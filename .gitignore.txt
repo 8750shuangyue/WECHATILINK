@@ -1,0 +1,3 @@
+# 忽略 main 下的 resources 文件夹
+src/main/resources/
+
