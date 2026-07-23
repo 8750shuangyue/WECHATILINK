@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信机器人控制台</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 12px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #f0f2f5;
+        }
+        .status.online {
+            background: #e6f7ff;
+            color: #1890ff;
+        }
+        .status.offline {
+            background: #fff2f0;
+            color: #ff4d4f;
+        }
+        .qrcode-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .qrcode-container img {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-bottom: 15px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .tips {
+            margin-top: 24px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            color: #444;
+            line-height: 1.8;
+        }
+        .tips h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .tips ul {
+            padding-left: 20px;
+        }
+        .tips li {
+            margin-bottom: 8px;
+        }
+        .hint {
+            margin-top: 16px;
+            color: #888;
+            font-size: 13px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>微信机器人控制台</h1>
+        <p class="subtitle">本页面只用于扫码登录与状态查看。<br>消息收发已切换为微信客户端聊天框内实时交互。</p>
+
+        <div id="status" class="status offline">未登录</div>
+
+        <button class="btn" id="loginBtn" onclick="startLogin()">获取二维码并登录</button>
+
+        <div class="qrcode-container" id="qrcodeContainer" style="display: none;">
+            <img id="qrcodeImg" alt="微信登录二维码">
+        </div>
+
+        <div class="tips">
+            <h3>使用方式</h3>
+            <ul>
+                <li>点击按钮生成二维码，并使用微信扫码登录机器人。</li>
+                <li>登录成功后，直接在微信客户端聊天框中给机器人发送文本消息。</li>
+                <li>机器人收到消息后，会通过已接入的对话 API 自动回复。</li>
+                <li>网页端不再提供手动收发消息入口。</li>
+            </ul>
+        </div>
+
+        <div class="hint" id="hint">等待登录</div>
+    </div>
+
+    <script>
+        let qrVisible = false;
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/wechat/status');
+                const data = await response.json();
+                const statusDiv = document.getElementById('status');
+                const hint = document.getElementById('hint');
+
+                if (data.loggedIn) {
+                    statusDiv.textContent = '已登录';
+                    statusDiv.classList.add('online');
+                    statusDiv.classList.remove('offline');
+                    document.getElementById('loginBtn').disabled = true;
+                    document.getElementById('loginBtn').textContent = '已登录';
+                    hint.textContent = data.message || '请直接在微信客户端聊天框中测试实时对话。';
+                    if (qrVisible) {
+                        document.getElementById('qrcodeContainer').style.display = 'none';
+                        qrVisible = false;
+                    }
+                } else {
+                    statusDiv.textContent = '未登录';
+                    statusDiv.classList.remove('online');
+                    statusDiv.classList.add('offline');
+                    hint.textContent = data.message || '请先扫码登录。';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function tryLoadQRCode() {
+            try {
+                const response = await fetch('/api/wechat/qrcode');
+                const data = await response.json();
+                if (data.success && data.qrCodeBase64) {
+                    const qrcodeImg = document.getElementById('qrcodeImg');
+                    const qrcodeContainer = document.getElementById('qrcodeContainer');
+                    qrcodeImg.src = data.qrCodeBase64;
+                    qrcodeContainer.style.display = 'flex';
+                    qrVisible = true;
+                    document.getElementById('hint').textContent = '请使用微信扫码登录，登录后在微信客户端聊天框内实时交互。';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function startLogin() {
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.disabled = true;
+            loginBtn.textContent = '正在获取二维码...';
+
+            try {
+                const response = await fetch('/api/wechat/login', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    const qrcodeImg = document.getElementById('qrcodeImg');
+                    const qrcodeContainer = document.getElementById('qrcodeContainer');
+                    qrcodeImg.src = data.qrCodeBase64;
+                    qrcodeContainer.style.display = 'flex';
+                    document.getElementById('status').textContent = '请扫码登录';
+                    document.getElementById('status').classList.remove('online');
+                    document.getElementById('status').classList.add('offline');
+                    document.getElementById('hint').textContent = '扫码成功后，请到微信客户端聊天框内与机器人实时交互。';
+
+                    qrVisible = true;
+                } else {
+                    alert('获取二维码失败: ' + data.error);
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '获取二维码并登录';
+                }
+            } catch (e) {
+                console.error(e);
+                alert('请求失败');
+                loginBtn.disabled = false;
+                loginBtn.textContent = '获取二维码并登录';
+            }
+        }
+
+        checkStatus();
+        tryLoadQRCode();
+        setInterval(() => {
+            checkStatus();
+            tryLoadQRCode();
+        }, 2000);
+    </script>
+</body>
+</html>
