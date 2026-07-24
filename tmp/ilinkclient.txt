@@ -1,0 +1,1497 @@
+﻿Compiled from "ILinkClient.java"
+public class com.lth.wechat.ilink.ILinkClient {
+  public static final java.lang.String VERSION;
+
+  public static final java.lang.String DEFAULT_BASE_URL;
+
+  public static final java.lang.String CHANNEL_VERSION;
+
+  public static final java.lang.String AUTHORIZATION_TYPE;
+
+  public static final java.lang.String CDN_BASE_URL;
+
+  private static final java.lang.String GET_BOT_QRCODE;
+
+  private static final java.lang.String GET_QRCODE_STATUS;
+
+  private static final java.lang.String GET_UPDATES;
+
+  private static final java.lang.String SEND_MESSAGE;
+
+  private static final java.lang.String GET_CONFIG;
+
+  private static final java.lang.String SEND_TYPING;
+
+  private static final java.lang.String GET_UPLOAD_URL;
+
+  private final java.net.http.HttpClient httpClient;
+
+  private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+  private final java.security.SecureRandom random;
+
+  private static final org.slf4j.Logger logger;
+
+  public com.lth.wechat.ilink.ILinkClient();
+    Code:
+       0: aload_0
+       1: invokestatic  #1                  // Method java/net/http/HttpClient.newBuilder:()Ljava/net/http/HttpClient$Builder;
+       4: ldc2_w        #7                  // long 10l
+       7: invokestatic  #9                  // Method java/time/Duration.ofSeconds:(J)Ljava/time/Duration;
+      10: invokeinterface #15,  2           // InterfaceMethod java/net/http/HttpClient$Builder.connectTimeout:(Ljava/time/Duration;)Ljava/net/http/HttpClient$Builder;
+      15: invokeinterface #21,  1           // InterfaceMethod java/net/http/HttpClient$Builder.build:()Ljava/net/http/HttpClient;
+      20: invokespecial #25                 // Method "<init>":(Ljava/net/http/HttpClient;)V
+      23: return
+
+  public com.lth.wechat.ilink.ILinkClient(java.net.http.HttpClient);
+    Code:
+       0: aload_0
+       1: invokespecial #31                 // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: new           #36                 // class java/security/SecureRandom
+       8: dup
+       9: invokespecial #38                 // Method java/security/SecureRandom."<init>":()V
+      12: putfield      #39                 // Field random:Ljava/security/SecureRandom;
+      15: aload_0
+      16: aload_1
+      17: putfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+      20: aload_0
+      21: new           #47                 // class com/fasterxml/jackson/databind/ObjectMapper
+      24: dup
+      25: invokespecial #49                 // Method com/fasterxml/jackson/databind/ObjectMapper."<init>":()V
+      28: putfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      31: return
+
+  private java.lang.String generateXWechatUin();
+    Code:
+       0: aload_0
+       1: getfield      #39                 // Field random:Ljava/security/SecureRandom;
+       4: invokevirtual #54                 // Method java/security/SecureRandom.nextLong:()J
+       7: ldc2_w        #58                 // long 4294967295l
+      10: land
+      11: lstore_1
+      12: lload_1
+      13: invokestatic  #60                 // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+      16: astore_3
+      17: invokestatic  #66                 // Method java/util/Base64.getEncoder:()Ljava/util/Base64$Encoder;
+      20: aload_3
+      21: getstatic     #72                 // Field java/nio/charset/StandardCharsets.UTF_8:Ljava/nio/charset/Charset;
+      24: invokevirtual #78                 // Method java/lang/String.getBytes:(Ljava/nio/charset/Charset;)[B
+      27: invokevirtual #82                 // Method java/util/Base64$Encoder.encodeToString:([B)Ljava/lang/String;
+      30: areturn
+
+  private java.net.http.HttpRequest$Builder baseRequest();
+    Code:
+       0: invokestatic  #88                 // Method java/net/http/HttpRequest.newBuilder:()Ljava/net/http/HttpRequest$Builder;
+       3: ldc           #93                 // String Content-Type
+       5: ldc           #95                 // String application/json
+       7: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      12: areturn
+
+  public com.lth.wechat.ilink.entity.login.QrCodeResp getBotQrCode();
+    Code:
+       0: aload_0
+       1: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+       4: invokeinterface #106,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.GET:()Ljava/net/http/HttpRequest$Builder;
+       9: ldc           #109                // String https://ilinkai.weixin.qq.com/ilink/bot/get_bot_qrcode?bot_type=3
+      11: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+      14: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+      19: ldc2_w        #7                  // long 10l
+      22: invokestatic  #9                  // Method java/time/Duration.ofSeconds:(J)Ljava/time/Duration;
+      25: invokeinterface #121,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.timeout:(Ljava/time/Duration;)Ljava/net/http/HttpRequest$Builder;
+      30: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+      35: astore_1
+      36: aload_0
+      37: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+      40: aload_1
+      41: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+      44: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+      47: astore_2
+      48: aload_0
+      49: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      52: aload_2
+      53: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+      58: checkcast     #61                 // class java/lang/String
+      61: ldc           #144                // class com/lth/wechat/ilink/entity/login/QrCodeResp
+      63: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+      66: checkcast     #144                // class com/lth/wechat/ilink/entity/login/QrCodeResp
+      69: areturn
+      70: astore_1
+      71: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+      74: dup
+      75: ldc           #154                // String ��ȡ��ά��ʧ��
+      77: aload_1
+      78: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+      81: athrow
+    Exception table:
+       from    to  target type
+           0    69    70   Class java/lang/Exception
+
+  public com.lth.wechat.ilink.dto.login.QrCodeInfo getQrCodeInfo();
+    Code:
+       0: aload_0
+       1: invokevirtual #159                // Method getBotQrCode:()Lcom/lth/wechat/ilink/entity/login/QrCodeResp;
+       4: invokestatic  #163                // Method com/lth/wechat/ilink/converter/EntityConverter.toQrCodeInfo:(Lcom/lth/wechat/ilink/entity/login/QrCodeResp;)Lcom/lth/wechat/ilink/dto/login/QrCodeInfo;
+       7: areturn
+
+  public com.lth.wechat.ilink.entity.login.LoginStatusResp getQrCodeStatus(java.lang.String);
+    Code:
+       0: aload_1
+       1: ifnonnull     14
+       4: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+       7: dup
+       8: ldc           #169                // String qrcode����Ϊ��
+      10: invokespecial #171                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;)V
+      13: athrow
+      14: aload_0
+      15: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+      18: invokeinterface #106,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.GET:()Ljava/net/http/HttpRequest$Builder;
+      23: aload_1
+      24: invokedynamic #174,  0            // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      29: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+      32: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+      37: ldc           #178                // String iLink-App-ClientVersion
+      39: ldc           #180                // String 1
+      41: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      46: ldc2_w        #182                // long 35l
+      49: invokestatic  #9                  // Method java/time/Duration.ofSeconds:(J)Ljava/time/Duration;
+      52: invokeinterface #121,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.timeout:(Ljava/time/Duration;)Ljava/net/http/HttpRequest$Builder;
+      57: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+      62: astore_2
+      63: aload_0
+      64: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+      67: aload_2
+      68: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+      71: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+      74: astore_3
+      75: aload_0
+      76: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      79: aload_3
+      80: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+      85: checkcast     #61                 // class java/lang/String
+      88: ldc           #184                // class com/lth/wechat/ilink/entity/login/LoginStatusResp
+      90: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+      93: checkcast     #184                // class com/lth/wechat/ilink/entity/login/LoginStatusResp
+      96: areturn
+      97: astore_2
+      98: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     101: dup
+     102: ldc           #186                // String ��ѯ��¼״̬ʧ��
+     104: aload_2
+     105: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     108: athrow
+    Exception table:
+       from    to  target type
+           0    96    97   Class java/lang/Exception
+
+  public com.lth.wechat.ilink.dto.login.LoginStatus pollLoginStatus(java.lang.String);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokevirtual #188                // Method getQrCodeStatus:(Ljava/lang/String;)Lcom/lth/wechat/ilink/entity/login/LoginStatusResp;
+       5: invokestatic  #192                // Method com/lth/wechat/ilink/converter/EntityConverter.toLoginStatus:(Lcom/lth/wechat/ilink/entity/login/LoginStatusResp;)Lcom/lth/wechat/ilink/dto/login/LoginStatus;
+       8: areturn
+
+  public com.lth.wechat.ilink.entity.message.GetUpdatesResponse getUpdates(com.lth.wechat.ilink.LoginCredentials, java.lang.String);
+    Code:
+       0: aload_0
+       1: aload_0
+       2: aload_2
+       3: aload_1
+       4: invokedynamic #196,  0            // InvokeDynamic #1:get:(Lcom/lth/wechat/ilink/ILinkClient;Ljava/lang/String;Lcom/lth/wechat/ilink/LoginCredentials;)Ljava/util/function/Supplier;
+       9: iconst_3
+      10: ldc           #200                // String ��ȡ��Ϣ
+      12: invokevirtual #202                // Method executeWithRetry:(Ljava/util/function/Supplier;ILjava/lang/String;)Ljava/lang/Object;
+      15: checkcast     #206                // class com/lth/wechat/ilink/entity/message/GetUpdatesResponse
+      18: areturn
+
+  public com.lth.wechat.ilink.dto.message.ReceiveMessagesResult receiveMessages(com.lth.wechat.ilink.LoginCredentials, java.lang.String);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: invokevirtual #208                // Method getUpdates:(Lcom/lth/wechat/ilink/LoginCredentials;Ljava/lang/String;)Lcom/lth/wechat/ilink/entity/message/GetUpdatesResponse;
+       6: invokestatic  #212                // Method com/lth/wechat/ilink/converter/EntityConverter.toReceiveMessagesResult:(Lcom/lth/wechat/ilink/entity/message/GetUpdatesResponse;)Lcom/lth/wechat/ilink/dto/message/ReceiveMessagesResult;
+       9: areturn
+
+  public com.lth.wechat.ilink.entity.send.SendMessageResp sendMessage(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.send.SendMessageRequest);
+    Code:
+       0: aload_0
+       1: aload_0
+       2: aload_1
+       3: aload_2
+       4: invokedynamic #216,  0            // InvokeDynamic #2:get:(Lcom/lth/wechat/ilink/ILinkClient;Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Ljava/util/function/Supplier;
+       9: iconst_3
+      10: ldc           #219                // String ������Ϣ
+      12: invokevirtual #202                // Method executeWithRetry:(Ljava/util/function/Supplier;ILjava/lang/String;)Ljava/lang/Object;
+      15: checkcast     #221                // class com/lth/wechat/ilink/entity/send/SendMessageResp
+      18: areturn
+
+  public void sendTextMessage(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: new           #223                // class com/lth/wechat/ilink/entity/send/SendMessageRequest
+       3: dup
+       4: invokespecial #225                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest."<init>":()V
+       7: astore        5
+       9: new           #226                // class com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg
+      12: dup
+      13: invokespecial #228                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg."<init>":()V
+      16: astore        6
+      18: aload         6
+      20: ldc           #229                // String
+      22: invokevirtual #231                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setFromUserId:(Ljava/lang/String;)V
+      25: aload         6
+      27: aload_2
+      28: invokevirtual #234                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setToUserId:(Ljava/lang/String;)V
+      31: aload         6
+      33: invokestatic  #237                // Method java/util/UUID.randomUUID:()Ljava/util/UUID;
+      36: invokestatic  #243                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+      39: invokedynamic #246,  0            // InvokeDynamic #3:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      44: invokevirtual #247                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setClientId:(Ljava/lang/String;)V
+      47: aload         6
+      49: iconst_2
+      50: invokevirtual #250                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageType:(I)V
+      53: aload         6
+      55: iconst_2
+      56: invokevirtual #254                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageState:(I)V
+      59: aload         6
+      61: aload_3
+      62: invokevirtual #257                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setContextToken:(Ljava/lang/String;)V
+      65: new           #260                // class java/util/ArrayList
+      68: dup
+      69: invokespecial #262                // Method java/util/ArrayList."<init>":()V
+      72: astore        7
+      74: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+      77: dup
+      78: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+      81: astore        8
+      83: aload         8
+      85: iconst_1
+      86: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+      89: aload         8
+      91: new           #269                // class com/lth/wechat/ilink/entity/message/TextItem
+      94: dup
+      95: invokespecial #271                // Method com/lth/wechat/ilink/entity/message/TextItem."<init>":()V
+      98: invokevirtual #272                // Method com/lth/wechat/ilink/entity/message/MessageItem.setText_item:(Lcom/lth/wechat/ilink/entity/message/TextItem;)V
+     101: aload         8
+     103: invokevirtual #276                // Method com/lth/wechat/ilink/entity/message/MessageItem.getText_item:()Lcom/lth/wechat/ilink/entity/message/TextItem;
+     106: aload         4
+     108: invokevirtual #280                // Method com/lth/wechat/ilink/entity/message/TextItem.setText:(Ljava/lang/String;)V
+     111: aload         7
+     113: aload         8
+     115: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     120: pop
+     121: aload         6
+     123: aload         7
+     125: invokevirtual #289                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setItemList:(Ljava/util/List;)V
+     128: aload         5
+     130: aload         6
+     132: invokevirtual #293                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setMsg:(Lcom/lth/wechat/ilink/entity/send/SendMessageRequest$Msg;)V
+     135: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     138: dup
+     139: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     142: astore        9
+     144: aload         9
+     146: ldc_w         #300                // String 1.0.0
+     149: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     152: aload         5
+     154: aload         9
+     156: invokevirtual #305                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     159: aload_0
+     160: aload_1
+     161: aload         5
+     163: invokevirtual #309                // Method sendMessage:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Lcom/lth/wechat/ilink/entity/send/SendMessageResp;
+     166: pop
+     167: return
+
+  public void sendImageMessage(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, com.lth.wechat.ilink.ILinkClient$MediaInfo);
+    Code:
+       0: new           #223                // class com/lth/wechat/ilink/entity/send/SendMessageRequest
+       3: dup
+       4: invokespecial #225                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest."<init>":()V
+       7: astore        5
+       9: new           #226                // class com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg
+      12: dup
+      13: invokespecial #228                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg."<init>":()V
+      16: astore        6
+      18: aload         6
+      20: ldc           #229                // String
+      22: invokevirtual #231                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setFromUserId:(Ljava/lang/String;)V
+      25: aload         6
+      27: aload_2
+      28: invokevirtual #234                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setToUserId:(Ljava/lang/String;)V
+      31: aload         6
+      33: invokestatic  #237                // Method java/util/UUID.randomUUID:()Ljava/util/UUID;
+      36: invokestatic  #243                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+      39: invokedynamic #313,  0            // InvokeDynamic #4:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      44: invokevirtual #247                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setClientId:(Ljava/lang/String;)V
+      47: aload         6
+      49: iconst_2
+      50: invokevirtual #250                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageType:(I)V
+      53: aload         6
+      55: iconst_2
+      56: invokevirtual #254                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageState:(I)V
+      59: aload         6
+      61: aload_3
+      62: invokevirtual #257                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setContextToken:(Ljava/lang/String;)V
+      65: new           #260                // class java/util/ArrayList
+      68: dup
+      69: invokespecial #262                // Method java/util/ArrayList."<init>":()V
+      72: astore        7
+      74: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+      77: dup
+      78: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+      81: astore        8
+      83: aload         8
+      85: iconst_2
+      86: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+      89: aload         8
+      91: new           #314                // class com/lth/wechat/ilink/entity/message/ImageItem
+      94: dup
+      95: invokespecial #316                // Method com/lth/wechat/ilink/entity/message/ImageItem."<init>":()V
+      98: invokevirtual #317                // Method com/lth/wechat/ilink/entity/message/MessageItem.setImage_item:(Lcom/lth/wechat/ilink/entity/message/ImageItem;)V
+     101: new           #321                // class com/lth/wechat/ilink/entity/message/CDNMediaEntity
+     104: dup
+     105: invokespecial #323                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity."<init>":()V
+     108: astore        9
+     110: aload         9
+     112: aload         4
+     114: invokevirtual #324                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getEncryptQueryParam:()Ljava/lang/String;
+     117: invokevirtual #330                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptQueryParam:(Ljava/lang/String;)V
+     120: aload         9
+     122: aload         4
+     124: invokevirtual #333                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getAesKey:()Ljava/lang/String;
+     127: invokevirtual #336                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setAesKey:(Ljava/lang/String;)V
+     130: aload         9
+     132: iconst_1
+     133: invokevirtual #339                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptType:(I)V
+     136: aload         8
+     138: invokevirtual #342                // Method com/lth/wechat/ilink/entity/message/MessageItem.getImage_item:()Lcom/lth/wechat/ilink/entity/message/ImageItem;
+     141: aload         9
+     143: invokevirtual #346                // Method com/lth/wechat/ilink/entity/message/ImageItem.setMedia:(Lcom/lth/wechat/ilink/entity/message/CDNMediaEntity;)V
+     146: aload         8
+     148: invokevirtual #342                // Method com/lth/wechat/ilink/entity/message/MessageItem.getImage_item:()Lcom/lth/wechat/ilink/entity/message/ImageItem;
+     151: aload         4
+     153: invokevirtual #350                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getFileSize:()J
+     156: invokevirtual #353                // Method com/lth/wechat/ilink/entity/message/ImageItem.setMidSize:(J)V
+     159: aload         7
+     161: aload         8
+     163: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     168: pop
+     169: aload         6
+     171: aload         7
+     173: invokevirtual #289                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setItemList:(Ljava/util/List;)V
+     176: aload         5
+     178: aload         6
+     180: invokevirtual #293                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setMsg:(Lcom/lth/wechat/ilink/entity/send/SendMessageRequest$Msg;)V
+     183: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     186: dup
+     187: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     190: astore        10
+     192: aload         10
+     194: ldc_w         #300                // String 1.0.0
+     197: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     200: aload         5
+     202: aload         10
+     204: invokevirtual #305                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     207: aload_0
+     208: aload_1
+     209: aload         5
+     211: invokevirtual #309                // Method sendMessage:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Lcom/lth/wechat/ilink/entity/send/SendMessageResp;
+     214: pop
+     215: return
+
+  public void sendVoiceMessage(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, com.lth.wechat.ilink.ILinkClient$MediaInfo, int, int);
+    Code:
+       0: new           #223                // class com/lth/wechat/ilink/entity/send/SendMessageRequest
+       3: dup
+       4: invokespecial #225                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest."<init>":()V
+       7: astore        7
+       9: new           #226                // class com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg
+      12: dup
+      13: invokespecial #228                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg."<init>":()V
+      16: astore        8
+      18: aload         8
+      20: ldc           #229                // String
+      22: invokevirtual #231                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setFromUserId:(Ljava/lang/String;)V
+      25: aload         8
+      27: aload_2
+      28: invokevirtual #234                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setToUserId:(Ljava/lang/String;)V
+      31: aload         8
+      33: invokestatic  #237                // Method java/util/UUID.randomUUID:()Ljava/util/UUID;
+      36: invokestatic  #243                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+      39: invokedynamic #357,  0            // InvokeDynamic #5:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      44: invokevirtual #247                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setClientId:(Ljava/lang/String;)V
+      47: aload         8
+      49: iconst_2
+      50: invokevirtual #250                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageType:(I)V
+      53: aload         8
+      55: iconst_2
+      56: invokevirtual #254                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageState:(I)V
+      59: aload         8
+      61: aload_3
+      62: invokevirtual #257                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setContextToken:(Ljava/lang/String;)V
+      65: new           #260                // class java/util/ArrayList
+      68: dup
+      69: invokespecial #262                // Method java/util/ArrayList."<init>":()V
+      72: astore        9
+      74: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+      77: dup
+      78: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+      81: astore        10
+      83: aload         10
+      85: iconst_3
+      86: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+      89: aload         10
+      91: new           #358                // class com/lth/wechat/ilink/entity/message/VoiceItem
+      94: dup
+      95: invokespecial #360                // Method com/lth/wechat/ilink/entity/message/VoiceItem."<init>":()V
+      98: invokevirtual #361                // Method com/lth/wechat/ilink/entity/message/MessageItem.setVoice_item:(Lcom/lth/wechat/ilink/entity/message/VoiceItem;)V
+     101: new           #321                // class com/lth/wechat/ilink/entity/message/CDNMediaEntity
+     104: dup
+     105: invokespecial #323                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity."<init>":()V
+     108: astore        11
+     110: aload         11
+     112: aload         4
+     114: invokevirtual #324                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getEncryptQueryParam:()Ljava/lang/String;
+     117: invokevirtual #330                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptQueryParam:(Ljava/lang/String;)V
+     120: aload         11
+     122: aload         4
+     124: invokevirtual #333                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getAesKey:()Ljava/lang/String;
+     127: invokevirtual #336                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setAesKey:(Ljava/lang/String;)V
+     130: aload         11
+     132: iconst_1
+     133: invokevirtual #339                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptType:(I)V
+     136: aload         10
+     138: invokevirtual #365                // Method com/lth/wechat/ilink/entity/message/MessageItem.getVoice_item:()Lcom/lth/wechat/ilink/entity/message/VoiceItem;
+     141: aload         11
+     143: invokevirtual #369                // Method com/lth/wechat/ilink/entity/message/VoiceItem.setMedia:(Lcom/lth/wechat/ilink/entity/message/CDNMediaEntity;)V
+     146: aload         10
+     148: invokevirtual #365                // Method com/lth/wechat/ilink/entity/message/MessageItem.getVoice_item:()Lcom/lth/wechat/ilink/entity/message/VoiceItem;
+     151: iload         5
+     153: i2l
+     154: invokevirtual #370                // Method com/lth/wechat/ilink/entity/message/VoiceItem.setPlaytime:(J)V
+     157: aload         10
+     159: invokevirtual #365                // Method com/lth/wechat/ilink/entity/message/MessageItem.getVoice_item:()Lcom/lth/wechat/ilink/entity/message/VoiceItem;
+     162: iload         6
+     164: invokevirtual #373                // Method com/lth/wechat/ilink/entity/message/VoiceItem.setEncodeType:(I)V
+     167: aload         9
+     169: aload         10
+     171: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     176: pop
+     177: aload         8
+     179: aload         9
+     181: invokevirtual #289                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setItemList:(Ljava/util/List;)V
+     184: aload         7
+     186: aload         8
+     188: invokevirtual #293                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setMsg:(Lcom/lth/wechat/ilink/entity/send/SendMessageRequest$Msg;)V
+     191: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     194: dup
+     195: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     198: astore        12
+     200: aload         12
+     202: ldc_w         #300                // String 1.0.0
+     205: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     208: aload         7
+     210: aload         12
+     212: invokevirtual #305                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     215: aload_0
+     216: aload_1
+     217: aload         7
+     219: invokevirtual #309                // Method sendMessage:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Lcom/lth/wechat/ilink/entity/send/SendMessageResp;
+     222: pop
+     223: return
+
+  public void sendFileMessage(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, com.lth.wechat.ilink.ILinkClient$MediaInfo, java.lang.String, long);
+    Code:
+       0: new           #223                // class com/lth/wechat/ilink/entity/send/SendMessageRequest
+       3: dup
+       4: invokespecial #225                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest."<init>":()V
+       7: astore        8
+       9: new           #226                // class com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg
+      12: dup
+      13: invokespecial #228                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg."<init>":()V
+      16: astore        9
+      18: aload         9
+      20: ldc           #229                // String
+      22: invokevirtual #231                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setFromUserId:(Ljava/lang/String;)V
+      25: aload         9
+      27: aload_2
+      28: invokevirtual #234                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setToUserId:(Ljava/lang/String;)V
+      31: aload         9
+      33: invokestatic  #237                // Method java/util/UUID.randomUUID:()Ljava/util/UUID;
+      36: invokestatic  #243                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+      39: invokedynamic #376,  0            // InvokeDynamic #6:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      44: invokevirtual #247                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setClientId:(Ljava/lang/String;)V
+      47: aload         9
+      49: iconst_2
+      50: invokevirtual #250                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageType:(I)V
+      53: aload         9
+      55: iconst_2
+      56: invokevirtual #254                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageState:(I)V
+      59: aload         9
+      61: aload_3
+      62: invokevirtual #257                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setContextToken:(Ljava/lang/String;)V
+      65: new           #260                // class java/util/ArrayList
+      68: dup
+      69: invokespecial #262                // Method java/util/ArrayList."<init>":()V
+      72: astore        10
+      74: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+      77: dup
+      78: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+      81: astore        11
+      83: aload         11
+      85: iconst_4
+      86: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+      89: aload         11
+      91: new           #377                // class com/lth/wechat/ilink/entity/message/FileItem
+      94: dup
+      95: invokespecial #379                // Method com/lth/wechat/ilink/entity/message/FileItem."<init>":()V
+      98: invokevirtual #380                // Method com/lth/wechat/ilink/entity/message/MessageItem.setFile_item:(Lcom/lth/wechat/ilink/entity/message/FileItem;)V
+     101: new           #321                // class com/lth/wechat/ilink/entity/message/CDNMediaEntity
+     104: dup
+     105: invokespecial #323                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity."<init>":()V
+     108: astore        12
+     110: aload         12
+     112: aload         4
+     114: invokevirtual #324                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getEncryptQueryParam:()Ljava/lang/String;
+     117: invokevirtual #330                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptQueryParam:(Ljava/lang/String;)V
+     120: aload         12
+     122: aload         4
+     124: invokevirtual #333                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getAesKey:()Ljava/lang/String;
+     127: invokevirtual #336                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setAesKey:(Ljava/lang/String;)V
+     130: aload         12
+     132: iconst_1
+     133: invokevirtual #339                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptType:(I)V
+     136: aload         11
+     138: invokevirtual #384                // Method com/lth/wechat/ilink/entity/message/MessageItem.getFile_item:()Lcom/lth/wechat/ilink/entity/message/FileItem;
+     141: aload         12
+     143: invokevirtual #388                // Method com/lth/wechat/ilink/entity/message/FileItem.setMedia:(Lcom/lth/wechat/ilink/entity/message/CDNMediaEntity;)V
+     146: aload         11
+     148: invokevirtual #384                // Method com/lth/wechat/ilink/entity/message/MessageItem.getFile_item:()Lcom/lth/wechat/ilink/entity/message/FileItem;
+     151: aload         5
+     153: invokevirtual #389                // Method com/lth/wechat/ilink/entity/message/FileItem.setFileName:(Ljava/lang/String;)V
+     156: aload         11
+     158: invokevirtual #384                // Method com/lth/wechat/ilink/entity/message/MessageItem.getFile_item:()Lcom/lth/wechat/ilink/entity/message/FileItem;
+     161: lload         6
+     163: invokestatic  #60                 // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+     166: invokevirtual #392                // Method com/lth/wechat/ilink/entity/message/FileItem.setLen:(Ljava/lang/String;)V
+     169: aload         10
+     171: aload         11
+     173: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     178: pop
+     179: aload         9
+     181: aload         10
+     183: invokevirtual #289                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setItemList:(Ljava/util/List;)V
+     186: aload         8
+     188: aload         9
+     190: invokevirtual #293                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setMsg:(Lcom/lth/wechat/ilink/entity/send/SendMessageRequest$Msg;)V
+     193: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     196: dup
+     197: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     200: astore        13
+     202: aload         13
+     204: ldc_w         #300                // String 1.0.0
+     207: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     210: aload         8
+     212: aload         13
+     214: invokevirtual #305                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     217: aload_0
+     218: aload_1
+     219: aload         8
+     221: invokevirtual #309                // Method sendMessage:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Lcom/lth/wechat/ilink/entity/send/SendMessageResp;
+     224: pop
+     225: return
+
+  public void sendVideoMessage(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, com.lth.wechat.ilink.ILinkClient$MediaInfo, long, int);
+    Code:
+       0: new           #223                // class com/lth/wechat/ilink/entity/send/SendMessageRequest
+       3: dup
+       4: invokespecial #225                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest."<init>":()V
+       7: astore        8
+       9: new           #226                // class com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg
+      12: dup
+      13: invokespecial #228                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg."<init>":()V
+      16: astore        9
+      18: aload         9
+      20: ldc           #229                // String
+      22: invokevirtual #231                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setFromUserId:(Ljava/lang/String;)V
+      25: aload         9
+      27: aload_2
+      28: invokevirtual #234                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setToUserId:(Ljava/lang/String;)V
+      31: aload         9
+      33: invokestatic  #237                // Method java/util/UUID.randomUUID:()Ljava/util/UUID;
+      36: invokestatic  #243                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+      39: invokedynamic #395,  0            // InvokeDynamic #7:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      44: invokevirtual #247                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setClientId:(Ljava/lang/String;)V
+      47: aload         9
+      49: iconst_2
+      50: invokevirtual #250                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageType:(I)V
+      53: aload         9
+      55: iconst_2
+      56: invokevirtual #254                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageState:(I)V
+      59: aload         9
+      61: aload_3
+      62: invokevirtual #257                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setContextToken:(Ljava/lang/String;)V
+      65: new           #260                // class java/util/ArrayList
+      68: dup
+      69: invokespecial #262                // Method java/util/ArrayList."<init>":()V
+      72: astore        10
+      74: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+      77: dup
+      78: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+      81: astore        11
+      83: aload         11
+      85: iconst_5
+      86: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+      89: aload         11
+      91: new           #396                // class com/lth/wechat/ilink/entity/message/VideoItem
+      94: dup
+      95: invokespecial #398                // Method com/lth/wechat/ilink/entity/message/VideoItem."<init>":()V
+      98: invokevirtual #399                // Method com/lth/wechat/ilink/entity/message/MessageItem.setVideo_item:(Lcom/lth/wechat/ilink/entity/message/VideoItem;)V
+     101: new           #321                // class com/lth/wechat/ilink/entity/message/CDNMediaEntity
+     104: dup
+     105: invokespecial #323                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity."<init>":()V
+     108: astore        12
+     110: aload         12
+     112: aload         4
+     114: invokevirtual #324                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getEncryptQueryParam:()Ljava/lang/String;
+     117: invokevirtual #330                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptQueryParam:(Ljava/lang/String;)V
+     120: aload         12
+     122: aload         4
+     124: invokevirtual #333                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo.getAesKey:()Ljava/lang/String;
+     127: invokevirtual #336                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setAesKey:(Ljava/lang/String;)V
+     130: aload         12
+     132: iconst_1
+     133: invokevirtual #339                // Method com/lth/wechat/ilink/entity/message/CDNMediaEntity.setEncryptType:(I)V
+     136: aload         11
+     138: invokevirtual #403                // Method com/lth/wechat/ilink/entity/message/MessageItem.getVideo_item:()Lcom/lth/wechat/ilink/entity/message/VideoItem;
+     141: aload         12
+     143: invokevirtual #407                // Method com/lth/wechat/ilink/entity/message/VideoItem.setMedia:(Lcom/lth/wechat/ilink/entity/message/CDNMediaEntity;)V
+     146: aload         11
+     148: invokevirtual #403                // Method com/lth/wechat/ilink/entity/message/MessageItem.getVideo_item:()Lcom/lth/wechat/ilink/entity/message/VideoItem;
+     151: lload         5
+     153: invokevirtual #408                // Method com/lth/wechat/ilink/entity/message/VideoItem.setVideoSize:(J)V
+     156: aload         11
+     158: invokevirtual #403                // Method com/lth/wechat/ilink/entity/message/MessageItem.getVideo_item:()Lcom/lth/wechat/ilink/entity/message/VideoItem;
+     161: iload         7
+     163: i2l
+     164: invokevirtual #411                // Method com/lth/wechat/ilink/entity/message/VideoItem.setPlayLength:(J)V
+     167: aload         10
+     169: aload         11
+     171: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     176: pop
+     177: aload         9
+     179: aload         10
+     181: invokevirtual #289                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setItemList:(Ljava/util/List;)V
+     184: aload         8
+     186: aload         9
+     188: invokevirtual #293                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setMsg:(Lcom/lth/wechat/ilink/entity/send/SendMessageRequest$Msg;)V
+     191: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     194: dup
+     195: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     198: astore        13
+     200: aload         13
+     202: ldc_w         #300                // String 1.0.0
+     205: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     208: aload         8
+     210: aload         13
+     212: invokevirtual #305                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     215: aload_0
+     216: aload_1
+     217: aload         8
+     219: invokevirtual #309                // Method sendMessage:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Lcom/lth/wechat/ilink/entity/send/SendMessageResp;
+     222: pop
+     223: return
+
+  public void sendReplyMessage(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, com.lth.wechat.ilink.entity.message.RefMessageEntity, java.lang.String);
+    Code:
+       0: new           #223                // class com/lth/wechat/ilink/entity/send/SendMessageRequest
+       3: dup
+       4: invokespecial #225                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest."<init>":()V
+       7: astore        6
+       9: new           #226                // class com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg
+      12: dup
+      13: invokespecial #228                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg."<init>":()V
+      16: astore        7
+      18: aload         7
+      20: ldc           #229                // String
+      22: invokevirtual #231                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setFromUserId:(Ljava/lang/String;)V
+      25: aload         7
+      27: aload_2
+      28: invokevirtual #234                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setToUserId:(Ljava/lang/String;)V
+      31: aload         7
+      33: invokestatic  #237                // Method java/util/UUID.randomUUID:()Ljava/util/UUID;
+      36: invokestatic  #243                // Method java/lang/String.valueOf:(Ljava/lang/Object;)Ljava/lang/String;
+      39: invokedynamic #414,  0            // InvokeDynamic #8:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      44: invokevirtual #247                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setClientId:(Ljava/lang/String;)V
+      47: aload         7
+      49: iconst_2
+      50: invokevirtual #250                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageType:(I)V
+      53: aload         7
+      55: iconst_2
+      56: invokevirtual #254                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setMessageState:(I)V
+      59: aload         7
+      61: aload_3
+      62: invokevirtual #257                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setContextToken:(Ljava/lang/String;)V
+      65: new           #260                // class java/util/ArrayList
+      68: dup
+      69: invokespecial #262                // Method java/util/ArrayList."<init>":()V
+      72: astore        8
+      74: aload         5
+      76: ifnull        134
+      79: aload         5
+      81: invokevirtual #415                // Method java/lang/String.isEmpty:()Z
+      84: ifne          134
+      87: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+      90: dup
+      91: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+      94: astore        9
+      96: aload         9
+      98: iconst_1
+      99: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+     102: aload         9
+     104: new           #269                // class com/lth/wechat/ilink/entity/message/TextItem
+     107: dup
+     108: invokespecial #271                // Method com/lth/wechat/ilink/entity/message/TextItem."<init>":()V
+     111: invokevirtual #272                // Method com/lth/wechat/ilink/entity/message/MessageItem.setText_item:(Lcom/lth/wechat/ilink/entity/message/TextItem;)V
+     114: aload         9
+     116: invokevirtual #276                // Method com/lth/wechat/ilink/entity/message/MessageItem.getText_item:()Lcom/lth/wechat/ilink/entity/message/TextItem;
+     119: aload         5
+     121: invokevirtual #280                // Method com/lth/wechat/ilink/entity/message/TextItem.setText:(Ljava/lang/String;)V
+     124: aload         8
+     126: aload         9
+     128: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     133: pop
+     134: new           #263                // class com/lth/wechat/ilink/entity/message/MessageItem
+     137: dup
+     138: invokespecial #265                // Method com/lth/wechat/ilink/entity/message/MessageItem."<init>":()V
+     141: astore        9
+     143: aload         9
+     145: bipush        6
+     147: invokevirtual #266                // Method com/lth/wechat/ilink/entity/message/MessageItem.setType:(I)V
+     150: aload         9
+     152: aload         4
+     154: invokevirtual #419                // Method com/lth/wechat/ilink/entity/message/MessageItem.setRef_msg:(Lcom/lth/wechat/ilink/entity/message/RefMessageEntity;)V
+     157: aload         8
+     159: aload         9
+     161: invokeinterface #283,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     166: pop
+     167: aload         7
+     169: aload         8
+     171: invokevirtual #289                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest$Msg.setItemList:(Ljava/util/List;)V
+     174: aload         6
+     176: aload         7
+     178: invokevirtual #293                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setMsg:(Lcom/lth/wechat/ilink/entity/send/SendMessageRequest$Msg;)V
+     181: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     184: dup
+     185: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     188: astore        10
+     190: aload         10
+     192: ldc_w         #300                // String 1.0.0
+     195: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     198: aload         6
+     200: aload         10
+     202: invokevirtual #305                // Method com/lth/wechat/ilink/entity/send/SendMessageRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     205: aload_0
+     206: aload_1
+     207: aload         6
+     209: invokevirtual #309                // Method sendMessage:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/send/SendMessageRequest;)Lcom/lth/wechat/ilink/entity/send/SendMessageResp;
+     212: pop
+     213: return
+
+  public void sendTypingStatus(com.lth.wechat.ilink.LoginCredentials, java.lang.String, java.lang.String, boolean);
+    Code:
+       0: new           #423                // class com/lth/wechat/ilink/entity/config/SendTypingRequest
+       3: dup
+       4: invokespecial #425                // Method com/lth/wechat/ilink/entity/config/SendTypingRequest."<init>":()V
+       7: astore        5
+       9: aload         5
+      11: aload_2
+      12: invokevirtual #426                // Method com/lth/wechat/ilink/entity/config/SendTypingRequest.setIlinkUserId:(Ljava/lang/String;)V
+      15: aload         5
+      17: aload_3
+      18: invokevirtual #429                // Method com/lth/wechat/ilink/entity/config/SendTypingRequest.setTypingTicket:(Ljava/lang/String;)V
+      21: aload         5
+      23: iload         4
+      25: ifeq          32
+      28: iconst_1
+      29: goto          33
+      32: iconst_2
+      33: invokevirtual #432                // Method com/lth/wechat/ilink/entity/config/SendTypingRequest.setStatus:(I)V
+      36: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+      39: dup
+      40: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+      43: astore        6
+      45: aload         6
+      47: ldc_w         #300                // String 1.0.0
+      50: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+      53: aload         5
+      55: aload         6
+      57: invokevirtual #435                // Method com/lth/wechat/ilink/entity/config/SendTypingRequest.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+      60: aload_0
+      61: aload_1
+      62: aload         5
+      64: invokevirtual #436                // Method sendTyping:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/config/SendTypingRequest;)Lcom/lth/wechat/ilink/entity/config/SendTypingResp;
+      67: pop
+      68: return
+
+  public com.lth.wechat.ilink.entity.config.GetConfigResp getConfig(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.config.GetConfigRequest);
+    Code:
+       0: aload_0
+       1: aload_0
+       2: aload_1
+       3: aload_2
+       4: invokedynamic #440,  0            // InvokeDynamic #9:get:(Lcom/lth/wechat/ilink/ILinkClient;Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/config/GetConfigRequest;)Ljava/util/function/Supplier;
+       9: iconst_3
+      10: ldc_w         #443                // String ��ȡ����
+      13: invokevirtual #202                // Method executeWithRetry:(Ljava/util/function/Supplier;ILjava/lang/String;)Ljava/lang/Object;
+      16: checkcast     #445                // class com/lth/wechat/ilink/entity/config/GetConfigResp
+      19: areturn
+
+  public com.lth.wechat.ilink.entity.config.SendTypingResp sendTyping(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.config.SendTypingRequest);
+    Code:
+       0: aload_0
+       1: aload_0
+       2: aload_1
+       3: aload_2
+       4: invokedynamic #447,  0            // InvokeDynamic #10:get:(Lcom/lth/wechat/ilink/ILinkClient;Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/config/SendTypingRequest;)Ljava/util/function/Supplier;
+       9: iconst_3
+      10: ldc_w         #450                // String ��������״̬
+      13: invokevirtual #202                // Method executeWithRetry:(Ljava/util/function/Supplier;ILjava/lang/String;)Ljava/lang/Object;
+      16: checkcast     #452                // class com/lth/wechat/ilink/entity/config/SendTypingResp
+      19: areturn
+
+  public com.lth.wechat.ilink.entity.media.GetUploadUrlResp getUploadUrl(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.media.GetUploadUrlReq);
+    Code:
+       0: aload_1
+       1: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+       4: ifnull        14
+       7: aload_1
+       8: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+      11: goto          17
+      14: ldc_w         #459                // String https://ilinkai.weixin.qq.com
+      17: astore_3
+      18: aload_0
+      19: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+      22: ldc_w         #461                // String AuthorizationType
+      25: ldc_w         #463                // String ilink_bot_token
+      28: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      33: ldc_w         #465                // String Authorization
+      36: aload_1
+      37: invokevirtual #467                // Method com/lth/wechat/ilink/LoginCredentials.getBotToken:()Ljava/lang/String;
+      40: invokedynamic #470,  0            // InvokeDynamic #11:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      45: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      50: ldc_w         #471                // String X-WECHAT-UIN
+      53: aload_0
+      54: invokevirtual #473                // Method generateXWechatUin:()Ljava/lang/String;
+      57: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      62: aload_3
+      63: invokedynamic #476,  0            // InvokeDynamic #12:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      68: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+      71: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+      76: aload_0
+      77: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      80: aload_2
+      81: invokevirtual #477                // Method com/fasterxml/jackson/databind/ObjectMapper.writeValueAsString:(Ljava/lang/Object;)Ljava/lang/String;
+      84: invokestatic  #480                // Method java/net/http/HttpRequest$BodyPublishers.ofString:(Ljava/lang/String;)Ljava/net/http/HttpRequest$BodyPublisher;
+      87: invokeinterface #485,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.POST:(Ljava/net/http/HttpRequest$BodyPublisher;)Ljava/net/http/HttpRequest$Builder;
+      92: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+      97: astore        4
+      99: aload_0
+     100: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+     103: aload         4
+     105: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+     108: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+     111: astore        5
+     113: aload_0
+     114: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+     117: aload         5
+     119: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+     124: checkcast     #61                 // class java/lang/String
+     127: ldc_w         #489                // class com/lth/wechat/ilink/entity/media/GetUploadUrlResp
+     130: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+     133: checkcast     #489                // class com/lth/wechat/ilink/entity/media/GetUploadUrlResp
+     136: areturn
+     137: astore_3
+     138: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     141: dup
+     142: ldc_w         #491                // String getUploadUrl ʧ��
+     145: aload_3
+     146: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     149: athrow
+    Exception table:
+       from    to  target type
+           0   136   137   Class java/lang/Exception
+
+  public com.lth.wechat.ilink.ILinkClient$MediaInfo uploadMedia(com.lth.wechat.ilink.LoginCredentials, int, java.lang.String, byte[]);
+    Code:
+       0: invokestatic  #493                // Method com/lth/wechat/ilink/utils/MediaUtils.generateFileKey:()Ljava/lang/String;
+       3: astore        5
+       5: invokestatic  #498                // Method com/lth/wechat/ilink/utils/MediaUtils.generateAesKey:()[B
+       8: astore        6
+      10: aload         4
+      12: invokestatic  #502                // Method com/lth/wechat/ilink/utils/MediaUtils.calculateMd5:([B)Ljava/lang/String;
+      15: astore        7
+      17: aload         4
+      19: arraylength
+      20: i2l
+      21: lstore        8
+      23: lload         8
+      25: invokestatic  #505                // Method com/lth/wechat/ilink/utils/MediaUtils.calculateEncryptedSize:(J)J
+      28: lstore        10
+      30: aload         4
+      32: aload         6
+      34: invokestatic  #509                // Method com/lth/wechat/ilink/utils/MediaUtils.encryptAesEcb:([B[B)[B
+      37: astore        12
+      39: new           #513                // class com/lth/wechat/ilink/entity/media/GetUploadUrlReq
+      42: dup
+      43: invokespecial #515                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq."<init>":()V
+      46: astore        13
+      48: aload         13
+      50: aload         5
+      52: invokevirtual #516                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setFileKey:(Ljava/lang/String;)V
+      55: aload         13
+      57: iload_2
+      58: invokevirtual #519                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setMediaType:(I)V
+      61: aload         13
+      63: aload_3
+      64: invokevirtual #522                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setToUserId:(Ljava/lang/String;)V
+      67: aload         13
+      69: lload         8
+      71: invokevirtual #523                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setRawSize:(J)V
+      74: aload         13
+      76: aload         7
+      78: invokevirtual #526                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setRawFileMd5:(Ljava/lang/String;)V
+      81: aload         13
+      83: lload         10
+      85: invokevirtual #529                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setFileSize:(J)V
+      88: aload         13
+      90: iconst_1
+      91: invokevirtual #532                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setNoNeedThumb:(Z)V
+      94: aload         13
+      96: aload         6
+      98: invokestatic  #536                // Method com/lth/wechat/ilink/utils/MediaUtils.aesKeyToHex:([B)Ljava/lang/String;
+     101: invokevirtual #539                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setAesKey:(Ljava/lang/String;)V
+     104: new           #297                // class com/lth/wechat/ilink/entity/config/BaseInfo
+     107: dup
+     108: invokespecial #299                // Method com/lth/wechat/ilink/entity/config/BaseInfo."<init>":()V
+     111: astore        14
+     113: aload         14
+     115: ldc_w         #300                // String 1.0.0
+     118: invokevirtual #302                // Method com/lth/wechat/ilink/entity/config/BaseInfo.setChannelVersion:(Ljava/lang/String;)V
+     121: aload         13
+     123: aload         14
+     125: invokevirtual #540                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlReq.setBaseInfo:(Lcom/lth/wechat/ilink/entity/config/BaseInfo;)V
+     128: aload_0
+     129: aload_1
+     130: aload         13
+     132: invokevirtual #541                // Method getUploadUrl:(Lcom/lth/wechat/ilink/LoginCredentials;Lcom/lth/wechat/ilink/entity/media/GetUploadUrlReq;)Lcom/lth/wechat/ilink/entity/media/GetUploadUrlResp;
+     135: astore        15
+     137: aload         12
+     139: aload         15
+     141: invokevirtual #545                // Method com/lth/wechat/ilink/entity/media/GetUploadUrlResp.getUpload_param:()Ljava/lang/String;
+     144: aload         5
+     146: invokestatic  #548                // Method com/lth/wechat/ilink/utils/MediaUtils.uploadToCdn:([BLjava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+     149: astore        16
+     151: aload         6
+     153: invokestatic  #536                // Method com/lth/wechat/ilink/utils/MediaUtils.aesKeyToHex:([B)Ljava/lang/String;
+     156: astore        17
+     158: aload         17
+     160: invokevirtual #552                // Method java/lang/String.getBytes:()[B
+     163: astore        18
+     165: invokestatic  #66                 // Method java/util/Base64.getEncoder:()Ljava/util/Base64$Encoder;
+     168: aload         18
+     170: invokevirtual #82                 // Method java/util/Base64$Encoder.encodeToString:([B)Ljava/lang/String;
+     173: astore        19
+     175: new           #325                // class com/lth/wechat/ilink/ILinkClient$MediaInfo
+     178: dup
+     179: aload         16
+     181: aload         19
+     183: lload         10
+     185: invokespecial #554                // Method com/lth/wechat/ilink/ILinkClient$MediaInfo."<init>":(Ljava/lang/String;Ljava/lang/String;J)V
+     188: areturn
+     189: astore        5
+     191: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     194: dup
+     195: ldc_w         #557                // String �ϴ�ý��ʧ��
+     198: aload         5
+     200: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     203: athrow
+    Exception table:
+       from    to  target type
+           0   188   189   Class java/lang/Exception
+
+  public byte[] downloadMedia(java.lang.String, java.lang.String);
+    Code:
+       0: aload_1
+       1: invokestatic  #559                // Method com/lth/wechat/ilink/utils/MediaUtils.downloadFromCdn:(Ljava/lang/String;)[B
+       4: astore_3
+       5: aload_2
+       6: invokestatic  #563                // Method com/lth/wechat/ilink/utils/MediaUtils.processAesKey:(Ljava/lang/String;)[B
+       9: astore        4
+      11: aload_3
+      12: aload         4
+      14: invokestatic  #566                // Method com/lth/wechat/ilink/utils/MediaUtils.decryptAesEcb:([B[B)[B
+      17: areturn
+      18: astore_3
+      19: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+      22: dup
+      23: ldc_w         #569                // String ����ý��ʧ��
+      26: aload_3
+      27: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+      30: athrow
+    Exception table:
+       from    to  target type
+           0    17    18   Class java/lang/Exception
+
+  private <T> T executeWithRetry(java.util.function.Supplier<T>, int, java.lang.String);
+    Code:
+       0: iconst_0
+       1: istore        4
+       3: iload         4
+       5: iload_2
+       6: if_icmpge     156
+       9: aload_1
+      10: invokeinterface #571,  1          // InterfaceMethod java/util/function/Supplier.get:()Ljava/lang/Object;
+      15: areturn
+      16: astore        5
+      18: iload         4
+      20: iload_2
+      21: iconst_1
+      22: isub
+      23: if_icmpne     77
+      26: getstatic     #575                // Field logger:Lorg/slf4j/Logger;
+      29: ldc_w         #579                // String {} ʧ�ܣ������� {} ��: {}
+      32: iconst_3
+      33: anewarray     #32                 // class java/lang/Object
+      36: dup
+      37: iconst_0
+      38: aload_3
+      39: aastore
+      40: dup
+      41: iconst_1
+      42: iload_2
+      43: invokestatic  #581                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      46: aastore
+      47: dup
+      48: iconst_2
+      49: aload         5
+      51: invokevirtual #586                // Method java/lang/Exception.getMessage:()Ljava/lang/String;
+      54: aastore
+      55: invokeinterface #589,  3          // InterfaceMethod org/slf4j/Logger.error:(Ljava/lang/String;[Ljava/lang/Object;)V
+      60: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+      63: dup
+      64: aload_3
+      65: iload_2
+      66: invokedynamic #595,  0            // InvokeDynamic #13:makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;
+      71: aload         5
+      73: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+      76: athrow
+      77: getstatic     #575                // Field logger:Lorg/slf4j/Logger;
+      80: ldc_w         #598                // String {} ʧ�ܣ��� {} ������: {}
+      83: iconst_3
+      84: anewarray     #32                 // class java/lang/Object
+      87: dup
+      88: iconst_0
+      89: aload_3
+      90: aastore
+      91: dup
+      92: iconst_1
+      93: iload         4
+      95: iconst_1
+      96: iadd
+      97: invokestatic  #581                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     100: aastore
+     101: dup
+     102: iconst_2
+     103: aload         5
+     105: invokevirtual #586                // Method java/lang/Exception.getMessage:()Ljava/lang/String;
+     108: aastore
+     109: invokeinterface #600,  3          // InterfaceMethod org/slf4j/Logger.warn:(Ljava/lang/String;[Ljava/lang/Object;)V
+     114: sipush        1000
+     117: iload         4
+     119: iconst_1
+     120: iadd
+     121: imul
+     122: i2l
+     123: invokestatic  #603                // Method java/lang/Thread.sleep:(J)V
+     126: goto          150
+     129: astore        6
+     131: invokestatic  #610                // Method java/lang/Thread.currentThread:()Ljava/lang/Thread;
+     134: invokevirtual #614                // Method java/lang/Thread.interrupt:()V
+     137: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     140: dup
+     141: ldc_w         #617                // String �������ж�
+     144: aload         6
+     146: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     149: athrow
+     150: iinc          4, 1
+     153: goto          3
+     156: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     159: dup
+     160: ldc_w         #619                // String ����ʧ��
+     163: invokespecial #171                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;)V
+     166: athrow
+    Exception table:
+       from    to  target type
+           9    15    16   Class java/lang/Exception
+         114   126   129   Class java/lang/InterruptedException
+
+  private void checkResponseCode(int, java.lang.String);
+    Code:
+       0: iload_1
+       1: bipush        -14
+       3: if_icmpne     17
+       6: new           #621                // class com/lth/wechat/ilink/exception/ILinkSessionExpiredException
+       9: dup
+      10: ldc_w         #623                // String �Ự�ѹ��ڣ������µ�¼
+      13: invokespecial #625                // Method com/lth/wechat/ilink/exception/ILinkSessionExpiredException."<init>":(Ljava/lang/String;)V
+      16: athrow
+      17: iload_1
+      18: ifeq          36
+      21: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+      24: dup
+      25: aload_2
+      26: iload_1
+      27: invokedynamic #626,  0            // InvokeDynamic #14:makeConcatWithConstants:(Ljava/lang/String;I)Ljava/lang/String;
+      32: invokespecial #171                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;)V
+      35: athrow
+      36: return
+
+  public static com.lth.wechat.ilink.LoginCredentials createCredentials(java.lang.String, com.lth.wechat.ilink.entity.login.LoginStatusResp);
+    Code:
+       0: ldc_w         #627                // String confirmed
+       3: aload_1
+       4: invokevirtual #629                // Method com/lth/wechat/ilink/entity/login/LoginStatusResp.getStatus:()Ljava/lang/String;
+       7: invokevirtual #632                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      10: ifne          24
+      13: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+      16: dup
+      17: ldc_w         #635                // String ��¼δȷ�ϣ��޷�����ƾ֤
+      20: invokespecial #171                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;)V
+      23: athrow
+      24: aload_1
+      25: invokevirtual #637                // Method com/lth/wechat/ilink/entity/login/LoginStatusResp.getBot_token:()Ljava/lang/String;
+      28: astore_2
+      29: aload_1
+      30: invokevirtual #640                // Method com/lth/wechat/ilink/entity/login/LoginStatusResp.getIlink_user_id:()Ljava/lang/String;
+      33: astore_3
+      34: aload_1
+      35: invokevirtual #643                // Method com/lth/wechat/ilink/entity/login/LoginStatusResp.getBaseurl:()Ljava/lang/String;
+      38: ifnull        48
+      41: aload_1
+      42: invokevirtual #643                // Method com/lth/wechat/ilink/entity/login/LoginStatusResp.getBaseurl:()Ljava/lang/String;
+      45: goto          51
+      48: ldc_w         #459                // String https://ilinkai.weixin.qq.com
+      51: astore        4
+      53: new           #455                // class com/lth/wechat/ilink/LoginCredentials
+      56: dup
+      57: aload_2
+      58: aload_3
+      59: aload         4
+      61: aload_0
+      62: invokespecial #646                // Method com/lth/wechat/ilink/LoginCredentials."<init>":(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+      65: areturn
+
+  private com.lth.wechat.ilink.entity.config.SendTypingResp lambda$sendTyping$3(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.config.SendTypingRequest);
+    Code:
+       0: aload_1
+       1: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+       4: ifnull        14
+       7: aload_1
+       8: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+      11: goto          17
+      14: ldc_w         #459                // String https://ilinkai.weixin.qq.com
+      17: astore_3
+      18: aload_0
+      19: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+      22: ldc_w         #461                // String AuthorizationType
+      25: ldc_w         #463                // String ilink_bot_token
+      28: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      33: ldc_w         #465                // String Authorization
+      36: aload_1
+      37: invokevirtual #467                // Method com/lth/wechat/ilink/LoginCredentials.getBotToken:()Ljava/lang/String;
+      40: invokedynamic #470,  0            // InvokeDynamic #11:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      45: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      50: ldc_w         #471                // String X-WECHAT-UIN
+      53: aload_0
+      54: invokevirtual #473                // Method generateXWechatUin:()Ljava/lang/String;
+      57: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      62: aload_3
+      63: invokedynamic #649,  0            // InvokeDynamic #15:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      68: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+      71: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+      76: aload_0
+      77: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      80: aload_2
+      81: invokevirtual #477                // Method com/fasterxml/jackson/databind/ObjectMapper.writeValueAsString:(Ljava/lang/Object;)Ljava/lang/String;
+      84: invokestatic  #480                // Method java/net/http/HttpRequest$BodyPublishers.ofString:(Ljava/lang/String;)Ljava/net/http/HttpRequest$BodyPublisher;
+      87: invokeinterface #485,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.POST:(Ljava/net/http/HttpRequest$BodyPublisher;)Ljava/net/http/HttpRequest$Builder;
+      92: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+      97: astore        4
+      99: aload_0
+     100: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+     103: aload         4
+     105: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+     108: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+     111: astore        5
+     113: aload_0
+     114: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+     117: aload         5
+     119: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+     124: checkcast     #61                 // class java/lang/String
+     127: ldc_w         #452                // class com/lth/wechat/ilink/entity/config/SendTypingResp
+     130: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+     133: checkcast     #452                // class com/lth/wechat/ilink/entity/config/SendTypingResp
+     136: astore        6
+     138: aload_0
+     139: aload         6
+     141: invokevirtual #650                // Method com/lth/wechat/ilink/entity/config/SendTypingResp.getRet:()I
+     144: ldc_w         #450                // String ��������״̬
+     147: invokevirtual #654                // Method checkResponseCode:(ILjava/lang/String;)V
+     150: aload         6
+     152: areturn
+     153: astore_3
+     154: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     157: dup
+     158: ldc_w         #658                // String sendTyping ʧ��
+     161: aload_3
+     162: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     165: athrow
+    Exception table:
+       from    to  target type
+           0   152   153   Class java/lang/Exception
+
+  private com.lth.wechat.ilink.entity.config.GetConfigResp lambda$getConfig$2(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.config.GetConfigRequest);
+    Code:
+       0: aload_1
+       1: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+       4: ifnull        14
+       7: aload_1
+       8: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+      11: goto          17
+      14: ldc_w         #459                // String https://ilinkai.weixin.qq.com
+      17: astore_3
+      18: aload_0
+      19: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+      22: ldc_w         #461                // String AuthorizationType
+      25: ldc_w         #463                // String ilink_bot_token
+      28: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      33: ldc_w         #465                // String Authorization
+      36: aload_1
+      37: invokevirtual #467                // Method com/lth/wechat/ilink/LoginCredentials.getBotToken:()Ljava/lang/String;
+      40: invokedynamic #470,  0            // InvokeDynamic #11:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      45: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      50: ldc_w         #471                // String X-WECHAT-UIN
+      53: aload_0
+      54: invokevirtual #473                // Method generateXWechatUin:()Ljava/lang/String;
+      57: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      62: aload_3
+      63: invokedynamic #660,  0            // InvokeDynamic #16:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      68: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+      71: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+      76: aload_0
+      77: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      80: aload_2
+      81: invokevirtual #477                // Method com/fasterxml/jackson/databind/ObjectMapper.writeValueAsString:(Ljava/lang/Object;)Ljava/lang/String;
+      84: invokestatic  #480                // Method java/net/http/HttpRequest$BodyPublishers.ofString:(Ljava/lang/String;)Ljava/net/http/HttpRequest$BodyPublisher;
+      87: invokeinterface #485,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.POST:(Ljava/net/http/HttpRequest$BodyPublisher;)Ljava/net/http/HttpRequest$Builder;
+      92: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+      97: astore        4
+      99: aload_0
+     100: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+     103: aload         4
+     105: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+     108: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+     111: astore        5
+     113: aload_0
+     114: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+     117: aload         5
+     119: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+     124: checkcast     #61                 // class java/lang/String
+     127: ldc_w         #445                // class com/lth/wechat/ilink/entity/config/GetConfigResp
+     130: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+     133: checkcast     #445                // class com/lth/wechat/ilink/entity/config/GetConfigResp
+     136: astore        6
+     138: aload_0
+     139: aload         6
+     141: invokevirtual #661                // Method com/lth/wechat/ilink/entity/config/GetConfigResp.getRet:()I
+     144: ldc_w         #443                // String ��ȡ����
+     147: invokevirtual #654                // Method checkResponseCode:(ILjava/lang/String;)V
+     150: aload         6
+     152: areturn
+     153: astore_3
+     154: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     157: dup
+     158: ldc_w         #662                // String getConfig ʧ��
+     161: aload_3
+     162: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     165: athrow
+    Exception table:
+       from    to  target type
+           0   152   153   Class java/lang/Exception
+
+  private com.lth.wechat.ilink.entity.send.SendMessageResp lambda$sendMessage$1(com.lth.wechat.ilink.LoginCredentials, com.lth.wechat.ilink.entity.send.SendMessageRequest);
+    Code:
+       0: aload_1
+       1: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+       4: ifnull        14
+       7: aload_1
+       8: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+      11: goto          17
+      14: ldc_w         #459                // String https://ilinkai.weixin.qq.com
+      17: astore_3
+      18: aload_0
+      19: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+      22: ldc_w         #461                // String AuthorizationType
+      25: ldc_w         #463                // String ilink_bot_token
+      28: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      33: ldc_w         #465                // String Authorization
+      36: aload_1
+      37: invokevirtual #467                // Method com/lth/wechat/ilink/LoginCredentials.getBotToken:()Ljava/lang/String;
+      40: invokedynamic #470,  0            // InvokeDynamic #11:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      45: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      50: ldc_w         #471                // String X-WECHAT-UIN
+      53: aload_0
+      54: invokevirtual #473                // Method generateXWechatUin:()Ljava/lang/String;
+      57: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      62: aload_3
+      63: invokedynamic #664,  0            // InvokeDynamic #17:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      68: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+      71: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+      76: aload_0
+      77: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+      80: aload_2
+      81: invokevirtual #477                // Method com/fasterxml/jackson/databind/ObjectMapper.writeValueAsString:(Ljava/lang/Object;)Ljava/lang/String;
+      84: invokestatic  #480                // Method java/net/http/HttpRequest$BodyPublishers.ofString:(Ljava/lang/String;)Ljava/net/http/HttpRequest$BodyPublisher;
+      87: invokeinterface #485,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.POST:(Ljava/net/http/HttpRequest$BodyPublisher;)Ljava/net/http/HttpRequest$Builder;
+      92: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+      97: astore        4
+      99: aload_0
+     100: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+     103: aload         4
+     105: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+     108: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+     111: astore        5
+     113: aload_0
+     114: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+     117: aload         5
+     119: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+     124: checkcast     #61                 // class java/lang/String
+     127: ldc           #221                // class com/lth/wechat/ilink/entity/send/SendMessageResp
+     129: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+     132: checkcast     #221                // class com/lth/wechat/ilink/entity/send/SendMessageResp
+     135: astore        6
+     137: aload_0
+     138: aload         6
+     140: invokevirtual #665                // Method com/lth/wechat/ilink/entity/send/SendMessageResp.getRet:()I
+     143: ldc           #219                // String ������Ϣ
+     145: invokevirtual #654                // Method checkResponseCode:(ILjava/lang/String;)V
+     148: aload         6
+     150: areturn
+     151: astore_3
+     152: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     155: dup
+     156: ldc_w         #666                // String ������Ϣʧ��
+     159: aload_3
+     160: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     163: athrow
+    Exception table:
+       from    to  target type
+           0   150   151   Class java/lang/Exception
+
+  private com.lth.wechat.ilink.entity.message.GetUpdatesResponse lambda$getUpdates$0(java.lang.String, com.lth.wechat.ilink.LoginCredentials);
+    Code:
+       0: new           #668                // class java/util/HashMap
+       3: dup
+       4: invokespecial #670                // Method java/util/HashMap."<init>":()V
+       7: astore_3
+       8: aload_1
+       9: ifnull        23
+      12: aload_3
+      13: ldc_w         #671                // String get_updates_buf
+      16: aload_1
+      17: invokeinterface #673,  3          // InterfaceMethod java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+      22: pop
+      23: aload_3
+      24: ldc_w         #679                // String base_info
+      27: ldc_w         #681                // String channel_version
+      30: ldc_w         #300                // String 1.0.0
+      33: invokestatic  #683                // InterfaceMethod java/util/Map.of:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Map;
+      36: invokeinterface #673,  3          // InterfaceMethod java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+      41: pop
+      42: aload_2
+      43: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+      46: ifnull        56
+      49: aload_2
+      50: invokevirtual #454                // Method com/lth/wechat/ilink/LoginCredentials.getApiBaseUrl:()Ljava/lang/String;
+      53: goto          59
+      56: ldc_w         #459                // String https://ilinkai.weixin.qq.com
+      59: astore        4
+      61: aload_0
+      62: invokevirtual #103                // Method baseRequest:()Ljava/net/http/HttpRequest$Builder;
+      65: ldc_w         #461                // String AuthorizationType
+      68: ldc_w         #463                // String ilink_bot_token
+      71: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      76: ldc_w         #465                // String Authorization
+      79: aload_2
+      80: invokevirtual #467                // Method com/lth/wechat/ilink/LoginCredentials.getBotToken:()Ljava/lang/String;
+      83: invokedynamic #470,  0            // InvokeDynamic #11:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      88: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+      93: ldc_w         #471                // String X-WECHAT-UIN
+      96: aload_0
+      97: invokevirtual #473                // Method generateXWechatUin:()Ljava/lang/String;
+     100: invokeinterface #97,  3           // InterfaceMethod java/net/http/HttpRequest$Builder.header:(Ljava/lang/String;Ljava/lang/String;)Ljava/net/http/HttpRequest$Builder;
+     105: aload         4
+     107: invokedynamic #687,  0            // InvokeDynamic #18:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+     112: invokestatic  #111                // Method java/net/URI.create:(Ljava/lang/String;)Ljava/net/URI;
+     115: invokeinterface #117,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.uri:(Ljava/net/URI;)Ljava/net/http/HttpRequest$Builder;
+     120: aload_0
+     121: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+     124: aload_3
+     125: invokevirtual #477                // Method com/fasterxml/jackson/databind/ObjectMapper.writeValueAsString:(Ljava/lang/Object;)Ljava/lang/String;
+     128: invokestatic  #480                // Method java/net/http/HttpRequest$BodyPublishers.ofString:(Ljava/lang/String;)Ljava/net/http/HttpRequest$BodyPublisher;
+     131: invokeinterface #485,  2          // InterfaceMethod java/net/http/HttpRequest$Builder.POST:(Ljava/net/http/HttpRequest$BodyPublisher;)Ljava/net/http/HttpRequest$Builder;
+     136: invokeinterface #125,  1          // InterfaceMethod java/net/http/HttpRequest$Builder.build:()Ljava/net/http/HttpRequest;
+     141: astore        5
+     143: aload_0
+     144: getfield      #43                 // Field httpClient:Ljava/net/http/HttpClient;
+     147: aload         5
+     149: invokestatic  #128                // Method java/net/http/HttpResponse$BodyHandlers.ofString:()Ljava/net/http/HttpResponse$BodyHandler;
+     152: invokevirtual #134                // Method java/net/http/HttpClient.send:(Ljava/net/http/HttpRequest;Ljava/net/http/HttpResponse$BodyHandler;)Ljava/net/http/HttpResponse;
+     155: astore        6
+     157: aload_0
+     158: getfield      #50                 // Field objectMapper:Lcom/fasterxml/jackson/databind/ObjectMapper;
+     161: aload         6
+     163: invokeinterface #138,  1          // InterfaceMethod java/net/http/HttpResponse.body:()Ljava/lang/Object;
+     168: checkcast     #61                 // class java/lang/String
+     171: ldc           #206                // class com/lth/wechat/ilink/entity/message/GetUpdatesResponse
+     173: invokevirtual #146                // Method com/fasterxml/jackson/databind/ObjectMapper.readValue:(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;
+     176: checkcast     #206                // class com/lth/wechat/ilink/entity/message/GetUpdatesResponse
+     179: astore        7
+     181: aload_0
+     182: aload         7
+     184: invokevirtual #688                // Method com/lth/wechat/ilink/entity/message/GetUpdatesResponse.getRet:()I
+     187: ldc           #200                // String ��ȡ��Ϣ
+     189: invokevirtual #654                // Method checkResponseCode:(ILjava/lang/String;)V
+     192: aload         7
+     194: areturn
+     195: astore_3
+     196: new           #152                // class com/lth/wechat/ilink/exception/ILinkException
+     199: dup
+     200: ldc_w         #689                // String ��ȡ��Ϣʧ��
+     203: aload_3
+     204: invokespecial #156                // Method com/lth/wechat/ilink/exception/ILinkException."<init>":(Ljava/lang/String;Ljava/lang/Throwable;)V
+     207: athrow
+    Exception table:
+       from    to  target type
+           0   194   195   Class java/lang/Exception
+
+  static {};
+    Code:
+       0: ldc           #26                 // class com/lth/wechat/ilink/ILinkClient
+       2: invokestatic  #691                // Method org/slf4j/LoggerFactory.getLogger:(Ljava/lang/Class;)Lorg/slf4j/Logger;
+       5: putstatic     #575                // Field logger:Lorg/slf4j/Logger;
+       8: return
+}
