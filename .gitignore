@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Runtime data & local state (never commit) ###
+uploads/
+tmp/
+login_state.json
+rag_knowledge.sqlite
+*.sqlite
+*.db
+
+### Local secrets & config ###
+.env
+application-local.properties
