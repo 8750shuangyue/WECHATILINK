@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>病害诊断 - Sekai PetPlant</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        * { box-sizing: border-box; }
+
+        /* ══════════════════ body & decorative background ══════════════════ */
+        body {
+            background: #f5f8f6;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: #333;
+            position: relative;
+        }
+
+        /* Decorative medical cross (+) pattern at very low opacity */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background-image:
+                url("data:image/svg+xml,%3Csvg width='80' height='80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 14v52M14 40h52' stroke='%232d6a4f' stroke-width='0.6' stroke-opacity='0.06' fill='none'/%3E%3C/svg%3E");
+            background-size: 80px 80px;
+        }
+
+        /* ══════════════════ topbar override ══════════════════ */
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 28px;
+            background: #ffffff;
+            border-bottom: 1px solid #e6ece8;
+            box-shadow: 0 1px 8px rgba(0,0,0,0.04);
+            position: relative;
+            z-index: 1;
+        }
+        .topbar-brand {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d6a4f;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        .topbar-right #greeting {
+            color: #555;
+            font-size: 14px;
+        }
+        .topbar-right button {
+            background: none;
+            border: 1px solid #c8d6ce;
+            border-radius: 20px;
+            padding: 6px 18px;
+            font-size: 13px;
+            color: #4a6b5a;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .topbar-right button:hover {
+            background: #e8f5ec;
+            border-color: #2d6a4f;
+            color: #2d6a4f;
+        }
+        .topbar-right button:active {
+            transform: scale(0.95);
+        }
+
+        /* ══════════════════ main container ══════════════════ */
+        .disease-main {
+            max-width: 920px;
+            margin: 28px auto 40px;
+            padding: 0 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ══════════════════ tab pills ══════════════════ */
+        .mode-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 28px;
+            position: relative;
+        }
+        .mode-tab {
+            padding: 13px 34px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 40px;
+            border: 2px solid #d0e0d5;
+            background: #fff;
+            color: #5a7a68;
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+        }
+        /* Smooth indicator underline that slides in */
+        .mode-tab::after {
+            content: '';
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            width: 40%;
+            height: 3px;
+            background: #2d6a4f;
+            border-radius: 3px;
+            transform: translateX(-50%) scaleX(0);
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .mode-tab.active::after {
+            transform: translateX(-50%) scaleX(1);
+        }
+        .mode-tab.active {
+            background: linear-gradient(135deg, #2d6a4f, #40916c);
+            border-color: #2d6a4f;
+            color: #fff;
+            box-shadow: 0 6px 20px rgba(45,106,79,0.3);
+            transform: translateY(-2px);
+        }
+        .mode-tab:hover:not(.active) {
+            border-color: #74a989;
+            background: #f0f8f3;
+            color: #2d6a4f;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(45,106,79,0.12);
+        }
+        .mode-tab:active {
+            transform: scale(0.95) !important;
+        }
+
+        /* ══════════════════ upload card ══════════════════ */
+        .upload-section {
+            background: #fff;
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+            margin-bottom: 24px;
+            border: 1px solid #e8ede9;
+            position: relative;
+            z-index: 1;
+        }
+        .upload-area {
+            border: 2px dashed #b8d4c2;
+            border-radius: 18px;
+            padding: 44px 20px;
+            text-align: center;
+            cursor: pointer;
+            background: #f9fdfa;
+            transition: all 0.3s ease;
+            min-height: 170px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            animation: upload-pulse 3s ease-in-out infinite;
+        }
+        /* Subtle pulsing border animation to invite interaction */
+        @keyframes upload-pulse {
+            0%, 100% {
+                border-color: #b8d4c2;
+                box-shadow: inset 0 0 0 0 rgba(45,106,79,0);
+            }
+            50% {
+                border-color: #74a989;
+                box-shadow: inset 0 0 0 4px rgba(45,106,79,0.04);
+            }
+        }
+        .upload-area:hover {
+            border-color: #40916c;
+            background: #f0faf4;
+            box-shadow: inset 0 0 0 6px rgba(45,106,79,0.05);
+            animation: none;
+        }
+        .upload-area input[type="file"] { display: none; }
+        .upload-area .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 14px;
+            border-radius: 50%;
+            background: #e8f5ec;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: #40916c;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .upload-area:hover .upload-icon {
+            background: #40916c;
+            color: #fff;
+            transform: scale(1.08);
+            box-shadow: 0 4px 16px rgba(64,145,108,0.35);
+        }
+        .upload-area strong {
+            display: block;
+            color: #2d6a4f;
+            font-size: 17px;
+            margin: 4px 0;
+            font-weight: 600;
+        }
+        .upload-area .hint {
+            color: #8ba396;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        /* ══════════════════ image preview ══════════════════ */
+        .preview-area {
+            margin-top: 18px;
+            position: relative;
+            display: none;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+            border: 3px solid #fff;
+            outline: 1px solid rgba(0,0,0,0.06);
+            animation: preview-reveal 0.4s ease-out;
+        }
+        @keyframes preview-reveal {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .preview-area img {
+            width: 100%;
+            max-height: 340px;
+            object-fit: contain;
+            background: #f4f7f5;
+            display: block;
+        }
+        .preview-area .clear-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+        .preview-area .clear-btn:hover {
+            background: rgba(220,38,38,0.85);
+            transform: scale(1.1);
+        }
+        .preview-area .clear-btn:active {
+            transform: scale(0.9);
+        }
+
+        /* ══════════════════ diagnose button ══════════════════ */
+        .diag-btn {
+            margin-top: 16px;
+            display: none;
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 30px;
+            border: none;
+            cursor: pointer;
+            background: linear-gradient(135deg, #2d6a4f, #40916c);
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 14px rgba(45,106,79,0.3);
+            animation: btn-glow 2.5s ease-in-out infinite;
+            z-index: 1;
+        }
+        /* Shimmer sweep animation */
+        .diag-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255,255,255,0.15) 25%,
+                rgba(255,255,255,0.35) 50%,
+                rgba(255,255,255,0.15) 75%,
+                transparent 100%);
+            animation: shimmer 3s ease-in-out infinite;
+            z-index: 1;
+            pointer-events: none;
+        }
+        @keyframes shimmer {
+            0%   { left: -100%; }
+            50%  { left: 100%; }
+            100% { left: 100%; }
+        }
+        /* Glow pulse */
+        @keyframes btn-glow {
+            0%, 100% {
+                box-shadow: 0 4px 14px rgba(45,106,79,0.3);
+            }
+            50% {
+                box-shadow: 0 4px 30px rgba(45,106,79,0.5), 0 0 50px rgba(64,145,108,0.18);
+            }
+        }
+        .diag-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(45,106,79,0.4);
+            animation: none;
+        }
+        .diag-btn:active {
+            transform: scale(0.96) translateY(0);
+            box-shadow: 0 2px 8px rgba(45,106,79,0.3);
+        }
+        .diag-btn:disabled {
+            opacity: 0.5;
+            pointer-events: none;
+            transform: none;
+            animation: none;
+        }
+        .diag-btn:disabled::before {
+            animation: none;
+        }
+
+        /* ══════════════════ loading spinner ══════════════════ */
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 28px;
+            color: #40916c;
+            font-size: 15px;
+            font-weight: 500;
+        }
+        .loading-spinner .spinner-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #40916c;
+            border-radius: 50%;
+            margin: 0 3px;
+            animation: pulse-dot 1.3s infinite ease-in-out;
+        }
+        .loading-spinner .spinner-dot:nth-child(2) { animation-delay: 0.16s; }
+        .loading-spinner .spinner-dot:nth-child(3) { animation-delay: 0.32s; }
+        @keyframes pulse-dot {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1.1); opacity: 1; }
+        }
+
+        /* ══════════════════ result card ══════════════════ */
+        .result-section {
+            background: #fff;
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+            margin-bottom: 24px;
+            border: 1px solid #e8ede9;
+            display: none;
+            /* Reveal animation: slide up + fade in */
+            animation: result-reveal 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes result-reveal {
+            from {
+                opacity: 0;
+                transform: translateY(36px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .result-section .disease-name {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #1b4332;
+        }
+
+        /* ══════════════════ confidence badge with progress-ring ══════════════════ */
+        .confidence-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            position: relative;
+            min-width: 72px;
+        }
+        /* Progress-ring via radial-gradient doughnut */
+        .confidence-badge.HIGH,
+        .confidence-badge.high {
+            color: #b91c1c;
+            background: radial-gradient(circle at center, #fef2f2 52%, #fecaca 54%, #fecaca 70%, transparent 72%);
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.12);
+        }
+        .confidence-badge.MEDIUM,
+        .confidence-badge.medium {
+            color: #c2410c;
+            background: radial-gradient(circle at center, #fff7ed 52%, #fed7aa 54%, #fed7aa 70%, transparent 72%);
+            box-shadow: 0 0 0 3px rgba(249,115,22,0.12);
+        }
+        .confidence-badge.LOW,
+        .confidence-badge.low {
+            color: #15803d;
+            background: radial-gradient(circle at center, #f0fdf4 52%, #bbf7d0 54%, #bbf7d0 70%, transparent 72%);
+            box-shadow: 0 0 0 3px rgba(34,197,94,0.12);
+        }
+
+        /* ══════════════════ result fields ══════════════════ */
+        .result-field { margin-bottom: 20px; }
+        .result-field .field-label {
+            font-weight: 700;
+            color: #2d6a4f;
+            font-size: 14px;
+            margin-bottom: 7px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .result-field .field-value {
+            color: #445;
+            line-height: 1.75;
+            white-space: pre-wrap;
+            background: #f9fdfa;
+            padding: 14px 18px;
+            border-radius: 12px;
+            border-left: 4px solid #74a989;
+            font-size: 14px;
+            position: relative;
+        }
+
+        /* ══════════════════ urgency — traffic-light dot system ══════════════════ */
+        .urgency-immediate {
+            border-left-color: #dc2626 !important;
+            background: #fef2f2 !important;
+        }
+        .urgency-24h {
+            border-left-color: #ea580c !important;
+            background: #fff7ed !important;
+        }
+        .urgency-observe {
+            border-left-color: #16a34a !important;
+            background: #f0fdf4 !important;
+        }
+        /* Traffic-light dots as left indicators */
+        .field-value.urgency-immediate,
+        .field-value.urgency-24h,
+        .field-value.urgency-observe {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        /* Hide the emoji dot and replace with a CSS traffic-light dot */
+        .field-value.urgency-immediate::before,
+        .field-value.urgency-24h::before,
+        .field-value.urgency-observe::before {
+            content: '';
+            flex-shrink: 0;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px currentColor;
+            animation: urgency-blink 2s ease-in-out infinite;
+        }
+        .field-value.urgency-immediate::before {
+            background: #dc2626;
+            color: #dc2626;
+            animation-duration: 0.8s;
+        }
+        .field-value.urgency-24h::before {
+            background: #ea580c;
+            color: #ea580c;
+            animation-duration: 1.2s;
+        }
+        .field-value.urgency-observe::before {
+            background: #16a34a;
+            color: #16a34a;
+            animation-duration: 2.5s;
+        }
+        @keyframes urgency-blink {
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px currentColor; }
+            50% { opacity: 0.6; box-shadow: 0 0 16px currentColor; }
+        }
+
+        /* ══════════════════ disclaimer ══════════════════ */
+        .disclaimer {
+            margin-top: 20px;
+            padding: 14px 18px;
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            border-radius: 10px;
+            font-size: 13px;
+            color: #92400e;
+            line-height: 1.6;
+        }
+
+        /* ══════════════════ history — timeline-style connector ══════════════════ */
+        .history-section {
+            background: #fff;
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+            border: 1px solid #e8ede9;
+            position: relative;
+        }
+        .history-section h3 {
+            margin: 0 0 24px;
+            color: #1b4332;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        /* Vertical timeline connector line */
+        .history-section #historyList {
+            position: relative;
+            padding-left: 0;
+        }
+        .history-item {
+            padding: 16px 18px 16px 48px;
+            border: 1px solid #e8ede9;
+            border-radius: 14px;
+            margin-bottom: 16px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            background: #fafcfa;
+        }
+        .history-item:last-child {
+            margin-bottom: 0;
+        }
+        .history-item:hover {
+            border-color: #74a989;
+            background: #f5faf7;
+            transform: translateX(6px);
+            box-shadow: 0 4px 16px rgba(45,106,79,0.08);
+        }
+        .history-item:active {
+            transform: scale(0.98) translateX(6px);
+        }
+        /* Timeline dot */
+        .history-item::before {
+            content: '';
+            position: absolute;
+            left: 16px;
+            top: 22px;
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border: 3px solid #c8dcd0;
+            border-radius: 50%;
+            z-index: 2;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .history-item:hover::before {
+            background: #40916c;
+            border-color: #2d6a4f;
+            box-shadow: 0 0 0 5px rgba(45,106,79,0.12);
+        }
+        /* Vertical connector between dots */
+        .history-item::after {
+            content: '';
+            position: absolute;
+            left: 21px;
+            top: 36px;
+            bottom: -16px;
+            width: 2px;
+            background: linear-gradient(to bottom, #c8dcd0, #e8ede9);
+            z-index: 1;
+        }
+        .history-item:last-child::after {
+            display: none;
+        }
+
+        .history-item .hist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .history-item .hist-name {
+            font-weight: 700;
+            color: #1b4332;
+            font-size: 15px;
+        }
+        .history-item .hist-time {
+            font-size: 12px;
+            color: #a0b0a6;
+        }
+        .history-item .hist-summary {
+            font-size: 13px;
+            color: #6b7d72;
+        }
+
+        /* ══════════════════ empty state ══════════════════ */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: #a0b0a6;
+        }
+        .empty-state .empty-icon {
+            font-size: 52px;
+            margin-bottom: 14px;
+            opacity: 0.5;
+        }
+        .empty-state .empty-text {
+            font-size: 15px;
+        }
+
+        /* ══════════════════ toast ══════════════════ */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            padding: 12px 24px;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            animation: toast-in 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                       toast-out 0.35s cubic-bezier(0.4, 0, 0.2, 1) 2.5s forwards;
+            white-space: nowrap;
+            text-align: center;
+        }
+        .toast.success { background: linear-gradient(135deg, #2d6a4f, #40916c); }
+        .toast.error { background: linear-gradient(135deg, #c0392b, #e74c3c); }
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateY(-20px) scale(0.9); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toast-out {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to   { opacity: 0; transform: translateY(-20px) scale(0.9); }
+        }
+
+        /* ══════════════════ responsive ══════════════════ */
+        @media (max-width: 768px) {
+            .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+            .topbar-brand { font-size: 15px; }
+            .mode-tab { padding: 10px 20px; font-size: 14px; }
+            .upload-area { padding: 30px 16px; }
+            .history-item { padding: 14px 14px 14px 40px; }
+            .history-item::before { left: 12px; top: 20px; }
+            .history-item::after { left: 17px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════ toast container ═══════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════ topbar ═══════════ -->
+<header class="topbar">
+    <div class="topbar-brand">🔬 智能病害诊断</div>
+    <div class="topbar-right">
+        <span id="greeting"></span>
+        <button onclick="location.href='/home'">首页</button>
+        <button onclick="logout()">退出</button>
+    </div>
+</header>
+
+<!-- ═══════════ main ═══════════ -->
+<main class="disease-main">
+
+    <!-- mode tabs -->
+    <div class="mode-tabs">
+        <div class="mode-tab active" id="plantTab" onclick="switchMode('plant')">🌿 植物病虫害</div>
+        <div class="mode-tab" id="petTab" onclick="switchMode('pet')">🐱 宠物皮肤病</div>
+    </div>
+
+    <!-- upload section -->
+    <div class="upload-section">
+        <label class="upload-area" id="uploadBox">
+            <input type="file" id="imageFile" accept="image/*" onchange="handleFile(this.files[0])">
+            <div class="upload-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </div>
+            <strong id="uploadLabel">点击或拖拽上传照片</strong>
+            <span class="hint">支持 JPG、PNG 格式</span>
+        </label>
+        <div class="preview-area" id="previewArea">
+            <img id="previewImage" src="" alt="预览">
+            <button class="clear-btn" onclick="clearImage()">&#10005;</button>
+        </div>
+        <button class="diag-btn" id="diagnoseBtn" onclick="diagnose()" disabled>🔍 开始诊断</button>
+        <div class="loading-spinner" id="loadingSpinner">
+            AI正在分析中<span class="spinner-dot"></span><span class="spinner-dot"></span><span class="spinner-dot"></span>
+        </div>
+    </div>
+
+    <!-- result -->
+    <div class="result-section" id="resultSection">
+        <div class="disease-name">
+            <span id="diseaseName">-</span>
+            <span class="confidence-badge" id="confidenceBadge"></span>
+        </div>
+        <div class="result-field">
+            <div class="field-label">🔍 症状描述</div>
+            <div class="field-value" id="symptomsField">-</div>
+        </div>
+        <div class="result-field">
+            <div class="field-label">💊 治疗方案</div>
+            <div class="field-value" id="treatmentField">-</div>
+        </div>
+        <div class="result-field">
+            <div class="field-label">🛡 预防建议</div>
+            <div class="field-value" id="preventionField">-</div>
+        </div>
+        <div class="result-field">
+            <div class="field-label">⏱ 紧急程度</div>
+            <div class="field-value" id="urgencyField">-</div>
+        </div>
+        <div class="disclaimer">
+            ⚠ <strong>免责声明：</strong>本诊断由AI辅助生成，不能替代专业兽医或植物病理学家的诊断。如遇严重情况，请及时就医。
+        </div>
+    </div>
+
+    <!-- history -->
+    <div class="history-section">
+        <h3>📋 诊断记录</h3>
+        <div id="historyList">
+            <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                <div class="empty-text">暂无诊断记录</div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+/* ═══════════════════════ state ═══════════════════════ */
+let currentMode = 'plant';
+let imageData = null;
+
+/* ═══════════════════════ toast ═══════════════════════ */
+function showToast(msg, type) {
+    var container = document.getElementById('toastContainer');
+    var el = document.createElement('div');
+    el.className = 'toast ' + (type || 'success');
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(function() {
+        if (el.parentNode) el.parentNode.removeChild(el);
+    }, 3000);
+}
+
+/* ═══════════════════════ greeting ═══════════════════════ */
+function setGreeting(userName) {
+    var h = new Date().getHours();
+    var part = h < 12 ? '早上好' : (h < 18 ? '下午好' : '晚上好');
+    document.getElementById('greeting').textContent = part + '，' + (userName || '用户');
+}
+
+/* ═══════════════════════ auth ═══════════════════════ */
+fetch('/api/auth/me').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.code === 200) {
+        setGreeting(data.data.userName);
+    } else {
+        location.href = '/login';
+    }
+}).catch(function() {
+    location.href = '/login';
+});
+
+/* ═══════════════════════ switch mode ═══════════════════════ */
+function switchMode(mode) {
+    currentMode = mode;
+    document.getElementById('plantTab').classList.toggle('active', mode === 'plant');
+    document.getElementById('petTab').classList.toggle('active', mode === 'pet');
+    var label = mode === 'plant' ? '点击或拖拽上传植物照片' : '点击或拖拽上传宠物皮肤照片';
+    document.getElementById('uploadLabel').textContent = label;
+    document.getElementById('resultSection').style.display = 'none';
+}
+
+/* ═══════════════════════ file handling ═══════════════════════ */
+function handleFile(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        imageData = e.target.result.split(',')[1];
+        document.getElementById('previewImage').src = e.target.result;
+        document.getElementById('previewArea').style.display = 'block';
+        document.getElementById('diagnoseBtn').style.display = 'block';
+        document.getElementById('diagnoseBtn').disabled = false;
+        document.getElementById('resultSection').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImage() {
+    imageData = null;
+    document.getElementById('previewArea').style.display = 'none';
+    document.getElementById('diagnoseBtn').style.display = 'none';
+    document.getElementById('imageFile').value = '';
+    document.getElementById('resultSection').style.display = 'none';
+}
+
+/* ═══════════════════════ diagnose ═══════════════════════ */
+async function diagnose() {
+    if (!imageData) return;
+
+    var btn = document.getElementById('diagnoseBtn');
+    var spinner = document.getElementById('loadingSpinner');
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    document.getElementById('resultSection').style.display = 'none';
+
+    try {
+        var blob = b64toBlob(imageData, 'image/jpeg');
+        var formData = new FormData();
+        formData.append('file', blob, 'diagnosis.jpg');
+        formData.append('type', currentMode);
+
+        var r = await fetch('/api/disease/diagnose', { method: 'POST', body: formData });
+        if (!r.ok) throw new Error('诊断请求失败');
+        var x = await r.json();
+        if (x.code !== 200) throw new Error(x.message || '诊断失败');
+
+        displayResult(x.data);
+        showToast('诊断完成', 'success');
+    } catch (e) {
+        showToast('诊断出错：' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+    }
+}
+
+/* ═══════════════════════ display result ═══════════════════════ */
+function displayResult(data) {
+    var section = document.getElementById('resultSection');
+    var dc = data.diseaseName || '未知';
+    var prefix = currentMode === 'plant' ? '🌿 ' : '🐱 ';
+    document.getElementById('diseaseName').textContent = prefix + dc;
+
+    var conf = (data.confidence || '').toUpperCase();
+    var badge = document.getElementById('confidenceBadge');
+    badge.textContent = conf || '未知';
+    badge.className = 'confidence-badge ' + conf.toLowerCase();
+
+    document.getElementById('symptomsField').textContent = data.symptoms || '暂无症状描述';
+    document.getElementById('treatmentField').textContent = data.treatmentPlan || '暂无治疗方案';
+    document.getElementById('preventionField').textContent = data.prevention || '暂无预防建议';
+
+    var urgency = (data.urgencyLevel || '').toUpperCase();
+    var urgencyField = document.getElementById('urgencyField');
+
+    // Reset classes
+    urgencyField.classList.remove('urgency-immediate', 'urgency-24h', 'urgency-observe');
+
+    if (urgency === 'IMMEDIATE') {
+        urgencyField.classList.add('urgency-immediate');
+        urgencyField.innerHTML = '<strong>立即就医 — 请尽快寻求专业帮助！</strong>';
+    } else if (urgency === '24H') {
+        urgencyField.classList.add('urgency-24h');
+        urgencyField.innerHTML = '<strong>24小时内处理 — 请在24小时内安排就诊</strong>';
+    } else if (urgency === 'OBSERVE') {
+        urgencyField.classList.add('urgency-observe');
+        urgencyField.innerHTML = '<strong>继续观察 — 可在家自行护理并留意变化</strong>';
+    } else {
+        urgencyField.textContent = urgency || '未知';
+    }
+
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    loadHistory();
+}
+
+/* ═══════════════════════ helpers ═══════════════════════ */
+function b64toBlob(b64Data, contentType) {
+    var byteChars = atob(b64Data);
+    var byteArrays = [];
+    for (var offset = 0; offset < byteChars.length; offset += 512) {
+        var slice = byteChars.slice(offset, offset + 512);
+        var byteNumbers = new Array(slice.length);
+        for (var i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    return new Blob(byteArrays, { type: contentType });
+}
+
+function hEs(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ═══════════════════════ history ═══════════════════════ */
+async function loadHistory() {
+    var container = document.getElementById('historyList');
+    try {
+        var r = await fetch('/api/disease/history');
+        if (!r.ok) throw new Error('无法加载诊断记录');
+        var x = await r.json();
+        if (x.code !== 200) throw new Error(x.message);
+
+        if (!x.data || x.data.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无诊断记录</div></div>';
+            return;
+        }
+
+        container.innerHTML = x.data.map(function(h) {
+            var diagName = '未知';
+            var confidence = '';
+            try {
+                var parsed = JSON.parse(h.result || '{}');
+                diagName = parsed.diseaseName || '未知';
+                confidence = parsed.confidence || '';
+            } catch (e) {}
+
+            var typeLabel = '';
+            try {
+                var meta = JSON.parse(h.metadata || '{}');
+                typeLabel = meta.type === 'plant' ? '🌿 植物' : '🐱 宠物';
+            } catch (e) {}
+
+            var timeStr = h.createdAt ? h.createdAt.replace('T', ' ').substring(0, 19) : '';
+
+            return '<div class="history-item" onclick="showHistoryDetail(\'' + (h.result || '').replace(/'/g, "\\'").replace(/"/g, '&quot;') + '\')">' +
+                '<div class="hist-header">' +
+                '<span class="hist-name">' + typeLabel + ' - ' + hEs(diagName) + '</span>' +
+                '<span class="hist-time">' + hEs(timeStr) + '</span>' +
+                '</div>' +
+                '<div class="hist-summary">置信度：' + hEs(confidence || '未提供') + '</div>' +
+                '</div>';
+        }).join('');
+    } catch (e) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-text">加载记录失败：' + hEs(e.message) + '</div></div>';
+    }
+}
+
+function showHistoryDetail(resultJson) {
+    try {
+        var data = JSON.parse(resultJson);
+        displayResult(data);
+        window.scrollTo({ top: document.getElementById('resultSection').offsetTop - 100, behavior: 'smooth' });
+    } catch (e) {
+        showToast('无法加载该记录', 'error');
+    }
+}
+
+/* ═══════════════════════ logout ═══════════════════════ */
+async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.href = '/login';
+}
+
+/* ═══════════════════════ init ═══════════════════════ */
+loadHistory();
+
+// Drag-and-drop support
+(function() {
+    var box = document.getElementById('uploadBox');
+    var prevent = function(e) { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(ev) {
+        box.addEventListener(ev, prevent, false);
+    });
+    box.addEventListener('drop', function(e) {
+        var files = e.dataTransfer.files;
+        if (files && files.length > 0) handleFile(files[0]);
+    }, false);
+})();
+</script>
+<script src="/js/push.js"></script>
+</body>
+</html>

@@ -37,4 +37,13 @@ public class InMemoryChatMemoryRepository implements ChatMemoryRepository {
     public boolean exists(String conversationId) {
         return memory.containsKey(conversationId);
     }
+
+    @Override
+    public void removeSystemMessages(String conversationId, String contentPrefix) {
+        memory.computeIfPresent(conversationId, (key, messages) -> {
+            messages.removeIf(msg -> "system".equals(msg.getRole()) && 
+                msg.getContent() != null && msg.getContent().startsWith(contentPrefix));
+            return messages;
+        });
+    }
 }

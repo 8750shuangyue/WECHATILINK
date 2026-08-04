@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>电商平台 - PetPlant</title>
+    <link rel="stylesheet" href="/css/shop.css">
+</head>
+<body>
+<header>
+    <h2>🛒 电商平台</h2>
+    <div class="tabs">
+        <button id="plantTab" onclick="location.href='/care'">植物护理</button>
+        <button id="petTab" onclick="location.href='/care?type=PET'">宠物护理</button>
+        <button id="shopTab" class="active">电商平台</button>
+    </div>
+    <div class="nav"><span id="userName"></span><button onclick="location.href='/home'">切换系统</button><button onclick="logout()">退出</button></div>
+</header>
+<main>
+    <section class="hero">
+        <div>
+            <h1>发现精选好物</h1>
+            <p>浏览商品，管理店铺，开启你的电商之旅</p>
+        </div>
+        <button class="primary" onclick="location.href='/shop-publish'" style="padding:16px 30px;font-size:16px;">+ 发布商品</button>
+    </section>
+    <div class="filter-bar">
+        <input type="text" id="searchInput" placeholder="搜索商品..." oninput="handleSearch()">
+        <select id="categoryFilter" onchange="handleFilter()">
+            <option value="">全部分类</option>
+        </select>
+        <select id="sortFilter" onchange="handleSort()">
+            <option value="default">默认排序</option>
+            <option value="price_asc">价格从低到高</option>
+            <option value="price_desc">价格从高到低</option>
+        </select>
+        <select id="statusFilter" onchange="handleFilter()">
+            <option value="">全部状态</option>
+            <option value="ON">在售</option>
+            <option value="OFF">已下架</option>
+        </select>
+        <button class="minor" onclick="resetFilters()">重置</button>
+    </div>
+    <div class="stats-bar">
+        <div class="stat-card"><div class="stat-value" id="statTotal">0</div><div class="stat-label">总商品</div></div>
+        <div class="stat-card"><div class="stat-value" id="statOn">0</div><div class="stat-label">在售</div></div>
+        <div class="stat-card"><div class="stat-value" id="statOff">0</div><div class="stat-label">已下架</div></div>
+    </div>
+    <div id="productGrid" class="cards"></div>
+    <div id="pagination" class="pagination"></div>
+</main>
+<div id="toast"></div>
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">商品详情</h3>
+            <button class="close-btn" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+    </div>
+</div>
+<script src="/js/shop.js"></script>
+</body>
+</html>

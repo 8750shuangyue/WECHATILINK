@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - 宠物与绿植 AI 护理助手</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --green-500: #3ddc97;
+            --green-600: #2f9e63;
+            --teal: #4fd1c5;
+            --purple: #8b5cf6;
+            --pink: #ec4899;
+            --text: #f2faf6;
+            --muted: rgba(226, 240, 233, .72);
+            --font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font);
+            color: var(--text);
+            min-height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background:
+                radial-gradient(1200px 800px at 80% -10%, rgba(47, 158, 99, .35), transparent 55%),
+                radial-gradient(1000px 700px at -10% 100%, rgba(79, 209, 197, .28), transparent 55%),
+                radial-gradient(900px 600px at 110% 110%, rgba(139, 92, 246, .25), transparent 55%),
+                linear-gradient(160deg, #08131c 0%, #0b2327 45%, #0e1c2c 100%);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---- 光斑 ---- */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: .55;
+            z-index: 0;
+            pointer-events: none;
+            animation: drift 22s ease-in-out infinite;
+        }
+
+        .orb-1 {
+            width: 520px;
+            height: 520px;
+            background: radial-gradient(circle, rgba(61, 220, 151, .5), transparent 70%);
+            top: -12%;
+            left: -6%;
+        }
+
+        .orb-2 {
+            width: 460px;
+            height: 460px;
+            background: radial-gradient(circle, rgba(79, 209, 197, .45), transparent 70%);
+            bottom: -14%;
+            right: -8%;
+            animation-delay: -7s;
+        }
+
+        .orb-3 {
+            width: 380px;
+            height: 380px;
+            background: radial-gradient(circle, rgba(139, 92, 246, .4), transparent 70%);
+            top: 42%;
+            left: 55%;
+            animation-delay: -13s;
+        }
+
+        .orb-4 {
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(236, 72, 153, .3), transparent 70%);
+            top: 8%;
+            right: 22%;
+            animation-delay: -4s;
+        }
+
+        @keyframes drift {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50%      { transform: translate(40px, -30px) scale(1.08); }
+        }
+
+        /* ---- 旋转极光 ---- */
+        .aurora {
+            position: fixed;
+            inset: -60%;
+            z-index: 0;
+            pointer-events: none;
+            background: conic-gradient(
+                from 0deg at 50% 50%,
+                rgba(61, 220, 151, .12),
+                rgba(79, 209, 197, .10),
+                rgba(139, 92, 246, .12),
+                rgba(236, 72, 153, .08),
+                rgba(61, 220, 151, .12)
+            );
+            filter: blur(80px);
+            opacity: .5;
+            animation: spin 46s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ---- 点阵 ---- */
+        .dots {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: .35;
+            background-image: radial-gradient(rgba(255,255,255,.14) 1px, transparent 1px);
+            background-size: 28px 28px;
+            -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+            mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+        }
+
+        /* ---- 上浮粒子 ---- */
+        .pt {
+            position: fixed;
+            bottom: -50px;
+            font-size: 22px;
+            opacity: 0;
+            z-index: 1;
+            pointer-events: none;
+            animation: riseUp linear infinite;
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,.25));
+        }
+
+        .pt-1 { left: 6%;  font-size: 24px; animation-duration: 15s; animation-delay: 0s; }
+        .pt-2 { left: 14%; font-size: 18px; animation-duration: 18s; animation-delay: -5s; }
+        .pt-3 { left: 26%; font-size: 21px; animation-duration: 13s; animation-delay: -9s; }
+        .pt-4 { left: 38%; font-size: 17px; animation-duration: 20s; animation-delay: -2s; }
+        .pt-5 { left: 62%; font-size: 22px; animation-duration: 16s; animation-delay: -11s; }
+        .pt-6 { left: 74%; font-size: 19px; animation-duration: 14s; animation-delay: -6s; }
+        .pt-7 { left: 85%; font-size: 24px; animation-duration: 19s; animation-delay: -3s; }
+        .pt-8 { left: 93%; font-size: 17px; animation-duration: 17s; animation-delay: -8s; }
+
+        @keyframes riseUp {
+            0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+            12%  { opacity: .4; }
+            88%  { opacity: .3; }
+            100% { transform: translateY(-112vh) rotate(45deg); opacity: 0; }
+        }
+
+        /* ---- 玻璃卡片 ---- */
+        .glass {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 500px;
+            padding: 50px 46px 40px;
+            border-radius: 30px;
+            background: linear-gradient(160deg, rgba(255,255,255,.13), rgba(255,255,255,.04));
+            border: 1px solid rgba(255, 255, 255, .18);
+            backdrop-filter: blur(30px) saturate(150%);
+            -webkit-backdrop-filter: blur(30px) saturate(150%);
+            box-shadow:
+                0 40px 90px rgba(0, 0, 0, .5),
+                inset 0 1px 0 rgba(255, 255, 255, .28);
+            text-align: center;
+            animation: card-in .85s cubic-bezier(.2, .8, .3, 1) both;
+            overflow: hidden;
+        }
+
+        /* 顶部高光 */
+        .glass::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 15%;
+            right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+            z-index: 3;
+        }
+
+        /* 渐变描边 */
+        .glass::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(150deg, rgba(255,255,255,.5), rgba(255,255,255,.05) 30%, rgba(61,220,151,.4) 70%, rgba(79,209,197,.55));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        /* 鼠标跟随光斑 */
+        .spotlight {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: radial-gradient(340px circle at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,.13), transparent 60%);
+            opacity: 0;
+            transition: opacity .35s;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .glass:hover .spotlight {
+            opacity: 1;
+        }
+
+        @keyframes card-in {
+            from { opacity: 0; transform: translateY(28px) scale(.95); filter: blur(6px); }
+            to   { opacity: 1; transform: none; filter: blur(0); }
+        }
+
+        /* 内容区 */
+        .glass > *:not(.spotlight) {
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo-chip {
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 18px;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 38px;
+            background: linear-gradient(150deg, rgba(61, 220, 151, .24), rgba(79, 209, 197, .14));
+            border: 1px solid rgba(255, 255, 255, .24);
+            box-shadow: 0 16px 40px rgba(61, 220, 151, .3), inset 0 1px 0 rgba(255,255,255,.35);
+            backdrop-filter: blur(8px);
+            animation: breathe 4.5s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); }
+            50%      { transform: scale(1.07); }
+        }
+
+        .brand {
+            font-size: 27px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+            background: linear-gradient(120deg, #fff 25%, #b8f5d9 45%, #fff 65%);
+            background-size: 220% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: sheen 6s ease-in-out infinite;
+        }
+
+        @keyframes sheen {
+            0%, 100% { background-position: 0% 0; }
+            50%      { background-position: 100% 0; }
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: rgba(255,255,255,.92);
+            background: rgba(255, 255, 255, .1);
+            border: 1px solid rgba(255, 255, 255, .22);
+            margin-bottom: 22px;
+        }
+
+        .slogan {
+            font-size: 23px;
+            font-weight: 800;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            background: linear-gradient(120deg, #f2faf6, #3ddc97 55%, #4fd1c5);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .desc {
+            font-size: 14px;
+            color: var(--muted);
+            line-height: 1.7;
+            margin-bottom: 26px;
+        }
+
+        /* 功能玻璃小卡 */
+        .tiles {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            padding: 15px 8px 13px;
+            border-radius: 17px;
+            background: rgba(255, 255, 255, .07);
+            border: 1px solid rgba(255, 255, 255, .14);
+            backdrop-filter: blur(6px);
+            transition: .25s;
+        }
+
+        .tile:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, .12);
+            border-color: rgba(61, 220, 151, .45);
+            box-shadow: 0 12px 30px rgba(61, 220, 151, .18);
+        }
+
+        .tile-icon {
+            font-size: 24px;
+        }
+
+        .tile-title {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .tile-desc {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        /* 按钮 */
+        .actions {
+            display: flex;
+            gap: 14px;
+        }
+
+        .btn {
+            position: relative;
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 15px 18px;
+            border-radius: 16px;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-decoration: none;
+            transition: .25s;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .btn-login {
+            color: #06251a;
+            background: linear-gradient(135deg, #3ddc97, #2f9e63 60%, #4fd1c5);
+            background-size: 160% 160%;
+            box-shadow: 0 14px 34px rgba(61, 220, 151, .35), inset 0 1px 0 rgba(255,255,255,.4);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-3px);
+            background-position: 100% 50%;
+            box-shadow: 0 20px 46px rgba(61, 220, 151, .5), inset 0 1px 0 rgba(255,255,255,.4);
+        }
+
+        .btn-register {
+            color: #fff;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .25);
+            backdrop-filter: blur(6px);
+        }
+
+        .btn-register:hover {
+            background: rgba(255, 255, 255, .16);
+            transform: translateY(-3px);
+        }
+
+        .btn:active {
+            transform: translateY(0) scale(.97);
+        }
+
+        /* 按钮流光 */
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -80%;
+            width: 55%;
+            height: 100%;
+            background: linear-gradient(105deg, transparent, rgba(255,255,255,.45), transparent);
+            transform: skewX(-20deg);
+            transition: left .6s ease;
+        }
+
+        .btn:hover::after {
+            left: 130%;
+        }
+
+        .foot {
+            margin-top: 26px;
+            font-size: 12px;
+            color: rgba(226, 240, 233, .5);
+            letter-spacing: .5px;
+        }
+
+        .loading-text {
+            font-size: 13px;
+            color: rgba(255,255,255,.6);
+            margin-top: 18px;
+        }
+
+        /* ---- 响应式 ---- */
+        @media (max-width: 560px) {
+            body { padding: 16px; overflow: auto; }
+            .glass { padding: 38px 22px 30px; border-radius: 24px; }
+            .slogan { font-size: 19px; }
+            .actions { flex-direction: column; }
+            .tiles { gap: 8px; }
+            .pt { display: none; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+<div class="orb orb-4"></div>
+<div class="aurora"></div>
+<div class="dots"></div>
+
+<span class="pt pt-1">🐾</span>
+<span class="pt pt-2">🪴</span>
+<span class="pt pt-3">🍃</span>
+<span class="pt pt-4">💧</span>
+<span class="pt pt-5">🐶</span>
+<span class="pt pt-6">🌸</span>
+<span class="pt pt-7">🐱</span>
+<span class="pt pt-8">🌿</span>
+
+<main class="glass" id="landingCard">
+    <div class="spotlight"></div>
+
+    <div class="logo-chip">🐾🌿</div>
+    <h1 class="brand">Sekai PetPlant</h1>
+    <span class="badge">AI 宠物 · 绿植护理助手</span>
+    <p class="slogan">让每株植物、每只毛孩子<br>都被温柔以待</p>
+    <p class="desc">拍照识别宠物与植物、智能护理提醒、微信实时对话——一站式 AI 生活助手。</p>
+
+    <div class="tiles">
+        <div class="tile">
+            <span class="tile-icon">🧠</span>
+            <span class="tile-title">AI 识别</span>
+            <span class="tile-desc">拍照即诊断</span>
+        </div>
+        <div class="tile">
+            <span class="tile-icon">⏰</span>
+            <span class="tile-title">智能提醒</span>
+            <span class="tile-desc">用药浇水不漏</span>
+        </div>
+        <div class="tile">
+            <span class="tile-icon">💬</span>
+            <span class="tile-title">微信对话</span>
+            <span class="tile-desc">多端实时同步</span>
+        </div>
+    </div>
+
+    <div class="actions">
+        <a class="btn btn-login" href="/login">登 录</a>
+        <a class="btn btn-register" href="/register">注 册</a>
+    </div>
+
+    <p class="loading-text" id="checking">正在检查登录状态…</p>
+    <p class="foot">Sekai PetPlant &copy; 2026 · 用心守护每一个小生命</p>
+</main>
+
+<script>
+// 鼠标跟随光斑
+var card = document.getElementById('landingCard');
+card.addEventListener('mousemove', function (e) {
+    var r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+});
+
+// 已登录用户直接进入首页
+fetch('/api/auth/me').then(r => r.json()).then(data => {
+    if (data.code === 200) {
+        location.href = '/home';
+    } else {
+        document.getElementById('checking').style.display = 'none';
+    }
+}).catch(() => {
+    document.getElementById('checking').style.display = 'none';
+});
+</script>
+</body>
+</html>

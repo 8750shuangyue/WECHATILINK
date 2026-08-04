@@ -1,6 +1,5 @@
 package com.example.demo.core;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -12,9 +11,6 @@ import java.util.UUID;
 
 @Service
 public class FileStorageService {
-
-    @Value("${server.port:8080}")
-    private String serverPort;
 
     private Path uploadPath;
 
@@ -30,7 +26,7 @@ public class FileStorageService {
         String filename = UUID.randomUUID().toString() + (extension != null ? extension : ".jpg");
         Path targetPath = uploadPath.resolve(filename);
         Files.write(targetPath, imageBytes);
-        return "http://localhost:" + serverPort + "/uploads/" + filename;
+        return "/uploads/" + filename;
     }
 
     public void deleteFile(String fileName) throws IOException {

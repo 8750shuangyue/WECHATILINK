@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - Chat</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body style="background: #f0f4f2;">
+<header class="topbar">
+    <div class="topbar-brand">
+        <a href="/home" style="color:#fff;text-decoration:none;">← Back</a>
+        &nbsp;|&nbsp; <span id="headerSys">PetPlant</span>
+    </div>
+    <div class="topbar-right">
+        <span id="greeting"></span>
+        <span class="badge" id="botStatus" style="background:#4a9;">Online</span>
+        <button onclick="logout()" class="text-btn">Exit</button>
+    </div>
+</header>
+
+<div class="chat-container">
+    <aside class="chat-sidebar">
+        <div class="sidebar-header"><h3>🐾🌿 PetPlant</h3><p>v2.0.0</p></div>
+        <div class="sidebar-system"><div class="sys-label">Current System</div><div class="sys-name" id="sidebarSys">PetPlant Assistant</div></div>
+        <div class="sidebar-tools"><div class="tool-label">Capabilities</div>
+            <div class="tool-list" id="toolList"></div>
+        </div>
+        <button class="secondary-btn" onclick="location.href='/home'" style="margin-top:auto;">Switch System</button>
+    </aside>
+
+    <div class="chat-main">
+        <div class="chat-messages" id="chatMessages">
+            <div class="msg system-msg">
+                <div class="msg-bubble system-bubble" id="welcomeMsg">
+                    Welcome to PetPlant Assistant!<br>Ask about pet care, plant safety, and more.
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <div id="imagePreview" style="display:none;margin-bottom:8px;position:relative;">
+                <img id="previewImg" src="" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid #ddd;">
+                <span onclick="removeImage()" style="position:absolute;top:-8px;left:116px;cursor:pointer;font-size:18px;">&times;</span>
+            </div>
+            <div class="input-row">
+                <label class="icon-btn" title="Send image" style="cursor:pointer;">
+                    🖼
+                    <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
+                </label>
+                <textarea id="msgInput" placeholder="Type a message... (Enter to send)" rows="1"></textarea>
+                <button class="send-btn" id="sendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;padding:10px 24px;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;"></div>
+
+<script>
+var selected = sessionStorage.getItem('selectedSystem') || 'petplant';
+var sysLabel, capabilities, welcomeText;
+if (selected === 'petplant') {
+    sysLabel = '🐾🌿 PetPlant Assistant';
+    capabilities = ['🐾 Pet Care', '🌿 Plant Safety', '🌤 Weather', '🔍 Search'];
+    welcomeText = 'Welcome to PetPlant Assistant!<br>Ask about pet care, plant safety, and more.';
+} else {
+    sysLabel = '💬📱 WeChat iLink';
+    capabilities = ['🖼 Image Analysis', '🌤 Weather', '⏰ Time', '🔍 Web Search', '📎 File Analysis'];
+    welcomeText = 'Welcome to WeChat iLink!<br>Send images, files, or text. AI with vision + tools.';
+}
+
+document.getElementById('sidebarSys').textContent = sysLabel;
+document.getElementById('headerSys').textContent = sysLabel;
+document.getElementById('welcomeMsg').innerHTML = welcomeText;
+
+var tl = document.getElementById('toolList');
+capabilities.forEach(function(c) {
+    var s = document.createElement('span');
+    s.className = 'tool-chip';
+    s.textContent = c;
+    tl.appendChild(s);
+});
+
+var imageBase64 = null;
+
+fetch('/api/auth/me').then(r => r.json()).then(data => {
+    if (data.code === 200) document.getElementById('greeting').textContent = data.data.userName;
+    else location.href = '/login';
+});
+
+function addMessage(text, dir, from, time) {
+    var div = document.createElement('div');
+    var isIn = dir === 'in';
+    div.className = 'msg ' + (isIn ? 'bot-msg' : 'user-msg');
+    var timeStr = time ? ' ' + time : '';
+    div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#4a9' : 'rgba(255,255,255,0.7)') + ';margin-bottom:3px;">' + from + timeStr + '</div>' + text.replace(/\n/g, '<br>') + '</div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function addImageMessage(url, from, time) {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    var bubble = document.createElement('div');
+    bubble.className = 'msg-bubble bot-bubble';
+    var meta = document.createElement('div');
+    meta.style.cssText = 'font-size:11px;color:#4a9;margin-bottom:6px;';
+    meta.textContent = from + (time ? ' ' + time : '');
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = 'AI generated image';
+    img.style.cssText = 'display:block;max-width:min(100%,512px);max-height:512px;border-radius:10px;cursor:pointer;';
+    img.onclick = function() { window.open(url, '_blank'); };
+    bubble.appendChild(meta);
+    bubble.appendChild(img);
+    div.appendChild(bubble);
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function handleImage(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        imageBase64 = ev.target.result.split(',')[1];
+        document.getElementById('previewImg').src = ev.target.result;
+        document.getElementById('imagePreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeImage() {
+    imageBase64 = null;
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('imageInput').value = '';
+}
+
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.style.opacity = '1';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function(){ t.style.opacity = '0'; }, 3000);
+}
+
+async function sendText() {
+    var text = document.getElementById('msgInput').value.trim();
+    if (!text && !imageBase64) { showToast('Please enter a message or select an image'); return; }
+
+    var displayText = text || '[Image]';
+    addMessage(displayText, 'out', 'Me', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    
+    if (imageBase64) {
+        var imgDiv = document.createElement('div');
+        imgDiv.className = 'msg user-msg';
+        imgDiv.innerHTML = '<div class="msg-bubble user-bubble"><img src="data:image/png;base64,' + imageBase64 + '" style="max-width:200px;border-radius:8px;"></div>';
+        document.getElementById('chatMessages').appendChild(imgDiv);
+    }
+
+    document.getElementById('msgInput').value = '';
+    
+    var body = {text: text};
+    if (imageBase64) {
+        body.image = imageBase64;
+    }
+
+    try {
+        var res = await fetch('/api/care/qa', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({question: text || '请分析这张图片'})
+        });
+        var x = await res.json();
+        if (x.data && x.data.reply) {
+            addMessage(x.data.reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+        }
+    } catch(e) {
+        showToast('Send failed: ' + e.message);
+    }
+
+    removeImage();
+}
+
+document.getElementById('sendBtn').onclick = sendText;
+document.getElementById('msgInput').onkeydown = function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+};
+
+async function logout() {
+    await fetch('/api/auth/logout', {method:'POST'});
+    location.href = '/login';
+}
+</script>
+</body>
+</html>

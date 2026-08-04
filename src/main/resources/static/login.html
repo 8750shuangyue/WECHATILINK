@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - 登录</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="auth-overlay">
+    <div class="auth-card">
+        <div class="brand">
+            <span class="logo">🐾🌿</span>
+            <h1>Sekai PetPlant</h1>
+            <p>一体式宠物&绿植护理助手</p>
+        </div>
+        <div class="auth-tabs">
+            <a href="/login" class="tab active">登录</a>
+            <a href="/register" class="tab">注册</a>
+        </div>
+        <div class="server-msg" id="serverMsg"></div>
+        <form id="loginForm">
+            <label>用户名</label>
+            <input type="text" id="userName" placeholder="请输入用户名" required autocomplete="username">
+            <label>密码</label>
+            <div class="pw-row">
+                <input type="password" id="password" placeholder="请输入密码" required autocomplete="current-password">
+                <button type="button" id="togglePw">👁</button>
+            </div>
+            <button type="submit" class="primary-btn">登 录</button>
+        </form>
+    </div>
+</div>
+<script>
+const API = '';
+document.getElementById('togglePw').onclick = function() {
+    const p = document.getElementById('password');
+    p.type = p.type === 'password' ? 'text' : 'password';
+};
+document.getElementById('loginForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const msg = document.getElementById('serverMsg');
+    try {
+        const res = await fetch(API + '/api/auth/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                userName: document.getElementById('userName').value,
+                password: document.getElementById('password').value
+            })
+        });
+        const data = await res.json();
+        if (data.code === 200) {
+            msg.className = 'server-msg success';
+            msg.textContent = '登录成功，正在跳转...';
+            setTimeout(() => location.href = '/home', 800);
+        } else {
+            msg.className = 'server-msg error';
+            msg.textContent = data.message;
+        }
+    } catch(err) {
+        msg.className = 'server-msg error';
+        msg.textContent = '网络错误，请重试';
+    }
+};
+</script>
+</body>
+</html>

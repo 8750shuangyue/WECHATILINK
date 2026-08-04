@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社区交流 - Sekai PetPlant</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        :root {
+            --primary: #4a9;
+            --primary-dark: #3a8;
+            --primary-light: #e8f5e9;
+            --warm: #f39c12;
+            --warm-light: #fff3e0;
+            --cool: #3498db;
+            --cool-light: #e3f2fd;
+            --danger: #e74c3c;
+            --danger-light: #fdecea;
+            --bg: #eef1ef;
+            --card-bg: #fff;
+            --text: #2c3e50;
+            --text-secondary: #555;
+            --text-muted: #999;
+            --border: #e8e8e8;
+            --radius-sm: 6px;
+            --radius: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 18px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow: 0 2px 8px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+            animation: pageFadeIn 0.4s ease;
+        }
+
+        @keyframes pageFadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Topbar */
+        .topbar {
+            background: linear-gradient(135deg, #43a047 0%, #388e3c 50%, #2e7d32 100%);
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 24px;
+            height: 56px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .topbar-brand {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 13px;
+        }
+        .topbar-right a {
+            color: #fff;
+            opacity: 0.85;
+            text-decoration: none;
+            font-size: 13px;
+            transition: opacity var(--transition);
+        }
+        .topbar-right a:hover { opacity: 1; }
+        .text-btn {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: var(--radius-sm);
+            padding: 5px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+        .text-btn:hover { background: rgba(255,255,255,0.25); }
+
+        /* Container */
+        .community-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 20px;
+            animation: contentSlideIn 0.5s ease forwards;
+        }
+
+        @keyframes contentSlideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Header */
+        .com-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 0 16px;
+        }
+        .com-header h2 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0;
+        }
+        .new-post-btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-xl);
+            padding: 10px 22px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 8px rgba(68,170,153,0.3);
+        }
+        .new-post-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(68,170,153,0.4);
+        }
+        .new-post-btn:active { transform: translateY(0); }
+
+        /* Category Tabs */
+        .com-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 18px;
+            border-bottom: 2px solid #e0e4e0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .com-tab {
+            padding: 10px 22px;
+            font-size: 14px;
+            color: var(--text-muted);
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all var(--transition);
+            white-space: nowrap;
+            font-weight: 500;
+            position: relative;
+        }
+        .com-tab:hover { color: var(--primary); }
+        .com-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 700;
+        }
+        .com-tab .tab-count {
+            display: inline-block;
+            background: #f0f0f0;
+            color: #888;
+            font-size: 11px;
+            border-radius: 10px;
+            padding: 1px 7px;
+            margin-left: 5px;
+            font-weight: 400;
+            transition: all var(--transition);
+        }
+        .com-tab.active .tab-count {
+            background: var(--primary-light);
+            color: var(--primary-dark);
+        }
+
+        /* Tag Cloud */
+        .tag-cloud-wrapper {
+            margin-bottom: 18px;
+        }
+        .tag-cloud-header {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .tag-cloud {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 2px 0 8px;
+            scrollbar-width: thin;
+            scrollbar-color: #ddd transparent;
+        }
+        .tag-cloud::-webkit-scrollbar { height: 4px; }
+        .tag-cloud::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+        .tag-cloud::-webkit-scrollbar-track { background: transparent; }
+
+        .tag-chip {
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+            color: #567;
+            padding: 5px 14px;
+            border-radius: var(--radius-xl);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+            border: 1.5px solid transparent;
+            font-weight: 500;
+        }
+        .tag-chip:hover {
+            background: linear-gradient(135deg, #e0e8ff 0%, #d0dcff 100%);
+            border-color: #c8d6ff;
+            transform: translateY(-1px);
+        }
+        .tag-chip.selected {
+            background: linear-gradient(135deg, var(--primary) 0%, #5bceaa 100%);
+            color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 3px 10px rgba(68,170,153,0.35);
+        }
+
+        /* ===== Skeleton Loading ===== */
+        .skeleton-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
+            border: 1.5px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: skeletonPulse 1.6s ease-in-out infinite;
+        }
+        @keyframes skeletonPulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+        .skeleton-line {
+            height: 14px;
+            border-radius: 7px;
+            background: linear-gradient(90deg, #e8e8e8 25%, #f0f0f0 50%, #e8e8e8 75%);
+            background-size: 200% 100%;
+            animation: skeletonShimmer 1.6s ease-in-out infinite;
+        }
+        @keyframes skeletonShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        .skeleton-line.w40 { width: 40%; }
+        .skeleton-line.w60 { width: 60%; }
+        .skeleton-line.w75 { width: 75%; }
+        .skeleton-line.w90 { width: 90%; }
+        .skeleton-tags { display: flex; gap: 8px; margin-top: 4px; }
+        .skeleton-tag { width: 48px; height: 20px; border-radius: 10px;
+            background: linear-gradient(90deg, #e8e8e8 25%, #f0f0f0 50%, #e8e8e8 75%);
+            background-size: 200% 100%;
+            animation: skeletonShimmer 1.6s ease-in-out infinite; }
+        .skeleton-stats { display: flex; gap: 18px; margin-top: 4px; }
+        .skeleton-stat { width: 60px; height: 12px; border-radius: 6px;
+            background: linear-gradient(90deg, #e8e8e8 25%, #f0f0f0 50%, #e8e8e8 75%);
+            background-size: 200% 100%;
+            animation: skeletonShimmer 1.6s ease-in-out infinite; }
+
+        /* ===== Like Button Heart Beat ===== */
+        .like-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 14px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 20px;
+            background: #fafafa;
+            cursor: pointer;
+            font-size: 13px;
+            color: #888;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+        }
+        .like-btn:hover {
+            border-color: #e57373;
+            color: #e53935;
+            background: #fff5f5;
+        }
+        .like-btn.liked {
+            background: linear-gradient(135deg, #ffebee, #fce4ec);
+            border-color: #ef5350;
+            color: #e53935;
+            box-shadow: 0 2px 8px rgba(229,57,53,0.2);
+        }
+        .like-btn:active { transform: scale(0.95); }
+        .like-btn .heart-icon {
+            display: inline-block;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .like-btn.liked .heart-icon {
+            animation: heartBeat 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            color: #e53935;
+        }
+        @keyframes heartBeat {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.4); }
+            50% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+
+        /* ===== Threaded Comment Lines ===== */
+        .comment-thread {
+            position: relative;
+            padding-left: 20px;
+        }
+        .comment-thread::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 24px;
+            bottom: 6px;
+            width: 2px;
+            background: linear-gradient(180deg, #d0d0d0 0%, #e8e8e8 60%, transparent 100%);
+            border-radius: 1px;
+        }
+        .comment-thread .comment-item {
+            position: relative;
+        }
+        .comment-thread .comment-item::before {
+            content: '';
+            position: absolute;
+            left: -12px;
+            top: 18px;
+            width: 10px;
+            height: 2px;
+            background: #d0d0d0;
+            border-radius: 1px;
+        }
+        .comment-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .comment-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #a5d6a7, #66bb6a);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            margin-right: 10px;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+
+        /* Post List */
+        .post-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .post-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1.5px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+            animation: cardFadeIn 0.45s ease forwards;
+            opacity: 0;
+        }
+        @keyframes cardFadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Left gradient accent per category */
+        .post-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+        }
+        .post-card.cat-PET::before { background: linear-gradient(to bottom, #f39c12, #e67e22, #d35400); }
+        .post-card.cat-PLANT::before { background: linear-gradient(to bottom, #43a047, #388e3c, #2e7d32); }
+        .post-card.cat-GENERAL::before { background: linear-gradient(to bottom, #3498db, #2980b9, #1a5276); }
+        .post-card:hover {
+            border-color: #c8e6c9;
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        .post-card:hover::before { opacity: 1; }
+        .post-card .post-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+        .post-card .post-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .post-card .post-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .post-card .post-author {
+            font-weight: 600;
+            color: #555;
+        }
+        .post-card .post-meta-dot {
+            width: 3px;
+            height: 3px;
+            background: #ccc;
+            border-radius: 50%;
+        }
+        .post-card .post-preview {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 12px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .post-card .post-tags {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .post-card .post-tag {
+            padding: 3px 10px;
+            border-radius: var(--radius-xl);
+            font-size: 11px;
+            font-weight: 500;
+            cursor: default;
+            transition: all var(--transition);
+        }
+        .post-tag.tag-pet {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            color: #e67e22;
+            border: 1px solid rgba(230,126,34,0.15);
+        }
+        .post-tag.tag-plant {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            color: var(--primary-dark);
+            border: 1px solid rgba(58,136,58,0.12);
+        }
+        .post-tag.tag-general {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            color: #1976d2;
+            border: 1px solid rgba(25,118,210,0.12);
+        }
+        .post-tag.tag-other {
+            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+            color: #7b1fa2;
+            border: 1px solid rgba(123,31,162,0.12);
+        }
+        .post-card .post-stats {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 18px;
+            align-items: center;
+        }
+        .post-card .post-stats span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: color var(--transition);
+        }
+        .post-card .post-stats .stat-like:hover { color: var(--danger); }
+        .post-card .post-stats .stat-comment:hover { color: var(--primary); }
+        .post-card .post-stats .stat-view:hover { color: var(--cool); }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-muted);
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .empty-state .empty-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+        .empty-state p {
+            font-size: 14px;
+            margin: 4px 0;
+        }
+        .empty-state .new-post-link {
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            margin-top: 28px;
+            padding-bottom: 40px;
+        }
+        .page-btn {
+            min-width: 36px;
+            height: 36px;
+            padding: 0 10px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--card-bg);
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+        }
+        .page-btn:hover:not(:disabled):not(.active) {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: var(--primary-light);
+        }
+        .page-btn.active {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border-color: var(--primary);
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(68,170,153,0.3);
+        }
+        .page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            background: #f5f5f5;
+        }
+        .page-ellipsis {
+            min-width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            color: #ccc;
+            cursor: default;
+        }
+        .page-info {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin: 0 8px;
+        }
+
+        /* Detail Overlay */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 100;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 30px;
+            overflow-y: auto;
+        }
+        .detail-overlay.show { display: flex; }
+        .detail-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 680px;
+            padding: 32px;
+            margin-bottom: 40px;
+            position: relative;
+            box-shadow: var(--shadow-lg);
+            animation: detailSlideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+        }
+        @keyframes detailSlideUp {
+            from { opacity: 0; transform: translateY(30px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .detail-close {
+            position: absolute;
+            top: 14px;
+            right: 18px;
+            background: #f5f5f5;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-muted);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+            line-height: 1;
+        }
+        .detail-close:hover { background: #e0e0e0; color: #333; transform: rotate(90deg); }
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            color: var(--primary);
+            cursor: pointer;
+            margin-bottom: 16px;
+            background: none;
+            border: none;
+            padding: 0;
+            font-weight: 500;
+            transition: all var(--transition);
+        }
+        .detail-back:hover { color: var(--primary-dark); transform: translateX(-3px); }
+        .detail-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 10px;
+            padding-right: 36px;
+            line-height: 1.4;
+        }
+        .detail-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .detail-meta .detail-author {
+            font-weight: 600;
+            color: #555;
+        }
+        .detail-meta .detail-category-badge {
+            padding: 2px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .detail-meta .detail-category-badge.cat-pet {
+            background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+            color: #e67e22;
+        }
+        .detail-meta .detail-category-badge.cat-plant {
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            color: var(--primary-dark);
+        }
+        .detail-meta .detail-category-badge.cat-general {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            color: #1976d2;
+        }
+        .detail-content {
+            font-size: 14px;
+            line-height: 1.9;
+            color: #444;
+            margin-bottom: 22px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .detail-image {
+            max-width: 100%;
+            border-radius: var(--radius);
+            margin-bottom: 18px;
+            box-shadow: var(--shadow-sm);
+        }
+        .detail-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .detail-tag {
+            padding: 4px 12px;
+            border-radius: var(--radius-xl);
+            font-size: 12px;
+            font-weight: 500;
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+            color: #567;
+        }
+
+        /* Detail actions */
+        .detail-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 22px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid #f0f0f0;
+            position: relative;
+        }
+        .like-btn {
+            background: #f8f8f8;
+            border: 1.5px solid #e0e0e0;
+            border-radius: var(--radius-xl);
+            padding: 8px 18px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            position: relative;
+            overflow: visible;
+        }
+        .like-btn:hover { border-color: var(--danger); background: #fff5f5; }
+        .like-btn.liked {
+            background: var(--danger-light);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        .like-btn .heart-icon {
+            display: inline-block;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .like-btn.liked .heart-icon {
+            animation: heartBeat 0.5s ease;
+        }
+        @keyframes heartBeat {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.35); }
+            50% { transform: scale(0.9); }
+            75% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* Confetti burst particles */
+        .confetti-container {
+            position: absolute;
+            pointer-events: none;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            z-index: 10;
+        }
+        .confetti-particle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            animation: confettiBurst 0.7s ease-out forwards;
+        }
+        @keyframes confettiBurst {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--cx), var(--cy)) scale(0); opacity: 0; }
+        }
+
+        .like-btn::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            background: radial-gradient(circle, var(--danger) 10%, transparent 10.01%);
+            transform: scale(10);
+            opacity: 0;
+            transition: transform 0.5s, opacity 1s;
+        }
+        .like-btn:active::after {
+            transform: scale(0);
+            opacity: 0.3;
+            transition: 0s;
+        }
+        .delete-btn {
+            background: none;
+            border: 1.5px solid #e8e8e8;
+            border-radius: var(--radius-xl);
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-muted);
+            transition: all var(--transition);
+            margin-left: auto;
+            font-weight: 500;
+        }
+        .delete-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+            background: #fff5f5;
+        }
+
+        /* Comments */
+        .comments-section h4 {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .comments-section h4 .comment-count-badge {
+            background: #f0f0f0;
+            color: #888;
+            font-size: 12px;
+            font-weight: 500;
+            border-radius: 10px;
+            padding: 2px 10px;
+        }
+
+        /* Threaded-line comment design */
+        .comment-item {
+            padding: 12px 0;
+            position: relative;
+        }
+        .comment-item + .comment-item { border-top: 1px solid #f5f5f5; }
+        .comment-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .comment-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #a5d6a7 0%, #66bb6a 50%, #43a047 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #fff;
+            font-weight: 700;
+            flex-shrink: 0;
+            box-shadow: 0 2px 6px rgba(67,160,71,0.2);
+        }
+        .comment-avatar.reply-avatar {
+            width: 26px;
+            height: 26px;
+            font-size: 11px;
+            background: linear-gradient(135deg, #bdbdbd 0%, #9e9e9e 50%, #757575 100%);
+            color: #fff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        .comment-author {
+            font-size: 13px;
+            font-weight: 700;
+            color: #444;
+        }
+        .comment-time {
+            font-size: 11px;
+            color: #bbb;
+            margin-left: 4px;
+        }
+        .comment-content {
+            font-size: 13px;
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 6px;
+            margin-left: 40px;
+        }
+        .comment-actions {
+            margin-left: 40px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .c-reply-btn {
+            font-size: 11px;
+            color: var(--primary);
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 2px 0;
+            font-weight: 500;
+            transition: color var(--transition);
+        }
+        .c-reply-btn:hover { color: var(--primary-dark); text-decoration: underline; }
+        .c-delete-btn {
+            font-size: 11px;
+            color: #ccc;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 2px 0;
+            transition: color var(--transition);
+        }
+        .c-delete-btn:hover { color: var(--danger); }
+        .comment-replies {
+            margin-left: 32px;
+            padding-left: 16px;
+            border-left: 2px solid transparent;
+            border-image: linear-gradient(to bottom, #a5d6a7, transparent) 1;
+            margin-top: 4px;
+            position: relative;
+        }
+        /* Thread connector dots */
+        .comment-replies::before {
+            content: '';
+            position: absolute;
+            left: -5px;
+            top: 16px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a5d6a7;
+        }
+        .reply-form {
+            margin-top: 8px;
+            margin-left: 40px;
+            display: none;
+        }
+        .reply-form.show { display: flex; flex-direction: column; gap: 8px; }
+        .reply-form textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1.5px solid #ddd;
+            border-radius: var(--radius);
+            font-size: 13px;
+            resize: vertical;
+            min-height: 56px;
+            font-family: inherit;
+            transition: border-color var(--transition);
+            background: #fafafa;
+        }
+        .reply-form textarea:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(68,170,153,0.08); }
+        .reply-form .reply-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .reply-submit {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            padding: 6px 16px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all var(--transition);
+            box-shadow: 0 2px 6px rgba(68,170,153,0.2);
+        }
+        .reply-submit:hover { background: var(--primary-dark); box-shadow: 0 3px 10px rgba(68,170,153,0.3); }
+        .reply-cancel {
+            background: #f0f0f0;
+            color: #666;
+            border: none;
+            border-radius: var(--radius);
+            padding: 6px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+        .reply-cancel:hover { background: #e0e0e0; }
+
+        /* New comment form */
+        .new-comment-form {
+            margin-top: 18px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        .new-comment-form textarea {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: var(--radius);
+            font-size: 13px;
+            resize: vertical;
+            min-height: 48px;
+            font-family: inherit;
+            background: #fafafa;
+            transition: all var(--transition);
+        }
+        .new-comment-form textarea:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(68,170,153,0.08); }
+        .new-comment-form button {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            height: 48px;
+            white-space: nowrap;
+            transition: all var(--transition);
+            box-shadow: 0 2px 8px rgba(68,170,153,0.25);
+        }
+        .new-comment-form button:hover {
+            box-shadow: 0 4px 14px rgba(68,170,153,0.35);
+            transform: translateY(-1px);
+        }
+
+        /* New Post Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 520px;
+            padding: 32px;
+            box-shadow: var(--shadow-lg);
+            animation: detailSlideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+        }
+        .modal-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0 0 20px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        /* Rich text toolbar visual */
+        .modal-rt-toolbar {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .modal-rt-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            cursor: default;
+            font-size: 13px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .modal-rt-btn:hover { background: #f5f5f5; color: #555; }
+        .modal-rt-sep { width: 1px; background: #eee; margin: 4px 6px; }
+
+        .modal-card label {
+            display: block;
+            font-size: 13px;
+            color: #555;
+            margin: 12px 0 5px;
+            font-weight: 600;
+        }
+        .modal-card label .required {
+            color: var(--danger);
+        }
+        .modal-card input,
+        .modal-card select,
+        .modal-card textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color var(--transition), box-shadow var(--transition);
+            background: #fafafa;
+        }
+        .modal-card input:focus,
+        .modal-card select:focus,
+        .modal-card textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(68,170,153,0.08);
+        }
+        .modal-card textarea {
+            min-height: 140px;
+            resize: vertical;
+            line-height: 1.8;
+        }
+        .modal-card select {
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 22px;
+            padding-top: 16px;
+            border-top: 1px solid #f0f0f0;
+        }
+        .modal-cancel {
+            padding: 10px 22px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: var(--radius);
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all var(--transition);
+            font-weight: 500;
+        }
+        .modal-cancel:hover { background: #f5f5f5; border-color: #ccc; }
+        .modal-submit {
+            padding: 10px 28px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: #fff;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            transition: all var(--transition);
+            box-shadow: 0 2px 8px rgba(68,170,153,0.3);
+        }
+        .modal-submit:hover {
+            box-shadow: 0 4px 14px rgba(68,170,153,0.4);
+            transform: translateY(-1px);
+        }
+        .modal-submit:active { transform: translateY(0); }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: var(--radius-xl);
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        }
+        .toast.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.success { background: linear-gradient(135deg, #43a047, #66bb6a); }
+        .toast.error { background: linear-gradient(135deg, #e53935, #ef5350); }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .community-container { padding: 0 12px; }
+            .com-header { flex-direction: column; gap: 12px; align-items: stretch; }
+            .com-header h2 { font-size: 20px; }
+            .new-post-btn { justify-content: center; }
+            .post-card { padding: 16px; }
+            .detail-card { padding: 20px; border-radius: var(--radius) var(--radius) 0 0; max-width: 100%; margin-bottom: 0; }
+            .detail-overlay { padding-top: 10px; align-items: flex-end; }
+            .comment-replies { margin-left: 20px; padding-left: 12px; }
+            .comment-content { margin-left: 30px; }
+            .comment-actions { margin-left: 30px; }
+            .reply-form { margin-left: 30px; }
+            .new-comment-form { flex-direction: column; }
+            .new-comment-form button { width: 100%; }
+            .modal-card { padding: 24px; margin: 10px; max-width: 100%; }
+            .pagination { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="topbar-brand">👥 社区交流</div>
+        <div class="topbar-right">
+            <span id="greeting"></span>
+            <a href="/home.html">首页</a>
+            <button onclick="logout()" class="text-btn">退出</button>
+        </div>
+    </header>
+
+    <div class="community-container">
+        <!-- Header -->
+        <div class="com-header">
+            <h2>社区交流</h2>
+            <button class="new-post-btn" onclick="showNewPostModal()">✏️ 发布新帖</button>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="com-tabs">
+            <button class="com-tab active" onclick="filterByCategory(null)">全部</button>
+            <button class="com-tab" onclick="filterByCategory('PET')">宠物</button>
+            <button class="com-tab" onclick="filterByCategory('PLANT')">植物</button>
+            <button class="com-tab" onclick="filterByCategory('GENERAL')">综合</button>
+        </div>
+
+        <!-- Tag Cloud -->
+        <div class="tag-cloud-wrapper">
+            <div class="tag-cloud-header">热门标签</div>
+            <div class="tag-cloud" id="tagCloud"></div>
+        </div>
+
+        <!-- Post List -->
+        <div class="post-list" id="postList"></div>
+        <div class="loading" id="loading" style="display:none;">加载中...</div>
+        <div class="empty-state" id="emptyState" style="display:none;">
+            <div class="empty-icon">📝</div>
+            <p>还没有人发帖，来发布第一条吧！</p>
+            <p><span class="new-post-link" onclick="showNewPostModal()">立即发布</span></p>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- Post Detail Overlay -->
+    <div class="detail-overlay" id="detailOverlay">
+        <div class="detail-card" id="detailCard"></div>
+    </div>
+
+    <!-- New Post Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-card">
+            <h3>发布新帖</h3>
+            <div class="modal-rt-toolbar">
+                <span class="modal-rt-btn" title="加粗">B</span>
+                <span class="modal-rt-btn" title="斜体"><i>I</i></span>
+                <span class="modal-rt-btn" title="下划线"><u>U</u></span>
+                <span class="modal-rt-sep"></span>
+                <span class="modal-rt-btn" title="链接">🔗</span>
+                <span class="modal-rt-btn" title="图片">🖼</span>
+                <span class="modal-rt-btn" title="列表">📋</span>
+            </div>
+            <label>标题 <span class="required">*</span></label>
+            <input type="text" id="newTitle" placeholder="输入帖子标题" maxlength="200">
+            <label>分类</label>
+            <select id="newCategory">
+                <option value="GENERAL">综合</option>
+                <option value="PET">宠物</option>
+                <option value="PLANT">植物</option>
+            </select>
+            <label>内容 <span class="required">*</span></label>
+            <textarea id="newContent" placeholder="分享你的经验或提出问题..."></textarea>
+            <label>图片链接（可选）</label>
+            <input type="text" id="newImageUrl" placeholder="https://example.com/image.jpg">
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="hideNewPostModal()">取消</button>
+                <button class="modal-submit" onclick="submitNewPost()">发布</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let currentUserName = null;
+        let currentCategory = null;
+        let currentTag = null;
+        let currentPage = 1;
+        let currentPostId = null;
+
+        // ============ Toast ============
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'toast ' + (type || '');
+            toast.classList.add('show');
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(function() {
+                toast.classList.remove('show');
+            }, 2500);
+        }
+
+        // ============ Greeting based on hour ============
+        function getGreeting() {
+            var h = new Date().getHours();
+            if (h < 6) return '夜深了';
+            if (h < 9) return '早上好';
+            if (h < 12) return '上午好';
+            if (h < 14) return '中午好';
+            if (h < 18) return '下午好';
+            return '晚上好';
+        }
+
+        // ============ Time format ============
+        function formatTime(dateStr) {
+            if (!dateStr) return '';
+            var now = new Date();
+            var date = new Date(dateStr);
+            var diff = Math.floor((now - date) / 1000);
+            if (diff < 0) diff = 0;
+            if (diff < 60) return '刚刚';
+            if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
+            if (diff < 86400) return Math.floor(diff / 3600) + '小时前';
+            if (diff < 2592000) return Math.floor(diff / 86400) + '天前';
+            var m = date.getMonth() + 1;
+            var d = date.getDate();
+            return (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+        }
+
+        // ============ Auth check ============
+        fetch('/api/auth/me').then(function(r) { return r.json(); }).then(function(data) {
+            if (data.code === 200) {
+                currentUser = data.data.userName || data.data.user;
+                currentUserName = data.data.userName || data.data.user;
+                document.getElementById('greeting').textContent = getGreeting() + '，' + currentUserName;
+                loadTagCloud();
+                loadPosts();
+            } else {
+                location.href = '/login';
+            }
+        }).catch(function() {
+            location.href = '/login';
+        });
+
+        function logout() {
+            fetch('/api/auth/logout', { method: 'POST' }).then(function() {
+                location.href = '/login';
+            });
+        }
+
+        // ============ Category Tabs ============
+        function filterByCategory(cat) {
+            currentCategory = cat;
+            currentTag = null;
+            currentPage = 1;
+            var tabs = document.querySelectorAll('.com-tab');
+            var categories = [null, 'PET', 'PLANT', 'GENERAL'];
+            tabs.forEach(function(t, i) {
+                t.classList.toggle('active', categories[i] === cat);
+            });
+            document.querySelectorAll('.tag-chip').forEach(function(c) {
+                c.classList.remove('selected');
+            });
+            loadPosts();
+            loadTagCloud();
+        }
+
+        function filterByTag(tag) {
+            currentTag = tag;
+            currentCategory = null;
+            currentPage = 1;
+            document.querySelectorAll('.com-tab').forEach(function(t) {
+                t.classList.remove('active');
+            });
+            document.querySelectorAll('.tag-chip').forEach(function(c) {
+                c.classList.toggle('selected', c.textContent.trim() === tag);
+            });
+            loadPosts();
+        }
+
+        // ============ Tag Cloud ============
+        function loadTagCloud() {
+            fetch('/api/community/tags').then(function(r) { return r.json(); }).then(function(data) {
+                var container = document.getElementById('tagCloud');
+                if (data.code === 200 && data.data.length > 0) {
+                    container.innerHTML = data.data.map(function(t) {
+                        var selected = currentTag === t ? ' selected' : '';
+                        return '<span class="tag-chip' + selected + '" onclick="filterByTag(\'' + t.replace(/'/g, "\\'") + '\')">' + t + '</span>';
+                    }).join('');
+                } else {
+                    container.innerHTML = '';
+                }
+            }).catch(function(e) { console.error('加载标签失败', e); });
+        }
+
+        // ============ Skeleton Loader ============
+        function showSkeletons() {
+            var container = document.getElementById('postList');
+            var html = '';
+            for (var i = 0; i < 4; i++) {
+                html += '<div class="skeleton-card" style="animation-delay:' + (i * 0.1) + 's;">' +
+                    '<div class="skeleton-line w60"></div>' +
+                    '<div class="skeleton-line w40"></div>' +
+                    '<div class="skeleton-line w90"></div>' +
+                    '<div class="skeleton-line w75"></div>' +
+                    '<div class="skeleton-tags">' +
+                        '<div class="skeleton-tag"></div>' +
+                        '<div class="skeleton-tag" style="width:60px;"></div>' +
+                        '<div class="skeleton-tag" style="width:42px;"></div>' +
+                    '</div>' +
+                    '<div class="skeleton-stats">' +
+                        '<div class="skeleton-stat"></div>' +
+                        '<div class="skeleton-stat"></div>' +
+                        '<div class="skeleton-stat"></div>' +
+                    '</div>' +
+                '</div>';
+            }
+            container.innerHTML = html;
+        }
+
+        // ============ Load Posts ============
+        function loadPosts() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+            showSkeletons();
+
+            var url = '/api/community/posts?page=' + currentPage + '&size=20';
+            if (currentCategory) url += '&category=' + currentCategory;
+            if (currentTag) url += '&tag=' + encodeURIComponent(currentTag);
+
+            fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200 && data.data.content.length > 0) {
+                    var container = document.getElementById('postList');
+                    var postsHtml = data.data.content.map(function(p, idx) {
+                        var preview = p.content ? p.content.substring(0, 200) + (p.content.length > 200 ? '...' : '') : '';
+                        var tags = p.tags ? p.tags.split(/[,]+/).map(function(t) { return t.trim(); }).filter(Boolean) : [];
+                        var time = formatTime(p.createdAt);
+                        var catClass = 'cat-' + (p.category || 'GENERAL');
+                        return '<div class="post-card ' + catClass + '" onclick="openPostDetail(' + p.id + ')" style="animation-delay:' + (idx * 0.05) + 's;">' +
+                            '<div class="post-title">' + escapeHtml(p.title) + '</div>' +
+                            '<div class="post-meta">' +
+                                '<span class="post-author">' + escapeHtml(p.userName || p.userId) + '</span>' +
+                                '<span class="post-meta-dot"></span>' +
+                                '<span>发布了</span>' +
+                                '<span>' + time + '</span>' +
+                            '</div>' +
+                            '<div class="post-preview">' + escapeHtml(preview) + '</div>' +
+                            (tags.length > 0 ? '<div class="post-tags">' + tags.map(function(t) {
+                                return '<span class="post-tag ' + getTagClass(t) + '">' + escapeHtml(t) + '</span>';
+                            }).join('') + '</div>' : '') +
+                            '<div class="post-stats">' +
+                                '<span class="stat-like">👍 ' + (p.likeCount || 0) + ' 赞</span>' +
+                                '<span class="stat-comment">💬 ' + (p.commentCount || 0) + ' 评论</span>' +
+                                '<span class="stat-view">👁 ' + (p.viewCount || 0) + ' 阅读</span>' +
+                            '</div>' +
+                        '</div>';
+                    }).join('');
+                    container.innerHTML = postsHtml;
+                    renderPagination(data.data.totalPages, currentPage);
+                } else {
+                    document.getElementById('postList').innerHTML = '';
+                    document.getElementById('pagination').innerHTML = '';
+                    document.getElementById('emptyState').style.display = 'block';
+                }
+            }).catch(function(e) {
+                document.getElementById('postList').innerHTML = '';
+                console.error('加载帖子失败', e);
+                showToast('加载失败，请稍后重试', 'error');
+            });
+        }
+
+        function getTagClass(tag) {
+            var t = (tag || '').toLowerCase();
+            if (/猫|狗|宠物|喵|汪|animal|pet|cat|dog/.test(t)) return 'tag-pet';
+            if (/植物|花|草|树|plant|leaf|绿|forest/.test(t)) return 'tag-plant';
+            if (/综合|讨论|日常|杂谈|general|other/.test(t)) return 'tag-general';
+            return 'tag-other';
+        }
+
+        function renderPosts(posts) {
+            var container = document.getElementById('postList');
+            container.innerHTML = posts.map(function(p, idx) {
+                var preview = p.content ? p.content.substring(0, 200) + (p.content.length > 200 ? '...' : '') : '';
+                var tags = p.tags ? p.tags.split(/[,]+/).map(function(t) { return t.trim(); }).filter(Boolean) : [];
+                var time = formatTime(p.createdAt);
+                var catClass = 'cat-' + (p.category || 'GENERAL');
+                return '<div class="post-card ' + catClass + '" onclick="openPostDetail(' + p.id + ')" style="animation-delay:' + (idx * 0.05) + 's;">' +
+                    '<div class="post-title">' + escapeHtml(p.title) + '</div>' +
+                    '<div class="post-meta">' +
+                        '<span class="post-author">' + escapeHtml(p.userName || p.userId) + '</span>' +
+                        '<span class="post-meta-dot"></span>' +
+                        '<span>发布了</span>' +
+                        '<span>' + time + '</span>' +
+                    '</div>' +
+                    '<div class="post-preview">' + escapeHtml(preview) + '</div>' +
+                    (tags.length > 0 ? '<div class="post-tags">' + tags.map(function(t) {
+                        return '<span class="post-tag ' + getTagClass(t) + '">' + escapeHtml(t) + '</span>';
+                    }).join('') + '</div>' : '') +
+                    '<div class="post-stats">' +
+                        '<span class="stat-like">👍 ' + (p.likeCount || 0) + ' 赞</span>' +
+                        '<span class="stat-comment">💬 ' + (p.commentCount || 0) + ' 评论</span>' +
+                        '<span class="stat-view">👁 ' + (p.viewCount || 0) + ' 阅读</span>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function renderPagination(totalPages, current) {
+            var container = document.getElementById('pagination');
+            if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+            var html = '';
+            html += '<button class="page-btn" ' + (current <= 1 ? 'disabled' : '') + ' onclick="goToPage(' + (current - 1) + ')">上一页</button>';
+
+            var start = Math.max(1, current - 2);
+            var end = Math.min(totalPages, current + 2);
+            if (start > 1) {
+                html += '<button class="page-btn" onclick="goToPage(1)">1</button>';
+                if (start > 2) html += '<span class="page-ellipsis">...</span>';
+            }
+
+            for (var i = start; i <= end; i++) {
+                html += '<button class="page-btn' + (i === current ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+            }
+
+            if (end < totalPages) {
+                if (end < totalPages - 1) html += '<span class="page-ellipsis">...</span>';
+                html += '<button class="page-btn" onclick="goToPage(' + totalPages + ')">' + totalPages + '</button>';
+            }
+            html += '<button class="page-btn" ' + (current >= totalPages ? 'disabled' : '') + ' onclick="goToPage(' + (current + 1) + ')">下一页</button>';
+            html += '<span class="page-info">第' + current + '页</span>';
+
+            container.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            loadPosts();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ============ Confetti burst ============
+        function burstConfetti(btn) {
+            var container = document.createElement('span');
+            container.className = 'confetti-container';
+            var colors = ['#e74c3c', '#f39c12', '#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#1abc9c', '#e91e63'];
+            for (var i = 0; i < 14; i++) {
+                var particle = document.createElement('span');
+                particle.className = 'confetti-particle';
+                particle.style.background = colors[i % colors.length];
+                var angle = (i / 14) * 360;
+                var dist = 35 + Math.random() * 25;
+                var cx = Math.cos(angle * Math.PI / 180) * dist;
+                var cy = Math.sin(angle * Math.PI / 180) * dist;
+                particle.style.setProperty('--cx', cx + 'px');
+                particle.style.setProperty('--cy', cy + 'px');
+                particle.style.animationDelay = (Math.random() * 0.1) + 's';
+                container.appendChild(particle);
+            }
+            btn.appendChild(container);
+            setTimeout(function() { if (container.parentNode) container.remove(); }, 800);
+        }
+
+        // ============ Post Detail ============
+        function openPostDetail(postId) {
+            currentPostId = postId;
+            fetch('/api/community/posts/' + postId).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    renderDetail(data.data);
+                    document.getElementById('detailOverlay').classList.add('show');
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    showToast(data.message || '加载失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('加载详情失败', e);
+                showToast('加载失败，请稍后重试', 'error');
+            });
+        }
+
+        function getCatBadgeClass(cat) {
+            if (cat === 'PET') return 'cat-pet';
+            if (cat === 'PLANT') return 'cat-plant';
+            return 'cat-general';
+        }
+
+        function getCategoryName(cat) {
+            if (cat === 'PET') return '宠物';
+            if (cat === 'PLANT') return '植物';
+            return '综合';
+        }
+
+        function renderDetail(data) {
+            var post = data.post;
+            var comments = data.comments || [];
+            var tags = post.tags ? post.tags.split(/[,]+/).map(function(t) { return t.trim(); }).filter(Boolean) : [];
+            var time = formatTime(post.createdAt);
+            var isOwner = currentUser && post.userId === currentUser;
+
+            var html = '';
+            html += '<button class="detail-close" onclick="closeDetail()">&times;</button>';
+            html += '<button class="detail-back" onclick="closeDetail()">← 返回列表</button>';
+            html += '<div class="detail-title">' + escapeHtml(post.title) + '</div>';
+            html += '<div class="detail-meta">';
+            html += '<span class="detail-author">' + escapeHtml(post.userName || post.userId) + '</span>';
+            html += '<span>发布了</span>';
+            html += '<span class="detail-category-badge ' + getCatBadgeClass(post.category) + '">' + getCategoryName(post.category || 'GENERAL') + '</span>';
+            html += '<span class="post-meta-dot"></span>';
+            html += '<span>' + time + '</span>';
+            html += '<span class="post-meta-dot"></span>';
+            html += '<span>👁 ' + (post.viewCount || 0) + ' 阅读</span>';
+            html += '</div>';
+            if (post.imageUrl) {
+                html += '<img class="detail-image" src="' + escapeHtml(post.imageUrl) + '" alt="帖子图片" onerror="this.style.display=\'none\'">';
+            }
+            html += '<div class="detail-content">' + escapeHtml(post.content) + '</div>';
+            if (tags.length > 0) {
+                html += '<div class="detail-tags">' + tags.map(function(t) {
+                    return '<span class="detail-tag">' + escapeHtml(t) + '</span>';
+                }).join('') + '</div>';
+            }
+            html += '<div class="detail-actions">';
+            html += '<button class="like-btn" onclick="toggleLike(' + post.id + ')" id="likeBtn">' +
+                '<span class="heart-icon">❤</span> <span id="likeCount">' + (post.likeCount || 0) + '</span> 点赞</button>';
+            if (isOwner) {
+                html += '<button class="delete-btn" onclick="deletePost(' + post.id + ')">删除</button>';
+            }
+            html += '</div>';
+
+            // Comments
+            html += '<div class="comments-section">';
+            html += '<h4>评论 <span class="comment-count-badge">' + (post.commentCount || 0) + '</span></h4>';
+
+            var topComments = comments.filter(function(c) { return !c.parentId; });
+            var replies = comments.filter(function(c) { return c.parentId; });
+
+            topComments.forEach(function(c) {
+                html += renderComment(c, replies, true);
+            });
+
+            html += '</div>';
+
+            // New comment form
+            html += '<div class="new-comment-form">';
+            html += '<textarea id="newCommentContent" placeholder="写下你的评论..." rows="2"></textarea>';
+            html += '<button onclick="submitComment(' + post.id + ')">发表评论</button>';
+            html += '</div>';
+
+            document.getElementById('detailCard').innerHTML = html;
+        }
+
+        function getInitial(name) {
+            if (!name) return '?';
+            return name.charAt(0).toUpperCase();
+        }
+
+        function renderComment(comment, allReplies, isTop) {
+            var time = formatTime(comment.createdAt);
+            var childReplies = allReplies.filter(function(r) { return r.parentId === comment.id; });
+            var isOwner = currentUser && comment.userId === currentUser;
+
+            var html = '<div class="comment-item">';
+            html += '<div class="comment-header">';
+            html += '<div class="comment-avatar' + (isTop ? '' : ' reply-avatar') + '">' + getInitial(comment.userName || comment.userId) + '</div>';
+            html += '<div>';
+            html += '<span class="comment-author">' + escapeHtml(comment.userName || comment.userId) + '</span>';
+            html += '<span class="comment-time">' + time + '</span>';
+            html += '</div>';
+            html += '</div>';
+            html += '<div class="comment-content">' + escapeHtml(comment.content) + '</div>';
+            html += '<div class="comment-actions">';
+            html += '<button class="c-reply-btn" onclick="showReplyForm(' + comment.id + ')">回复</button>';
+            if (isOwner) {
+                html += '<button class="c-delete-btn" onclick="deleteComment(' + comment.postId + ', ' + comment.id + ')">删除</button>';
+            }
+            html += '</div>';
+
+            // Reply form (hidden by default)
+            html += '<div class="reply-form" id="replyForm_' + comment.id + '">';
+            html += '<textarea id="replyContent_' + comment.id + '" placeholder="回复 ' + escapeHtml(comment.userName || comment.userId) + '..." rows="2"></textarea>';
+            html += '<div class="reply-actions">';
+            html += '<button class="reply-cancel" onclick="hideReplyForm(' + comment.id + ')">取消</button>';
+            html += '<button class="reply-submit" onclick="submitReply(' + comment.postId + ', ' + comment.id + ')">回复</button>';
+            html += '</div></div>';
+
+            // Nested replies
+            if (childReplies.length > 0) {
+                html += '<div class="comment-replies">';
+                childReplies.forEach(function(r) {
+                    html += renderComment(r, allReplies, false);
+                });
+                html += '</div>';
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        function showReplyForm(commentId) {
+            var form = document.getElementById('replyForm_' + commentId);
+            if (form) form.classList.add('show');
+        }
+
+        function hideReplyForm(commentId) {
+            var form = document.getElementById('replyForm_' + commentId);
+            if (form) form.classList.remove('show');
+        }
+
+        function closeDetail() {
+            document.getElementById('detailOverlay').classList.remove('show');
+            document.body.style.overflow = '';
+            currentPostId = null;
+            loadPosts();
+        }
+
+        // ============ Submit comment ============
+        function submitComment(postId) {
+            var content = document.getElementById('newCommentContent').value.trim();
+            if (!content) { showToast('请输入评论内容', 'error'); return; }
+            fetch('/api/community/posts/' + postId + '/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: content })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    showToast('评论成功', 'success');
+                    openPostDetail(postId);
+                } else {
+                    showToast(data.message || '评论失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('评论失败', e);
+                showToast('网络错误，请稍后重试', 'error');
+            });
+        }
+
+        function submitReply(postId, parentId) {
+            var content = document.getElementById('replyContent_' + parentId).value.trim();
+            if (!content) { showToast('请输入回复内容', 'error'); return; }
+            fetch('/api/community/posts/' + postId + '/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: content, parentId: parentId })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    showToast('回复成功', 'success');
+                    openPostDetail(postId);
+                } else {
+                    showToast(data.message || '回复失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('回复失败', e);
+                showToast('网络错误，请稍后重试', 'error');
+            });
+        }
+
+        // ============ Delete comment ============
+        function deleteComment(postId, commentId) {
+            if (!confirm('确定删除此评论？')) return;
+            fetch('/api/community/posts/' + postId + '/comments/' + commentId, { method: 'DELETE' })
+            .then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    showToast('评论已删除', 'success');
+                    openPostDetail(postId);
+                } else {
+                    showToast(data.message || '删除失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('删除评论失败', e);
+                showToast('网络错误，请稍后重试', 'error');
+            });
+        }
+
+        // ============ Like ============
+        function toggleLike(postId) {
+            fetch('/api/community/posts/' + postId + '/like', { method: 'POST' })
+            .then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    var btn = document.getElementById('likeBtn');
+                    if (btn) {
+                        btn.classList.add('liked');
+                        burstConfetti(btn);
+                        var countEl = document.getElementById('likeCount');
+                        if (countEl) {
+                            var newCount = parseInt(countEl.textContent) + 1;
+                            countEl.textContent = newCount;
+                        }
+                        setTimeout(function() { btn.classList.remove('liked'); }, 600);
+                    }
+                    openPostDetail(postId);
+                } else {
+                    showToast(data.message || '操作失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('点赞失败', e);
+                showToast('网络错误，请稍后重试', 'error');
+            });
+        }
+
+        // ============ Delete post ============
+        function deletePost(postId) {
+            if (!confirm('确定删除此内容？')) return;
+            fetch('/api/community/posts/' + postId, { method: 'DELETE' })
+            .then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    showToast('删除成功', 'success');
+                    closeDetail();
+                } else {
+                    showToast(data.message || '删除失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('删除失败', e);
+                showToast('网络错误，请稍后重试', 'error');
+            });
+        }
+
+        // ============ New Post Modal ============
+        function showNewPostModal() {
+            document.getElementById('modalOverlay').classList.add('show');
+            document.getElementById('newTitle').value = '';
+            document.getElementById('newContent').value = '';
+            document.getElementById('newImageUrl').value = '';
+            document.getElementById('newCategory').value = 'GENERAL';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function hideNewPostModal() {
+            document.getElementById('modalOverlay').classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        function submitNewPost() {
+            var title = document.getElementById('newTitle').value.trim();
+            var content = document.getElementById('newContent').value.trim();
+            var category = document.getElementById('newCategory').value;
+            var imageUrl = document.getElementById('newImageUrl').value.trim();
+
+            if (!title) { showToast('请输入标题', 'error'); return; }
+            if (!content) { showToast('请输入内容', 'error'); return; }
+
+            fetch('/api/community/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: title, content: content, category: category, imageUrl: imageUrl })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.code === 200) {
+                    showToast('发布成功！', 'success');
+                    hideNewPostModal();
+                    loadPosts();
+                    loadTagCloud();
+                } else {
+                    showToast(data.message || '发布失败', 'error');
+                }
+            }).catch(function(e) {
+                console.error('发布失败', e);
+                showToast('网络错误，请稍后重试', 'error');
+            });
+        }
+
+        // ============ Utilities ============
+        function escapeHtml(str) {
+            if (!str) return '';
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ============ Overlay click to close ============
+        document.getElementById('detailOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeDetail();
+        });
+        document.getElementById('modalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) hideNewPostModal();
+        });
+
+        // ============ ESC to close ============
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('detailOverlay').classList.contains('show')) {
+                    closeDetail();
+                } else if (document.getElementById('modalOverlay').classList.contains('show')) {
+                    hideNewPostModal();
+                }
+            }
+        });
+    </script>
+    <script src="/js/push.js"></script>
+</body>
+</html>

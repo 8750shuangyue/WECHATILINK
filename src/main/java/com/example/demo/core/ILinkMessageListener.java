@@ -80,7 +80,7 @@ public class ILinkMessageListener {
                     @Override
                     public void onLoginSuccess(com.github.wechat.ilink.sdk.core.login.LoginContext context) {
                         logger.info("ILink login successful");
-                        System.out.println("登录成功！");
+                        logger.info("登录成功！");
                         isLoggedIn.set(true);
                     }
 
@@ -96,7 +96,7 @@ public class ILinkMessageListener {
         logger.info("Starting ILink login...");
         
         String qrCode = client.executeLogin();
-        System.out.println("请扫码登录: " + qrCode);
+        logger.info("请扫码登录: {}", qrCode);
         logger.info("QR code generated, waiting for scan...");
 
         while (!isLoggedIn.get()) {
@@ -449,6 +449,22 @@ public class ILinkMessageListener {
             logger.info("Progress message sent to user {}: {}", userId, message);
         } catch (Exception e) {
             logger.error("Failed to send progress message to user {}", userId, e);
+        }
+    }
+
+    /**
+     * 供其他模块（如护理提醒）向微信用户发送文本消息。
+     */
+    public void sendTextToUser(String userId, String text) {
+        if (client == null || text == null || text.isEmpty()) {
+            return;
+        }
+        try {
+            client.sendText(userId, text);
+            logger.info("Sent text to user {}: {}", userId,
+                    text.length() > 50 ? text.substring(0, 50) + "..." : text);
+        } catch (Exception e) {
+            logger.error("Failed to send text to user {}", userId, e);
         }
     }
 

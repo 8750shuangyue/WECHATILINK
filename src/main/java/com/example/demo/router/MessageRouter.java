@@ -1,5 +1,7 @@
 package com.example.demo.router;
 
+import com.example.demo.ai.SpringAiChatService;
+import com.example.demo.care.service.SpringAiCareWorkflowService;
 import com.example.demo.chat.ChatMemoryService;
 import com.example.demo.chat.LlmService;
 import com.example.demo.config.DashScopeConfig;
@@ -23,6 +25,8 @@ public class MessageRouter {
     private static final Logger logger = LoggerFactory.getLogger(MessageRouter.class);
 
     private final LlmService llmService;
+    private final SpringAiChatService springAiChatService;
+    private final SpringAiCareWorkflowService careWorkflowService;
     private final VisionService visionService;
     private final ImageGenerationService imageGenerationService;
     private final DashScopeConfig config;
@@ -46,11 +50,21 @@ public class MessageRouter {
             "修改", "编辑", "换", "改成", "换成", "风格", "转换", "添加", "去除", "增强", "修复", "换成", "变成"
     );
 
-    public MessageRouter(LlmService llmService, VisionService visionService, 
-                         ImageGenerationService imageGenerationService, DashScopeConfig config,
-                         WeatherTool weatherTool,
+    private static final List<String> CARE_KEYWORDS = Arrays.asList(
+            "宠物", "猫咪", "狗狗", "小狗", "小猫", "喂药", "吃药", "疫苗", "驱虫",
+            "浇水", "施肥", "修剪", "植物", "养护", "护理", "症状", "生病", "呕吐",
+            "拉肚子", "咳嗽", "皮肤", "伤口", "中毒", "急诊", "兽医", "医院",
+            "植物毒性", "能不能吃", "能吃吗", "安全吗", "对比", "变化", "提醒"
+    );
+
+    public MessageRouter(LlmService llmService, SpringAiChatService springAiChatService,
+                         SpringAiCareWorkflowService careWorkflowService,
+                         VisionService visionService, ImageGenerationService imageGenerationService, 
+                         DashScopeConfig config, WeatherTool weatherTool,
                          FileParserService fileParserService, ChatMemoryService chatMemoryService) {
         this.llmService = llmService;
+        this.springAiChatService = springAiChatService;
+        this.careWorkflowService = careWorkflowService;
         this.visionService = visionService;
         this.imageGenerationService = imageGenerationService;
         this.config = config;
@@ -195,7 +209,23 @@ public class MessageRouter {
             }
             return new RouteResult(RouteType.WEATHER, city, null, null, null, needTts);
         }
+        if (isCareRequest(messageWithoutTtsKeyword)) {
+            return new RouteResult(RouteType.CARE_WORKFLOW, messageWithoutTtsKeyword, null, null, null, needTts);
+        }
         return new RouteResult(RouteType.TEXT_CHAT, messageWithoutTtsKeyword, null, null, null, needTts);
+    }
+
+    private boolean isCareRequest(String message) {
+        if (message == null || message.isEmpty()) {
+            return false;
+        }
+        String lowerMessage = message.toLowerCase();
+        for (String keyword : CARE_KEYWORDS) {
+            if (lowerMessage.contains(keyword.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isImageEditRequest(String message) {
@@ -223,9 +253,19 @@ public class MessageRouter {
         switch (routeResult.getRouteType()) {
             case TEXT_CHAT:
                 if (conversationId != null && !conversationId.isEmpty()) {
-                    return llmService.chatWithMemory(conversationId, routeResult.getTextContent());
+                    try {
+                        return springAiChatService.chat(routeResult.getTextContent(), null, conversationId);
+                    } catch (Exception e) {
+                        logger.warn("Spring AI chat failed, falling back to legacy LLM: {}", e.getMessage());
+                        return llmService.chatWithMemory(conversationId, routeResult.getTextContent());
+                    }
                 }
-                return llmService.chat(routeResult.getTextContent());
+                try {
+                    return springAiChatService.chatWithTools(routeResult.getTextContent());
+                } catch (Exception e) {
+                    logger.warn("Spring AI chat with tools failed, falling back to legacy LLM: {}", e.getMessage());
+                    return llmService.chat(routeResult.getTextContent());
+                }
             
             case IMAGE_ANALYSIS:
                 ImageAnalysisResponse analysis;
@@ -257,6 +297,24 @@ public class MessageRouter {
                 JSONObject weatherParams = new JSONObject();
                 weatherParams.put("city", city);
                 return weatherTool.execute(weatherParams).getData();
+
+            case CARE_WORKFLOW:
+                String userId = conversationId;
+                logger.info("Routing to care workflow: userId={}, message={}", userId, routeResult.getTextContent());
+                SpringAiCareWorkflowService.WorkflowResult workflowResult = 
+                        careWorkflowService.executeWorkflow(userId, routeResult.getTextContent(), null);
+                StringBuilder sb = new StringBuilder();
+                if (workflowResult.isEmergency()) {
+                    sb.append("⚠️ 紧急情况！\n");
+                }
+                sb.append(workflowResult.getResult());
+                if (workflowResult.getSteps() != null && !workflowResult.getSteps().isEmpty()) {
+                    sb.append("\n\n处理步骤：");
+                    for (String step : workflowResult.getSteps()) {
+                        sb.append("\n- ").append(step);
+                    }
+                }
+                return sb.toString();
             
             default:
                 return "抱歉，无法识别消息类型";
@@ -424,7 +482,8 @@ public class MessageRouter {
         IMAGE_ANALYSIS,
         IMAGE_GENERATION,
         IMAGE_EDIT,
-        WEATHER
+        WEATHER,
+        CARE_WORKFLOW
     }
 
     public static class RouteResult {

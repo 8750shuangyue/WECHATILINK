@@ -24,10 +24,8 @@ public class EmbeddingService {
 
     private static final Logger logger = LoggerFactory.getLogger(EmbeddingService.class);
     
-    private static final String MODEL_NAME = "text-embedding-v2";
-    
     private final DashScopeConfig config;
-    
+
     public EmbeddingService(DashScopeConfig config) {
         this.config = config;
     }
@@ -37,18 +35,22 @@ public class EmbeddingService {
             return new float[0];
         }
         
+        DashScopeConfig.Embedding embeddingConfig = config.getEmbedding();
+        
         JSONObject requestBody = new JSONObject();
-        requestBody.put("model", MODEL_NAME);
+        requestBody.put("model", embeddingConfig.getModel());
         
         JSONArray input = new JSONArray();
         input.add(text);
         requestBody.put("input", input);
         
         String jsonRequest = JSON.toJSONString(requestBody);
+        String url = embeddingConfig.getBaseUrl() + "/embeddings";
+        logger.info("[Embedding] Sending request to: {}, model: {}, text length: {}", url, embeddingConfig.getModel(), text.length());
         
-        HttpPost httpPost = new HttpPost(config.getBaseUrl() + "/embeddings");
+        HttpPost httpPost = new HttpPost(url);
         httpPost.setHeader("Content-Type", "application/json");
-        httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
+        httpPost.setHeader("Authorization", "Bearer " + embeddingConfig.getApiKey());
         httpPost.setEntity(new StringEntity(jsonRequest, ContentType.APPLICATION_JSON));
         
         try (CloseableHttpClient httpClient = HttpClients.createDefault();
@@ -60,10 +62,11 @@ public class EmbeddingService {
                 responseBody = EntityUtils.toString(entity, "UTF-8");
             }
             
-            logger.debug("Embedding API response: {}", responseBody);
+            logger.info("[Embedding] API response status: {}, body: {}", response.getCode(), responseBody.length() > 500 ? responseBody.substring(0, 500) + "..." : responseBody);
             
             if (response.getCode() != 200) {
-                throw new IOException("Embedding API request failed with status: " + response.getCode());
+                logger.error("[Embedding] API request failed, status: {}, full response: {}", response.getCode(), responseBody);
+                throw new IOException("Embedding API request failed with status: " + response.getCode() + ", response: " + responseBody);
             }
             
             return parseEmbeddingResponse(responseBody);

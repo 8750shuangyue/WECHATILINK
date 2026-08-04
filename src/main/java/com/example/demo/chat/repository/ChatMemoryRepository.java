@@ -15,4 +15,6 @@ public interface ChatMemoryRepository {
     void clear(String conversationId);
 
     boolean exists(String conversationId);
+
+    void removeSystemMessages(String conversationId, String contentPrefix);
 }

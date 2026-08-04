@@ -10,6 +10,8 @@ public class DashScopeConfig {
     private String apiKey;
     private String baseUrl;
     private String model;
+    private String embeddingModel = "text-embedding-v2";
+    private Embedding embedding = new Embedding();
 
     private Vision vision = new Vision();
     private Image image = new Image();
@@ -36,6 +38,22 @@ public class DashScopeConfig {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public String getEmbeddingModel() {
+        return embeddingModel;
+    }
+
+    public void setEmbeddingModel(String embeddingModel) {
+        this.embeddingModel = embeddingModel;
+    }
+
+    public Embedding getEmbedding() {
+        return embedding;
+    }
+
+    public void setEmbedding(Embedding embedding) {
+        this.embedding = embedding;
     }
 
     public Vision getVision() {
@@ -94,6 +112,36 @@ public class DashScopeConfig {
 
         public void setDefaultStyle(String defaultStyle) {
             this.defaultStyle = defaultStyle;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+    }
+
+    public static class Embedding {
+        private String apiKey;
+        private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+        private String model = "text-embedding-v2";
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
         }
 
         public String getModel() {

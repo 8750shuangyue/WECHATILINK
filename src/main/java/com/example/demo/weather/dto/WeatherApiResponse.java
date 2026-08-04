@@ -8,12 +8,18 @@ import java.util.List;
 @Data
 public class WeatherApiResponse {
 
+    @com.alibaba.fastjson2.annotation.JSONField(name = "status_code")
+    private String statusCode;
+
+    @com.alibaba.fastjson2.annotation.JSONField(name = "status")
+    private String status;
+
     private List<Result> results;
 
     @Data
     public static class Result {
 
-        private Location location;
+        private String location;
 
         private List<Daily> daily;
 

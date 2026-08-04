@@ -1,148 +1,72 @@
 package com.example.demo.chat;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
+import com.example.demo.chat.entity.UserSessionEntity;
+import com.example.demo.chat.repository.mysql.UserSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
 
 @Service
 public class UserSessionService {
 
     private static final Logger logger = LoggerFactory.getLogger(UserSessionService.class);
 
-    private static final String KEY_PREFIX = "chat:session:";
-    private static final int DEFAULT_EXPIRE_MINUTES = 5;
+    private final UserSessionRepository sessionRepository;
 
-    private final StringRedisTemplate redisTemplate;
-    private final RedisConnectionFactory connectionFactory;
-    private final Map<String, UserSession> memoryCache = new ConcurrentHashMap<>();
-
-    public UserSessionService(StringRedisTemplate redisTemplate) {
-        this.redisTemplate = redisTemplate;
-        this.connectionFactory = redisTemplate.getConnectionFactory();
-    }
-
-    private boolean isRedisAvailable() {
-        if (connectionFactory == null) {
-            return false;
-        }
-        try {
-            connectionFactory.getConnection().close();
-            return true;
-        } catch (Exception e) {
-            logger.warn("Redis connection not available: {}", e.getMessage());
-            return false;
-        }
+    public UserSessionService(UserSessionRepository sessionRepository) {
+        this.sessionRepository = sessionRepository;
     }
 
     public UserSession getSession(String userId) {
-        if (!isRedisAvailable()) {
-            logger.warn("Redis not available, using memory cache for getSession: {}", userId);
-            return memoryCache.get(userId);
+        Optional<UserSessionEntity> optional = sessionRepository.findById(userId);
+        if (optional.isEmpty()) {
+            return null;
         }
         
-        String key = buildKey(userId);
-        String json = null;
+        UserSessionEntity entity = optional.get();
+        UserSession session = new UserSession();
+        session.setUserId(entity.getUserId());
+        session.setPendingImageBase64(entity.getPendingImageBase64());
+        session.setImageDescription(entity.getImageDescription());
+        session.setImageAnalyzed(entity.isImageAnalyzed());
+        session.setPendingFileUrl(entity.getPendingFileUrl());
+        session.setPendingFileName(entity.getPendingFileName());
+        session.setFileAnalyzed(entity.isFileAnalyzed());
+        session.setLastUpdateTime(entity.getLastUpdateTime());
         
-        try {
-            json = redisTemplate.opsForValue().get(key);
-        } catch (Exception e) {
-            logger.error("Redis get operation failed for key: {}", key, e);
-            return memoryCache.get(userId);
-        }
-        
-        if (json == null || json.isEmpty()) {
-            return memoryCache.get(userId);
-        }
-        
-        try {
-            JSONObject jsonObj = JSON.parseObject(json);
-            UserSession session = new UserSession();
-            session.setUserId(userId);
-            session.setPendingImageBase64(jsonObj.getString("pendingImageBase64"));
-            session.setImageDescription(jsonObj.getString("imageDescription"));
-            session.setImageAnalyzed(jsonObj.getBooleanValue("imageAnalyzed"));
-            session.setPendingFileUrl(jsonObj.getString("pendingFileUrl"));
-            session.setPendingFileName(jsonObj.getString("pendingFileName"));
-            session.setFileAnalyzed(jsonObj.getBooleanValue("fileAnalyzed"));
-            
-            String timestampStr = jsonObj.getString("lastUpdateTime");
-            if (timestampStr != null && !timestampStr.isEmpty()) {
-                session.setLastUpdateTime(LocalDateTime.parse(timestampStr));
-            } else {
-                session.setLastUpdateTime(LocalDateTime.now());
-            }
-            
-            memoryCache.put(userId, session);
-            logger.debug("Loaded session for user {}, hasPendingImage: {}, imageAnalyzed: {}", 
-                userId, session.hasPendingImage(), session.isImageAnalyzed());
-            return session;
-        } catch (Exception e) {
-            logger.error("Failed to parse session from Redis", e);
-            return memoryCache.get(userId);
-        }
+        logger.debug("Loaded session for user {}, hasPendingImage: {}, imageAnalyzed: {}", 
+            userId, session.hasPendingImage(), session.isImageAnalyzed());
+        return session;
     }
 
     public void saveSession(UserSession session) {
         session.setLastUpdateTime(LocalDateTime.now());
         
-        if (!isRedisAvailable()) {
-            logger.warn("Redis not available, using memory cache for saveSession: {}", session.getUserId());
-            memoryCache.put(session.getUserId(), session);
-            return;
-        }
+        UserSessionEntity entity = sessionRepository.findById(session.getUserId())
+                .orElse(new UserSessionEntity(session.getUserId()));
         
-        String key = buildKey(session.getUserId());
+        entity.setPendingImageBase64(session.getPendingImageBase64());
+        entity.setImageDescription(session.getImageDescription());
+        entity.setImageAnalyzed(session.isImageAnalyzed());
+        entity.setPendingFileUrl(session.getPendingFileUrl());
+        entity.setPendingFileName(session.getPendingFileName());
+        entity.setFileAnalyzed(session.isFileAnalyzed());
+        entity.setLastUpdateTime(session.getLastUpdateTime());
         
-        JSONObject jsonObj = new JSONObject();
-        jsonObj.put("userId", session.getUserId());
-        jsonObj.put("pendingImageBase64", session.getPendingImageBase64());
-        jsonObj.put("imageDescription", session.getImageDescription());
-        jsonObj.put("imageAnalyzed", session.isImageAnalyzed());
-        jsonObj.put("pendingFileUrl", session.getPendingFileUrl());
-        jsonObj.put("pendingFileName", session.getPendingFileName());
-        jsonObj.put("fileAnalyzed", session.isFileAnalyzed());
-        jsonObj.put("lastUpdateTime", session.getLastUpdateTime().toString());
+        sessionRepository.save(entity);
         
-        String json = jsonObj.toJSONString();
-        
-        try {
-            redisTemplate.opsForValue().set(key, json, DEFAULT_EXPIRE_MINUTES, TimeUnit.MINUTES);
-            memoryCache.put(session.getUserId(), session);
-            logger.debug("Saved session for user {}, pendingImageBase64 length: {}, imageAnalyzed: {}", 
-                session.getUserId(), 
-                session.getPendingImageBase64() != null ? session.getPendingImageBase64().length() : 0,
-                session.isImageAnalyzed());
-        } catch (Exception e) {
-            logger.error("Redis set operation failed for key: {}", key, e);
-            memoryCache.put(session.getUserId(), session);
-        }
+        logger.debug("Saved session for user {}, pendingImageBase64 length: {}, imageAnalyzed: {}", 
+            session.getUserId(), 
+            session.getPendingImageBase64() != null ? session.getPendingImageBase64().length() : 0,
+            session.isImageAnalyzed());
     }
 
     public void clearSession(String userId) {
-        if (!isRedisAvailable()) {
-            logger.warn("Redis not available, clearing from memory cache: {}", userId);
-            memoryCache.remove(userId);
-            return;
-        }
-        
-        String key = buildKey(userId);
-        try {
-            redisTemplate.delete(key);
-            memoryCache.remove(userId);
-            logger.debug("Cleared session for user {}", userId);
-        } catch (Exception e) {
-            logger.error("Redis delete operation failed for key: {}", key, e);
-            memoryCache.remove(userId);
-        }
+        sessionRepository.deleteById(userId);
+        logger.debug("Cleared session for user {}", userId);
     }
 
     public void clearPendingImage(String userId) {
@@ -244,9 +168,5 @@ public class UserSessionService {
             saveSession(session);
             logger.debug("Cleared pending file for user {}", userId);
         }
-    }
-
-    private String buildKey(String userId) {
-        return KEY_PREFIX + userId;
     }
 }

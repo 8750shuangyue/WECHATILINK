@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - 注册</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="auth-overlay">
+    <div class="auth-card">
+        <div class="brand">
+            <span class="logo">🐾🌿</span>
+            <h1>Sekai PetPlant</h1>
+            <p>一体式宠物&绿植护理助手</p>
+        </div>
+        <div class="auth-tabs">
+            <a href="/login" class="tab">登录</a>
+            <a href="/register" class="tab active">注册</a>
+        </div>
+        <div class="server-msg" id="serverMsg"></div>
+        <form id="registerForm">
+            <label>用户名 <span class="req">*</span></label>
+            <input type="text" id="userName" placeholder="3-20位字母数字" required minlength="3" maxlength="20">
+            <label>密码 <span class="req">*</span></label>
+            <div class="pw-row">
+                <input type="password" id="password" placeholder="至少6位" required minlength="6">
+                <button type="button" id="togglePw">👁</button>
+            </div>
+            <label>邮箱</label>
+            <input type="email" id="email" placeholder="选填">
+            <label>手机号</label>
+            <input type="tel" id="phone" placeholder="选填">
+            <button type="submit" class="primary-btn">注 册</button>
+        </form>
+    </div>
+</div>
+<script>
+document.getElementById('togglePw').onclick = function() {
+    const p = document.getElementById('password');
+    p.type = p.type === 'password' ? 'text' : 'password';
+};
+document.getElementById('registerForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const msg = document.getElementById('serverMsg');
+    try {
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                userName: document.getElementById('userName').value,
+                password: document.getElementById('password').value,
+                email: document.getElementById('email').value,
+                phone: document.getElementById('phone').value
+            })
+        });
+        const data = await res.json();
+        if (data.code === 200) {
+            msg.className = 'server-msg success';
+            msg.textContent = '注册成功，正在跳转...';
+            setTimeout(() => location.href = '/home', 800);
+        } else {
+            msg.className = 'server-msg error';
+            msg.textContent = data.message;
+        }
+    } catch(err) {
+        msg.className = 'server-msg error';
+        msg.textContent = '网络错误，请重试';
+    }
+};
+</script>
+</body>
+</html>

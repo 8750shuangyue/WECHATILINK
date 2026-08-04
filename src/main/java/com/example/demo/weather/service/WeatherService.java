@@ -8,6 +8,8 @@ import com.example.demo.weather.exception.WeatherApiException;
 import com.example.demo.weather.model.WeatherResponse;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
@@ -32,7 +34,8 @@ public class WeatherService {
         this.weatherApiProperties = weatherApiProperties;
     }
 
-    public WeatherResponse getWeatherByCity(String city) {
+    @Tool(name = "queryWeather", description = "查询指定城市的实时天气信息")
+    public WeatherResponse getWeatherByCity(@ToolParam(description = "城市名称，如：北京、上海、杭州") String city) {
         validateCity(city);
         
         log.info("查询城市天气: {}", city);
@@ -42,10 +45,21 @@ public class WeatherService {
         
         try {
             String responseBody = executeRequest(url);
+            log.debug("天气 API 响应体: {}", responseBody);
+            
             WeatherApiResponse apiResponse = parseResponse(responseBody);
+            
+            if (apiResponse.getStatusCode() != null && !apiResponse.getStatusCode().equals("200")) {
+                log.error("天气 API 错误: statusCode={}, status={}", apiResponse.getStatusCode(), apiResponse.getStatus());
+                throw new WeatherApiException("天气API返回错误: " + apiResponse.getStatus());
+            }
+            
             return convertToWeatherResponse(apiResponse);
-        } catch (IOException e) {
-            log.error("获取天气数据失败，城市: {}", city, e);
+        } catch (WeatherApiException e) {
+            log.error("获取天气数据失败，城市: {}, 原因: {}", city, e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("获取天气数据异常，城市: {}", city, e);
             throw new WeatherApiException("获取天气数据失败: " + e.getMessage(), e);
         }
     }
@@ -129,8 +143,13 @@ public class WeatherService {
             throw new IOException("JSON解析失败: " + e.getMessage(), e);
         }
         
+        if (response.getStatusCode() != null && !response.getStatusCode().equals("200")) {
+            log.warn("天气 API 返回错误: statusCode={}, status={}", response.getStatusCode(), response.getStatus());
+            return response;
+        }
+        
         if (response.getResults() == null || response.getResults().isEmpty()) {
-            throw new WeatherApiException("未获取到天气数据", 400);
+            throw new WeatherApiException("未获取到天气数据，请检查城市名称是否正确");
         }
         
         return response;
@@ -138,13 +157,13 @@ public class WeatherService {
 
     private WeatherResponse convertToWeatherResponse(WeatherApiResponse apiResponse) {
         if (apiResponse.getResults() == null || apiResponse.getResults().isEmpty()) {
-            throw new WeatherApiException("天气数据为空");
+            throw new WeatherApiException("天气数据为空，请检查城市名称或API配置");
         }
 
         WeatherApiResponse.Result result = apiResponse.getResults().get(0);
-        WeatherApiResponse.Location location = result.getLocation();
+        String locationName = result.getLocation();
         
-        if (location == null) {
+        if (locationName == null || locationName.isEmpty()) {
             throw new WeatherApiException("位置信息为空");
         }
 
@@ -170,8 +189,7 @@ public class WeatherService {
                 .collect(Collectors.toList());
 
         return WeatherResponse.builder()
-                .city(location.getName())
-                .country(location.getCountry())
+                .city(locationName)
                 .updateTime(result.getLastUpdate())
                 .current(currentWeather)
                 .forecast(forecastDays)

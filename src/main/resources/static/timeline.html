@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成长记录 - Sekai PetPlant</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        :root {
+            --bg: #fdf5e6;
+            --card-bg: #fffef9;
+            --card-border: #f0e6d2;
+            --timeline-line: #d4c5a9;
+            --accent: #d4956b;
+            --accent-soft: #f5e6d3;
+            --text-primary: #4a3728;
+            --text-secondary: #8b7355;
+            --text-muted: #b8a893;
+            --badge-photo: #5b9bd5;
+            --badge-photo-bg: #e8f1fb;
+            --badge-milestone: #c8973e;
+            --badge-milestone-bg: #fef6e8;
+            --badge-care: #6bae6b;
+            --badge-care-bg: #eaf7ea;
+            --badge-annotation: #8b6eb8;
+            --badge-annotation-bg: #f3edf9;
+            --shadow-sm: 0 2px 8px rgba(120, 90, 50, 0.08);
+            --shadow-md: 0 6px 20px rgba(120, 90, 50, 0.12);
+            --shadow-lg: 0 12px 32px rgba(120, 90, 50, 0.16);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: linear-gradient(180deg, #fdf5e6 0%, #fef9f0 30%, #fdf6e8 60%, #fdf5e6 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            position: relative;
+        }
+
+        /* Paper texture overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.35;
+            background-image:
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(180, 160, 130, 0.03) 2px, rgba(180, 160, 130, 0.03) 3px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(180, 160, 130, 0.03) 2px, rgba(180, 160, 130, 0.03) 3px);
+            background-size: 80px 80px;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.04;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E");
+            background-size: 180px 180px;
+        }
+
+        .page-wrapper { max-width: 1000px; margin: 0 auto; padding: 24px 20px 60px; position: relative; z-index: 1; }
+
+        /* Page header */
+        .page-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+        .page-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 22px;
+        }
+
+        /* Tab group */
+        .tab-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 22px;
+            border: 2px solid #e8d5c0;
+            border-radius: 24px;
+            background: var(--card-bg);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+            letter-spacing: 0.3px;
+            position: relative;
+            overflow: hidden;
+        }
+        .tab-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #f5d6b8, #e8c4a0);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tab-btn:hover { border-color: #d4a574; color: var(--text-primary); transform: translateY(-1px); }
+        .tab-btn.active {
+            border-color: var(--accent);
+            background: linear-gradient(135deg, #fdf0e0, #fce8d4);
+            color: #8b5e3c;
+            box-shadow: var(--shadow-sm);
+        }
+        .tab-btn .tab-icon { font-size: 18px; margin-right: 6px; vertical-align: -1px; }
+
+        /* Target selector - circular avatar style */
+        .target-selector {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .target-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .target-card .avatar {
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fef9f0, #fdf0e0);
+            border: 3px solid #e8d5c0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+        }
+        .target-card:hover .avatar {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            border-color: #d4a574;
+        }
+        .target-card.active .avatar {
+            border-color: var(--accent);
+            background: linear-gradient(135deg, #fdf0e0, #fce8d4);
+            box-shadow: 0 0 0 4px rgba(212, 149, 107, 0.2), var(--shadow-md);
+            animation: avatar-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        .target-card .avatar::after {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border-radius: 50%;
+            border: 2px dashed transparent;
+            transition: all 0.3s ease;
+        }
+        .target-card.active .avatar::after {
+            border-color: rgba(212, 149, 107, 0.35);
+            animation: avatar-pulse 2.5s ease-in-out infinite;
+        }
+        @keyframes avatar-bounce {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.18); }
+            50% { transform: scale(0.94); }
+            70% { transform: scale(1.06); }
+            100% { transform: scale(1); }
+        }
+        @keyframes avatar-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.08); opacity: 0; }
+        }
+        .target-card .name {
+            font-size: 13px;
+            color: var(--text-primary);
+            font-weight: 600;
+            text-align: center;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .target-card .species {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: -5px;
+        }
+        .target-selector-hint {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Action bar */
+        .action-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+        .action-bar button {
+            padding: 11px 22px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s ease;
+            letter-spacing: 0.3px;
+        }
+        .add-btn {
+            background: linear-gradient(135deg, #d4956b, #c17f52);
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(193, 127, 82, 0.3);
+        }
+        .add-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(193, 127, 82, 0.4);
+        }
+        .auto-btn {
+            background: #fffef9;
+            color: #8b5e3c;
+            border: 2px solid #e8c4a0 !important;
+        }
+        .auto-btn:hover {
+            background: #fdf0e0;
+            border-color: #d4956b !important;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding: 10px 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, transparent 0%, #e8d5c0 3%, #d4c5a9 50%, #e8d5c0 97%, transparent 100%);
+            border-radius: 2px;
+            transform: translateX(-50%);
+        }
+
+        /* Month header */
+        .month-header {
+            text-align: center;
+            position: relative;
+            margin: 36px 0 28px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+        }
+        .month-header::before,
+        .month-header::after {
+            content: '';
+            flex: 1;
+            height: 1.5px;
+            background: linear-gradient(90deg, transparent, #d4c5a9, #c4b08a, #d4c5a9, transparent);
+            opacity: 0.6;
+            max-width: 120px;
+        }
+        .month-header::after {
+            background: linear-gradient(270deg, transparent, #d4c5a9, #c4b08a, #d4c5a9, transparent);
+        }
+        .month-header .header-bg {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #8b7355, #6b5640);
+            z-index: -2;
+            box-shadow: 0 0 0 10px rgba(139, 115, 85, 0.06);
+        }
+        .month-header .header-bg-ring {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 62px;
+            height: 62px;
+            border-radius: 50%;
+            border: 1.5px dashed rgba(139, 115, 85, 0.18);
+            z-index: -1;
+            animation: ring-rotate 20s linear infinite;
+        }
+        @keyframes ring-rotate {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        .month-header span {
+            display: inline-block;
+            padding: 10px 24px;
+            background: var(--card-bg);
+            border: 1.5px solid #e8d5c0;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Timeline entry */
+        .timeline-entry {
+            position: relative;
+            width: 100%;
+            margin-bottom: 34px;
+            display: flex;
+            justify-content: flex-start;
+            opacity: 0;
+            animation: entry-sway-in 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+            will-change: transform;
+            transition: transform 0.08s ease-out;
+        }
+        .timeline-entry:nth-child(even) {
+            justify-content: flex-end;
+        }
+        @keyframes entry-sway-in {
+            0%   { opacity: 0; transform: translateY(30px) rotate(0.5deg); }
+            60%  { opacity: 1; transform: translateY(-3px) rotate(-0.2deg); }
+            100% { opacity: 1; transform: translateY(0) rotate(0deg); }
+        }
+
+        .timeline-entry .entry-card-wrapper {
+            width: 45%;
+            position: relative;
+        }
+
+        /* Decorative dot/node on the timeline line */
+        .timeline-entry .timeline-node {
+            position: absolute;
+            top: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 2.5px solid #d4c5a9;
+            z-index: 4;
+            box-shadow: 0 0 0 5px rgba(212, 197, 169, 0.15);
+            transition: all 0.3s ease;
+        }
+        .timeline-entry:hover .timeline-node {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 8px rgba(212, 149, 107, 0.2);
+            transform: translateX(-50%) scale(1.3);
+        }
+
+        /* Date bubble on the line */
+        .timeline-entry .date-bubble {
+            position: absolute;
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 2px solid #e8d5c0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+            z-index: 3;
+            box-shadow: var(--shadow-sm), 0 0 12px rgba(212, 149, 107, 0.15);
+            flex-direction: column;
+            line-height: 1.1;
+            animation: date-glow-pulse 3s ease-in-out infinite;
+        }
+        @keyframes date-glow-pulse {
+            0%, 100% { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 12px rgba(212,149,107,0.1); }
+            50%      { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 22px rgba(212,149,107,0.28); }
+        }
+        .timeline-entry.milestone .date-bubble {
+            border-color: var(--badge-milestone);
+            color: var(--badge-milestone);
+            background: var(--badge-milestone-bg);
+            animation-name: date-glow-pulse-milestone;
+        }
+        @keyframes date-glow-pulse-milestone {
+            0%, 100% { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 12px rgba(200,151,62,0.1); }
+            50%      { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 22px rgba(200,151,62,0.28); }
+        }
+        .timeline-entry.care .date-bubble {
+            border-color: var(--badge-care);
+            color: var(--badge-care);
+            background: var(--badge-care-bg);
+            animation-name: date-glow-pulse-care;
+        }
+        @keyframes date-glow-pulse-care {
+            0%, 100% { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 12px rgba(107,174,107,0.1); }
+            50%      { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 22px rgba(107,174,107,0.28); }
+        }
+        .timeline-entry.photo .date-bubble {
+            border-color: var(--badge-photo);
+            color: var(--badge-photo);
+            background: var(--badge-photo-bg);
+            animation-name: date-glow-pulse-photo;
+        }
+        @keyframes date-glow-pulse-photo {
+            0%, 100% { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 12px rgba(91,155,213,0.1); }
+            50%      { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 22px rgba(91,155,213,0.28); }
+        }
+        .timeline-entry.annotation .date-bubble {
+            border-color: var(--badge-annotation);
+            color: var(--badge-annotation);
+            background: var(--badge-annotation-bg);
+            animation-name: date-glow-pulse-annotation;
+        }
+        @keyframes date-glow-pulse-annotation {
+            0%, 100% { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 12px rgba(139,110,184,0.1); }
+            50%      { box-shadow: 0 2px 8px rgba(120,90,50,0.08), 0 0 22px rgba(139,110,184,0.28); }
+        }
+        .date-bubble .day { font-size: 13px; line-height: 1; }
+        .date-bubble .mon { font-size: 9px; line-height: 1; opacity: 0.8; }
+
+        /* Connector line from date bubble to card */
+        .timeline-entry .connector {
+            position: absolute;
+            top: 22px;
+            height: 2px;
+            background: #e8d5c0;
+            z-index: 1;
+        }
+        .timeline-entry:nth-child(odd) .connector {
+            right: -12px;
+            left: auto;
+            width: calc(10% + 24px);
+        }
+        .timeline-entry:nth-child(even) .connector {
+            left: -12px;
+            right: auto;
+            width: calc(10% + 24px);
+        }
+
+        /* Entry card */
+        .entry-card {
+            background: var(--card-bg);
+            border-radius: 14px;
+            padding: 18px 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid #f0e6d2;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .entry-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-3px);
+        }
+
+        /* Polaroid-style frame for photo entries */
+        .timeline-entry.photo .entry-card {
+            border-radius: 4px;
+            border: none;
+            padding: 16px 16px 20px 16px;
+            background: #fffef9;
+            box-shadow: 0 3px 12px rgba(120,90,50,0.12), 0 1px 3px rgba(0,0,0,0.06);
+            transform: rotate(-1.2deg);
+            transition: all 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+            position: relative;
+        }
+        .timeline-entry.photo:nth-child(even) .entry-card {
+            transform: rotate(1.3deg);
+        }
+        .timeline-entry.photo .entry-card::before {
+            content: '';
+            position: absolute;
+            inset: 8px;
+            border: 1px solid rgba(180,160,130,0.1);
+            border-radius: 1px;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .timeline-entry.photo .entry-card::after {
+            content: '';
+            position: absolute;
+            inset: 10px;
+            box-shadow: inset 0 0 20px rgba(120,90,50,0.04);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .timeline-entry.photo .entry-card:hover {
+            transform: rotate(0deg) translateY(-4px);
+            box-shadow: 0 10px 28px rgba(120,90,50,0.18), 0 2px 6px rgba(0,0,0,0.08);
+        }
+        .timeline-entry.photo:nth-child(even) .entry-card:hover {
+            transform: rotate(0deg) translateY(-4px);
+        }
+        .timeline-entry.photo .entry-card .entry-image {
+            border-radius: 2px;
+            margin-top: 10px;
+            box-shadow: none;
+            transition: all 0.3s ease;
+        }
+        .timeline-entry.photo .entry-card .entry-image:hover {
+            transform: scale(1.015);
+            box-shadow: 0 3px 8px rgba(120,90,50,0.15);
+        }
+        /* End polaroid frame */
+
+        .entry-card.annotation-card {
+            border: 2px solid transparent;
+            background: linear-gradient(var(--card-bg), var(--card-bg)) padding-box,
+                        linear-gradient(135deg, #b89fd4, #e0c5f0, #a288c8) border-box;
+            box-shadow: 0 4px 16px rgba(139, 110, 184, 0.15);
+        }
+        .entry-card .entry-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .entry-card .entry-icon {
+            font-size: 20px;
+        }
+        .entry-card .entry-type-badge {
+            font-size: 11px;
+            padding: 3px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .entry-type-badge.photo { background: var(--badge-photo-bg); color: var(--badge-photo); }
+        .entry-type-badge.milestone { background: var(--badge-milestone-bg); color: var(--badge-milestone); }
+        .entry-type-badge.care { background: var(--badge-care-bg); color: var(--badge-care); }
+        .entry-type-badge.annotation { background: var(--badge-annotation-bg); color: var(--badge-annotation); }
+        .entry-card .entry-date-text {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-left: auto;
+        }
+        .entry-card .entry-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+        .entry-card .entry-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .entry-card .entry-image {
+            margin-top: 12px;
+            width: 100%;
+            border-radius: 10px;
+            max-height: 280px;
+            object-fit: cover;
+            cursor: pointer;
+            box-shadow: 0 3px 12px rgba(120, 90, 50, 0.12);
+            transition: all 0.3s ease;
+        }
+        .entry-card .entry-image:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 20px rgba(120, 90, 50, 0.2);
+        }
+        .entry-card .entry-actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            border-top: 1px dashed #f0e6d2;
+            padding-top: 10px;
+        }
+        .entry-card .entry-actions button {
+            font-size: 12px;
+            padding: 5px 14px;
+            border-radius: 14px;
+            border: 1.5px solid #e8d5c0;
+            background: #fffef9;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: 500;
+            transition: all 0.25s ease;
+        }
+        .entry-card .entry-actions button:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: #fdf0e0;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+            position: relative;
+        }
+        .empty-state .empty-illustration {
+            width: 160px;
+            height: 160px;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+        .empty-state .empty-illustration .empty-frame {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fdf5e6, #fef9f0);
+            border: 3px dashed #e8d5c0;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 16px rgba(232,213,192,0.15);
+            animation: empty-float 3s ease-in-out infinite;
+        }
+        @keyframes empty-float {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-10px); }
+        }
+        .empty-state .empty-illustration .empty-icon {
+            font-size: 60px;
+            opacity: 0.65;
+            animation: empty-sway 2.5s ease-in-out infinite;
+        }
+        @keyframes empty-sway {
+            0%, 100% { transform: rotate(-3deg); }
+            50%      { transform: rotate(3deg); }
+        }
+        .empty-state .empty-illustration .empty-sparkle {
+            position: absolute;
+            font-size: 16px;
+            opacity: 0;
+            animation: empty-sparkle-fade 2s ease-in-out infinite;
+        }
+        .empty-state .empty-illustration .empty-sparkle:nth-child(2) { top: -5px; left: 30%; animation-delay: 0s; }
+        .empty-state .empty-illustration .empty-sparkle:nth-child(3) { top: 55%; right: 0%; animation-delay: 0.6s; }
+        .empty-state .empty-illustration .empty-sparkle:nth-child(4) { bottom: 0; left: 25%; animation-delay: 1.2s; }
+        @keyframes empty-sparkle-fade {
+            0%, 100% { opacity: 0; transform: scale(0.6); }
+            50%      { opacity: 0.8; transform: scale(1.2); }
+        }
+        .empty-state .icon {
+            font-size: 56px;
+            margin-bottom: 14px;
+            opacity: 0.7;
+        }
+        .empty-state p {
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        /* Loading */
+        .loading-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--text-muted);
+        }
+        .spinner-ring {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e8d5c0;
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-state p {
+            margin-top: 12px;
+            font-size: 14px;
+        }
+
+        /* Scroll to top button */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #d4956b, #c17f52);
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 4px 16px rgba(193, 127, 82, 0.35);
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .scroll-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .scroll-to-top:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(193, 127, 82, 0.45);
+        }
+        .scroll-to-top:active {
+            transform: translateY(0) scale(0.94);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(60, 40, 20, 0.45);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px;
+            width: 92%;
+            max-width: 460px;
+            box-shadow: var(--shadow-lg);
+            animation: modal-in 0.3s ease;
+        }
+        @keyframes modal-in {
+            from { opacity: 0; transform: scale(0.92) translateY(16px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .modal h3 {
+            font-size: 19px;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .modal form label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: 10px 0 4px;
+            font-weight: 600;
+        }
+        .modal form input,
+        .modal form textarea,
+        .modal form select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid #e8d5c0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.25s ease;
+            background: #fffef9;
+            font-family: inherit;
+            color: var(--text-primary);
+        }
+        .modal form textarea { resize: vertical; min-height: 80px; }
+        .modal form input:focus,
+        .modal form textarea:focus,
+        .modal form select:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(212, 149, 107, 0.12);
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .modal-actions button {
+            padding: 10px 22px;
+            border-radius: 22px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.25s ease;
+        }
+        .cancel-btn {
+            background: #f5ece0;
+            color: var(--text-secondary);
+        }
+        .cancel-btn:hover { background: #ede0cf; }
+        .save-btn {
+            background: linear-gradient(135deg, #d4956b, #c17f52);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(193, 127, 82, 0.3);
+        }
+        .save-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(193, 127, 82, 0.4);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #5c4033;
+            color: #fff;
+            padding: 10px 26px;
+            border-radius: 22px;
+            font-size: 14px;
+            z-index: 200;
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            box-shadow: 0 6px 20px rgba(60, 40, 20, 0.3);
+        }
+        .toast.show { opacity: 1; pointer-events: auto; }
+        .toast.success { background: #5b8c5a; }
+        .toast.error { background: #c25450; }
+
+        /* Responsive: on narrow screens, stack cards right */
+        @media (max-width: 700px) {
+            .timeline::before { left: 28px; transform: none; }
+            .timeline-entry { justify-content: flex-start !important; padding-left: 48px; }
+            .timeline-entry .entry-card-wrapper { width: 100%; }
+            .timeline-entry .date-bubble { left: 28px; transform: translateX(-50%); }
+            .timeline-entry .connector { display: none; }
+            .timeline-entry .timeline-node { left: 28px; }
+            .month-header { text-align: left; padding-left: 48px; justify-content: flex-start; }
+            .month-header::before,
+            .month-header::after { display: none; }
+            .month-header .header-bg { left: 28px; transform: translate(-50%, -50%); }
+            .month-header .header-bg-ring { left: 28px; transform: translate(-50%, -50%); }
+            .target-card .avatar { width: 56px; height: 56px; font-size: 24px; }
+            .timeline-entry.photo .entry-card { transform: rotate(-0.8deg); }
+            .timeline-entry.photo:nth-child(even) .entry-card { transform: rotate(0.8deg); }
+            .scroll-to-top { bottom: 20px; right: 16px; width: 40px; height: 40px; font-size: 17px; }
+        }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="topbar-brand">🐾🌿 Sekai PetPlant</div>
+    <div class="topbar-right">
+        <span id="greeting"></span>
+        <a href="/home.html" style="color:#8b7355;font-size:13px;text-decoration:none;font-weight:500;">首页</a>
+        <button onclick="logout()" class="text-btn" style="color:#8b7355;">退出</button>
+    </div>
+</header>
+
+<div class="page-wrapper">
+    <h2 class="page-title">📅 成长时光轴</h2>
+    <p class="page-subtitle">记录每一个珍贵的成长瞬间，留下温暖的回忆</p>
+
+    <!-- Tab: PET / PLANT -->
+    <div class="tab-group">
+        <button class="tab-btn active" onclick="switchTargetType('PET')">
+            <span class="tab-icon">🐱</span>宠物
+        </button>
+        <button class="tab-btn" onclick="switchTargetType('PLANT')">
+            <span class="tab-icon">🌿</span>植物
+        </button>
+    </div>
+
+    <!-- Target selector -->
+    <div class="target-selector" id="targetSelector"></div>
+
+    <!-- Action bar -->
+    <div class="action-bar" id="actionBar" style="display:none;">
+        <button class="add-btn" onclick="openAddModal()">+ 添加里程碑</button>
+        <button class="auto-btn" onclick="autoDetect()">🤖 AI智能发现</button>
+    </div>
+
+    <!-- Timeline -->
+    <div id="timelineContent">
+        <div class="empty-state">
+            <div class="empty-illustration">
+                <span class="empty-sparkle">✨</span>
+                <span class="empty-sparkle">🌟</span>
+                <span class="empty-sparkle">💫</span>
+                <div class="empty-frame">
+                    <span class="empty-icon">📸</span>
+                </div>
+            </div>
+            <p>选择要查看的对象</p>
+        </div>
+    </div>
+</div>
+
+<!-- Scroll to top button -->
+<button class="scroll-to-top" id="scrollToTopBtn" title="回到顶部" aria-label="回到顶部">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+
+<!-- Add Milestone Modal -->
+<div class="modal-overlay" id="addModal">
+    <div class="modal">
+        <h3>添加里程碑</h3>
+        <form id="addForm" onsubmit="submitEntry(event)">
+            <label>类型</label>
+            <select id="entryType" required>
+                <option value="MILESTONE">里程碑</option>
+                <option value="CARE">护理记录</option>
+                <option value="PHOTO">照片</option>
+            </select>
+            <label>标题</label>
+            <input type="text" id="entryTitle" maxlength="200" placeholder="例如：第一次开花" required>
+            <label>描述</label>
+            <textarea id="entryDesc" placeholder="记录这个珍贵时刻..."></textarea>
+            <label>图片链接（可选）</label>
+            <input type="text" id="entryImageUrl" maxlength="500" placeholder="https://...">
+            <div class="modal-actions">
+                <button type="button" class="cancel-btn" onclick="closeAddModal()">取消</button>
+                <button type="submit" class="save-btn">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+let currentTargetType = 'PET';
+let currentTargetId = null;
+let currentTargets = [];
+let allEntries = [];
+
+// Greeting based on time of day
+(function() {
+    const hour = new Date().getHours();
+    let greeting;
+    if (hour >= 5 && hour < 9) greeting = '早上好';
+    else if (hour >= 9 && hour < 18) greeting = '下午好';
+    else greeting = '晚上好';
+    document.getElementById('greeting').textContent = greeting;
+})();
+
+// Auth check
+fetch('/api/auth/me').then(r => r.json()).then(data => {
+    if (data.code === 200) {
+        const hour = new Date().getHours();
+        let greeting;
+        if (hour >= 5 && hour < 9) greeting = '早上好';
+        else if (hour >= 9 && hour < 18) greeting = '下午好';
+        else greeting = '晚上好';
+        document.getElementById('greeting').textContent = greeting + '，' + data.data.userName;
+        loadTargets(currentTargetType);
+    } else {
+        location.href = '/login';
+    }
+}).catch(() => { location.href = '/login'; });
+
+async function logout() {
+    await fetch('/api/auth/logout', {method:'POST'});
+    location.href = '/login';
+}
+
+async function switchTargetType(type) {
+    currentTargetType = type;
+    currentTargetId = null;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    await loadTargets(type);
+}
+
+async function loadTargets(type) {
+    const res = await fetch('/api/care/targets/' + type);
+    const data = await res.json();
+    if (data.code !== 200) {
+        showToast('加载失败，请稍后重试', 'error');
+        return;
+    }
+    currentTargets = data.data;
+    renderTargetSelector();
+}
+
+function renderTargetSelector() {
+    const container = document.getElementById('targetSelector');
+    const typeLabel = currentTargetType === 'PET' ? '宠物' : '植物';
+    if (!currentTargets || currentTargets.length === 0) {
+        container.innerHTML = '<p class="target-selector-hint">暂无' + typeLabel + '。请先在护理页面添加。</p>';
+        document.getElementById('actionBar').style.display = 'none';
+        document.getElementById('timelineContent').innerHTML = '<div class="empty-state"><div class="empty-illustration"><span class="empty-sparkle">✨</span><span class="empty-sparkle">🌟</span><span class="empty-sparkle">💫</span><div class="empty-frame"><span class="empty-icon">📸</span></div></div><p>暂无可用对象</p></div>';
+        return;
+    }
+    let html = '<span class="target-selector-hint" style="margin-right:8px;">选择要查看的对象：</span>';
+    currentTargets.forEach((t) => {
+        const active = currentTargetId === t.id ? ' active' : '';
+        const icon = currentTargetType === 'PET' ? '🐱' : '🌿';
+        html += '<div class="target-card' + active + '" onclick="selectTarget(' + t.id + ', this)" data-id="' + t.id + '">';
+        html += '<div class="avatar">' + icon + '</div>';
+        html += '<div class="name">' + escapeHtml(t.name) + '</div>';
+        if (t.species) html += '<div class="species">' + escapeHtml(t.species) + '</div>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+
+    if (currentTargetId) {
+        document.getElementById('actionBar').style.display = 'flex';
+    }
+}
+
+function selectTarget(id, el) {
+    currentTargetId = id;
+    document.querySelectorAll('.target-card').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('actionBar').style.display = 'flex';
+    loadTimeline();
+}
+
+async function loadTimeline() {
+    if (!currentTargetId) return;
+    const content = document.getElementById('timelineContent');
+    content.innerHTML = '<div class="loading-state"><div class="spinner-ring"></div><p>加载中...</p></div>';
+
+    const res = await fetch('/api/timeline/' + currentTargetType + '/' + currentTargetId);
+    const data = await res.json();
+    if (data.code !== 200) {
+        content.innerHTML = '<div class="empty-state"><div class="empty-illustration"><span class="empty-sparkle">✨</span><span class="empty-sparkle">🌟</span><span class="empty-sparkle">💫</span><div class="empty-frame"><span class="empty-icon">⚠️</span></div></div><p>加载时间轴失败</p></div>';
+        return;
+    }
+    allEntries = data.data || [];
+    renderTimeline(allEntries);
+}
+
+function groupByMonth(entries) {
+    const groups = {};
+    entries.forEach(e => {
+        const d = new Date(e.createdAt);
+        const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(e);
+    });
+    return groups;
+}
+
+function formatMonth(key) {
+    const [y, m] = key.split('-');
+    return parseInt(y) + '年 ' + parseInt(m) + '月';
+}
+
+function formatDate(dateStr) {
+    const d = new Date(dateStr);
+    const y = d.getFullYear();
+    const mo = d.getMonth() + 1;
+    const day = d.getDate();
+    const h = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return y + '/' + mo + '/' + day + ' ' + h + ':' + mi;
+}
+
+function formatDayOnly(dateStr) {
+    const d = new Date(dateStr);
+    return { day: d.getDate(), month: d.getMonth() + 1 };
+}
+
+function getEntryIcon(type) {
+    const icons = { PHOTO: '📷', MILESTONE: '⭐', CARE: '❤️', ANNOTATION: '🤖' };
+    return icons[type] || '📌';
+}
+
+function getEntryTypeLabel(type) {
+    const labels = { PHOTO: '照片', MILESTONE: '里程碑', CARE: '护理', ANNOTATION: 'AI分析' };
+    return labels[type] || type;
+}
+
+function renderTimeline(entries) {
+    const content = document.getElementById('timelineContent');
+    if (!entries || entries.length === 0) {
+        content.innerHTML = '<div class="empty-state"><div class="empty-illustration"><span class="empty-sparkle">✨</span><span class="empty-sparkle">🌟</span><span class="empty-sparkle">💫</span><div class="empty-frame"><span class="empty-icon">📸</span></div></div><p>暂无记录</p><p style="font-size:13px;margin-top:4px;">添加里程碑或拍照，开始记录成长吧！</p></div>';
+        // Re-show scroll-to-top state check
+        handleScrollDebounced();
+        return;
+    }
+
+    const groups = groupByMonth(entries);
+    const sortedMonths = Object.keys(groups).sort().reverse();
+    let html = '<div class="timeline">';
+
+    sortedMonths.forEach(monthKey => {
+        const monthEntries = groups[monthKey];
+        html += '<div class="month-header"><div class="header-bg"></div><div class="header-bg-ring"></div><span>' + formatMonth(monthKey) + '</span></div>';
+        monthEntries.forEach((e, idx) => {
+            const typeClass = e.entryType ? e.entryType.toLowerCase() : 'milestone';
+            const isAnnotation = e.entryType === 'ANNOTATION';
+            const dateParts = formatDayOnly(e.createdAt);
+            const months = ['', '1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+            html += '<div class="timeline-entry ' + typeClass + '" style="animation-delay:' + (idx * 0.08) + 's">';
+            html += '<div class="entry-card-wrapper">';
+            html += '<div class="entry-card' + (isAnnotation ? ' annotation-card' : '') + '">';
+            html += '<div class="entry-meta">';
+            html += '<span class="entry-icon">' + getEntryIcon(e.entryType) + '</span>';
+            html += '<span class="entry-type-badge ' + typeClass + '">' + getEntryTypeLabel(e.entryType) + '</span>';
+            html += '<span class="entry-date-text">' + formatDate(e.createdAt) + '</span>';
+            html += '</div>';
+            if (e.title) html += '<div class="entry-title">' + escapeHtml(e.title) + '</div>';
+            if (e.description) html += '<div class="entry-desc">' + escapeHtml(e.description) + '</div>';
+            if (e.imageUrl) html += '<img class="entry-image" src="' + escapeHtml(e.imageUrl) + '" alt="照片" onclick="window.open(\'' + escapeAttr(e.imageUrl) + '\')" loading="lazy">';
+            html += '<div class="entry-actions">';
+            if (e.entryType !== 'ANNOTATION') {
+                html += '<button onclick="annotateEntry(' + e.id + ')">🤖 AI标注</button>';
+            }
+            html += '</div>';
+            html += '</div></div>';
+
+            // Date bubble
+            html += '<div class="date-bubble"><span class="day">' + dateParts.day + '</span><span class="mon">' + months[dateParts.month] + '</span></div>';
+            // Timeline decorative node
+            html += '<div class="timeline-node"></div>';
+            // Connector line (visual only on desktop)
+            html += '<div class="connector"></div>';
+
+            html += '</div>';
+        });
+    });
+
+    html += '</div>';
+    content.innerHTML = html;
+
+    // Attach parallax-like scroll listeners
+    attachParallaxListeners();
+    // Check scroll-to-top state
+    handleScrollDebounced();
+}
+
+async function annotateEntry(id) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '分析中...';
+    try {
+        const res = await fetch('/api/timeline/entry/' + id + '/annotate', { method: 'POST' });
+        const data = await res.json();
+        if (data.code === 200) {
+            showToast('AI标注完成！', 'success');
+            loadTimeline();
+        } else {
+            showToast(data.message || '标注失败', 'error');
+        }
+    } catch (err) {
+        showToast('网络错误，请稍后重试', 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = '🤖 AI标注';
+}
+
+function openAddModal() {
+    if (!currentTargetId) {
+        showToast('请先选择要查看的对象', 'error');
+        return;
+    }
+    document.getElementById('addModal').classList.add('show');
+    document.getElementById('addForm').reset();
+    document.getElementById('entryType').value = 'MILESTONE';
+}
+
+function closeAddModal() {
+    document.getElementById('addModal').classList.remove('show');
+}
+
+async function submitEntry(e) {
+    e.preventDefault();
+    const payload = {
+        targetType: currentTargetType,
+        targetId: currentTargetId,
+        entryType: document.getElementById('entryType').value,
+        title: document.getElementById('entryTitle').value,
+        description: document.getElementById('entryDesc').value,
+        imageUrl: document.getElementById('entryImageUrl').value || null
+    };
+
+    const res = await fetch('/api/timeline/entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.code === 200) {
+        showToast('记录添加成功！', 'success');
+        closeAddModal();
+        loadTimeline();
+    } else {
+        showToast(data.message || '添加失败，请稍后重试', 'error');
+    }
+}
+
+async function autoDetect() {
+    if (!currentTargetId) {
+        showToast('请先选择要查看的对象', 'error');
+        return;
+    }
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '检测中...';
+    try {
+        const res = await fetch('/api/timeline/milestone/auto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetType: currentTargetType, targetId: currentTargetId })
+        });
+        const data = await res.json();
+        if (data.code === 200) {
+            showToast(data.message || '智能发现完成！', 'success');
+            loadTimeline();
+        } else {
+            showToast(data.message || '检测失败', 'error');
+        }
+    } catch (err) {
+        showToast('网络错误，请稍后重试', 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = '🤖 AI智能发现';
+}
+
+function showToast(msg, type) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast show ' + (type || '');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.classList.remove('show'); }, 2800);
+}
+
+function escapeHtml(str) {
+    if (!str) return str;
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function escapeAttr(str) {
+    if (!str) return str;
+    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// Close modal on overlay click
+document.getElementById('addModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAddModal();
+});
+
+// ---- Scroll to top button ----
+(function() {
+    const btn = document.getElementById('scrollToTopBtn');
+    if (!btn) return;
+
+    function checkScroll() {
+        if (window.scrollY > 400) {
+            btn.classList.add('visible');
+        } else {
+            btn.classList.remove('visible');
+        }
+    }
+
+    btn.addEventListener('click', function() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    window.addEventListener('scroll', checkScroll, { passive: true });
+    checkScroll();
+})();
+
+// ---- Parallax-like subtle movement on scroll ----
+function attachParallaxListeners() {
+    const entries = document.querySelectorAll('.timeline-entry');
+    if (entries.length === 0) return;
+
+    function handleParallax() {
+        const viewportHeight = window.innerHeight;
+        entries.forEach(function(entry) {
+            const rect = entry.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            const viewportCenter = viewportHeight / 2;
+            const offset = (centerY - viewportCenter) / viewportHeight;
+            // Subtle horizontal shift based on scroll position
+            const shiftX = offset * 8; // max 8px shift
+            entry.style.transform = 'translateX(' + shiftX + 'px)';
+        });
+    }
+
+    // Remove any existing handler to avoid duplicates
+    window.removeEventListener('scroll', handleParallaxDebounced);
+    window.addEventListener('scroll', handleParallaxDebounced, { passive: true });
+}
+
+var parallaxTimer = null;
+function handleParallaxDebounced() {
+    if (parallaxTimer) cancelAnimationFrame(parallaxTimer);
+    parallaxTimer = requestAnimationFrame(function() {
+        // Call the actual parallax handler defined in attachParallaxListeners
+        var entries = document.querySelectorAll('.timeline-entry');
+        if (entries.length === 0) return;
+        var viewportHeight = window.innerHeight;
+        entries.forEach(function(entry) {
+            var rect = entry.getBoundingClientRect();
+            var centerY = rect.top + rect.height / 2;
+            var viewportCenter = viewportHeight / 2;
+            var offset = (centerY - viewportCenter) / viewportHeight;
+            var shiftX = offset * 8;
+            entry.style.transform = 'translateX(' + shiftX + 'px)';
+        });
+    });
+}
+
+// Also used for scroll-to-top debounced
+function handleScrollDebounced() {
+    var btn = document.getElementById('scrollToTopBtn');
+    if (!btn) return;
+    if (window.scrollY > 400) {
+        btn.classList.add('visible');
+    } else {
+        btn.classList.remove('visible');
+    }
+}
+</script>
+<script src="/js/push.js"></script>
+</body>
+</html>

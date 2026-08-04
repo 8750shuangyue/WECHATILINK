@@ -3,6 +3,8 @@ package com.example.demo.chat.repository;
 import com.example.demo.chat.ChatMessage;
 import com.example.demo.chat.entity.Conversation;
 import com.example.demo.chat.entity.Message;
+import com.example.demo.chat.repository.mysql.ConversationRepository;
+import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,7 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseChatMemoryRepository.class);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final String SYSTEM_ROLE = "system";
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
@@ -83,6 +86,14 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
     @Transactional(readOnly = true)
     public boolean exists(String conversationId) {
         return conversationRepository.existsById(conversationId);
+    }
+
+    @Override
+    @Transactional
+    public void removeSystemMessages(String conversationId, String contentPrefix) {
+        logger.info("Database removeSystemMessages - conversationId: {}, prefix: {}", conversationId, contentPrefix);
+        messageRepository.deleteByConversationIdAndRoleAndContentStartingWith(conversationId, SYSTEM_ROLE, contentPrefix);
+        logger.info("Database removeSystemMessages - completed");
     }
 
     private void ensureConversationExists(String conversationId) {

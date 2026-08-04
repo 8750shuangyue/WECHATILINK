@@ -1,14 +1,19 @@
 package com.example.demo.chat;
 
+import com.example.demo.chat.event.SummaryUpdateEvent;
+import com.example.demo.chat.event.VectorSaveEvent;
 import com.example.demo.chat.repository.ChatMemoryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,12 +27,18 @@ public class ChatMemoryService {
     private static final String ASSISTANT_ROLE = "assistant";
     private static final String SUMMARY_ROLE = "system";
     private static final String SUMMARY_PREFIX = "【对话摘要】";
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final ChatMemoryRepository repository;
+    private final ApplicationEventPublisher eventPublisher;
     
     @Autowired
     @Lazy
     private LlmService llmService;
+    
+    @Autowired
+    @Lazy
+    private VectorStoreService vectorStoreService;
 
     @Value("${chat.memory.max-messages:10}")
     private int maxMessages;
@@ -41,8 +52,9 @@ public class ChatMemoryService {
     @Value("${chat.memory.summary-keep-recent:5}")
     private int summaryKeepRecent;
 
-    public ChatMemoryService(ChatMemoryRepository repository) {
+    public ChatMemoryService(ChatMemoryRepository repository, ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
+        this.eventPublisher = eventPublisher;
     }
 
     public List<ChatMessage> getConversationHistory(String conversationId) {
@@ -180,6 +192,42 @@ public class ChatMemoryService {
         repository.addMessage(conversationId, new ChatMessage(USER_ROLE, userMessage));
         repository.addMessage(conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
         logger.debug("Saved message pair for conversation: {}", conversationId);
+        
+        eventPublisher.publishEvent(new VectorSaveEvent(conversationId, userMessage, assistantReply));
+        eventPublisher.publishEvent(new SummaryUpdateEvent(conversationId));
+    }
+
+    public void checkAndUpdateSummary(String conversationId) {
+        List<ChatMessage> history = repository.getMessages(conversationId);
+        long totalTokens = history.stream().mapToLong(ChatMessage::getTokenCount).sum();
+        
+        if (totalTokens > summaryThreshold && history.size() > summaryKeepRecent * 2) {
+            String summary = generateRollingSummaryContent(history);
+            if (summary != null && !summary.isEmpty()) {
+                repository.removeSystemMessages(conversationId, SUMMARY_PREFIX);
+                String timestamp = LocalDateTime.now().format(FORMATTER);
+                String summaryContent = SUMMARY_PREFIX + "[更新时间: " + timestamp.substring(0, 16) + "]\n" + summary;
+                repository.addMessage(conversationId, new ChatMessage(SYSTEM_ROLE, summaryContent));
+                logger.info("Summary saved for conversation: {}, length: {} chars", conversationId, summary.length());
+            }
+        }
+    }
+
+    private String generateRollingSummaryContent(List<ChatMessage> history) {
+        List<ChatMessage> messages = new ArrayList<>();
+        for (ChatMessage msg : history) {
+            if (!SYSTEM_ROLE.equals(msg.getRole())) {
+                messages.add(msg);
+            }
+        }
+
+        int keepRecentCount = summaryKeepRecent * 2;
+        List<ChatMessage> oldMessages = new ArrayList<>();
+        for (int i = 0; i < messages.size() - keepRecentCount; i++) {
+            oldMessages.add(messages.get(i));
+        }
+
+        return generateSummary(oldMessages);
     }
 
     public void clearConversation(String conversationId) {

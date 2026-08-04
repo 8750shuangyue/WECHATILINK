@@ -69,9 +69,9 @@ public class ToolDefinition {
     }
 
     public Map<String, Object> toSchema() {
-        Map<String, Object> schema = new LinkedHashMap<>();
-        schema.put("name", this.name);
-        schema.put("description", this.description);
+        Map<String, Object> function = new LinkedHashMap<>();
+        function.put("name", this.name);
+        function.put("description", this.description);
 
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("type", "object");
@@ -84,9 +84,15 @@ public class ToolDefinition {
             properties.put(entry.getKey(), prop);
         }
         params.put("properties", properties);
-        params.put("required", this.required);
+        if (!this.required.isEmpty()) {
+            params.put("required", this.required);
+        }
 
-        schema.put("parameters", params);
+        function.put("parameters", params);
+
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "function");
+        schema.put("function", function);
         return schema;
     }
 
