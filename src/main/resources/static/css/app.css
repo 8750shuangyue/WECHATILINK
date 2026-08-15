@@ -56,6 +56,18 @@ button, input, textarea, select {
   font-family: inherit;
 }
 
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.app-empty {
+  text-align: center;
+  color: var(--ink-2);
+  padding: 32px 0;
+  font-size: 14px;
+}
+
 /* ---------- 认证页（登录/注册） ---------- */
 .auth-overlay {
   display: flex;

@@ -38,7 +38,10 @@ tmp/
 login_state.json
 rag_knowledge.sqlite
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.db
+query
 
 ### Local secrets & config ###
 .env

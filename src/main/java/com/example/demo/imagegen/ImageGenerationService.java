@@ -34,6 +34,11 @@ public class ImageGenerationService {
         this.config = config;
     }
 
+    private String imageApiKey() {
+        String key = config.getImage().getApiKey();
+        return (key != null && !key.isBlank()) ? key : config.getApiKey();
+    }
+
     /**
      * @return local file path (e.g. "C:\\...\\uploads\\gen_abc.png")
      */
@@ -70,7 +75,7 @@ public class ImageGenerationService {
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(config.getImage().getBaseUrl()))
-            .header("Authorization", "Bearer " + config.getApiKey())
+            .header("Authorization", "Bearer " + imageApiKey())
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonStr))
             .build();
@@ -127,7 +132,7 @@ public class ImageGenerationService {
             logger.info("Downloading generated image from: {}", url);
             HttpRequest downloadReq = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Authorization", "Bearer " + config.getApiKey())
+            .header("Authorization", "Bearer " + imageApiKey())
                 .GET()
                 .build();
             HttpResponse<InputStream> downloadResp = httpClient.send(downloadReq, HttpResponse.BodyHandlers.ofInputStream());

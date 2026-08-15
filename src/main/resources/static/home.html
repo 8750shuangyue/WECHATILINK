@@ -580,6 +580,9 @@
         .feature-card:nth-child(4) { --accent-c1: #2f9e63; --accent-c2: #2a9d8f; --glow: rgba(47,158,99,.2); animation-delay: .2s; }
         .feature-card:nth-child(5) { --accent-c1: #f43f5e; --accent-c2: #f59e0b; --glow: rgba(244,63,94,.18); animation-delay: .25s; }
         .feature-card:nth-child(6) { --accent-c1: #3b82f6; --accent-c2: #22d3ee; --glow: rgba(59,130,246,.2); animation-delay: .3s; }
+        .feature-card:nth-child(7) { --accent-c1: #0ea5e9; --accent-c2: #14b8a6; --glow: rgba(14,165,233,.2); animation-delay: .35s; }
+        .feature-card:nth-child(8) { --accent-c1: #f59e0b; --accent-c2: #f97316; --glow: rgba(245,158,11,.2); animation-delay: .4s; }
+        .feature-card:nth-child(9) { --accent-c1: #8b5cf6; --accent-c2: #6366f1; --glow: rgba(139,92,246,.2); animation-delay: .45s; }
 
         .feature-card::before {
             content: '';
@@ -671,6 +674,9 @@
         .fc-purple .feat-icon { background: #f3e5f5; }
         .fc-teal .feat-icon { background: #e0f2f1; }
         .fc-pink .feat-icon { background: #fce4ec; }
+        .fc-sky .feat-icon { background: #e0f2fe; }
+        .fc-amber .feat-icon { background: #fff3e0; }
+        .fc-violet .feat-icon { background: #ede9fe; }
 
         /* ---- Push Toggle ---- */
         .push-bar {
@@ -830,6 +836,7 @@
             * { animation: none !important; transition: none !important; }
         }
     </style>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body>
 
@@ -911,10 +918,10 @@
             <p>宠物健康管理、植物养护建议、AI 智能问答，一站式搞定</p>
             <span class="sys-badge">核心</span>
         </div>
-        <div class="sys-card chat" onclick="selectSystem('wechat')">
+        <div class="sys-card chat" onclick="selectSystem('chat')">
             <div class="sys-icon">💬</div>
-            <h3>微信 iLink</h3>
-            <p>连接微信公众号，随时随地与 AI 助手对话，消息实时同步</p>
+            <h3>AI 对话</h3>
+            <p>Web 端智能对话，支持多工具调用与护理问答</p>
             <span class="sys-badge">即时</span>
         </div>
     </div>
@@ -962,6 +969,24 @@
             <h4>商城</h4>
             <p>宠物植物用品一站购</p>
         </div>
+        <div class="feature-card fc-sky" onclick="location.href='/reminders'">
+            <span class="shine"></span>
+            <div class="feat-icon">⏰</div>
+            <h4>护理提醒</h4>
+            <p>用药浇水提醒，及时送达</p>
+        </div>
+        <div class="feature-card fc-amber" onclick="location.href='/briefing'">
+            <span class="shine"></span>
+            <div class="feat-icon">🌅</div>
+            <h4>每日简报</h4>
+            <p>天气 + 待办 + 护理知识日报</p>
+        </div>
+        <div class="feature-card fc-violet" onclick="location.href='/kb'">
+            <span class="shine"></span>
+            <div class="feat-icon">📚</div>
+            <h4>知识库</h4>
+            <p>上传文档，喂养 AI 私有记忆</p>
+        </div>
     </div>
 
     <!-- Push Toggle -->
@@ -982,7 +1007,7 @@
 <div class="footer">Sekai PetPlant &copy; 2026 · 用心守护每一个小生命</div>
 
 <script>
-const VAPID_PUBLIC_KEY = 'BKfG-O8qPflqVK7oVXqCRHUQNi0u4Z2oT2wDvtqDpGOd5Iujq3cVEhuW6NviyHlJAzQEH0sOe0iAl1QpIVcNnns';
+const VAPID_PUBLIC_KEY = 'BLrXSeSFooC3M926Z4JKDI5KFP9_eQ4UBTECVv6--H-hDrcPSBv-qRmilQxywzLw7hRO5qrLiciyeaU3dn4che8';
 const SW_PATH = '/js/service-worker.js';
 
 // Init
@@ -1111,5 +1136,7 @@ function urlB64ToUint8Array(base64String) {
     return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
 }
 </script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 </body>
 </html>

@@ -74,6 +74,8 @@ public class DashScopeConfig {
 
     public static class Vision {
         private String model = "qwen-vl-plus";
+        private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+        private String apiKey;
 
         public String getModel() {
             return model;
@@ -82,6 +84,22 @@ public class DashScopeConfig {
         public void setModel(String model) {
             this.model = model;
         }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
     }
 
     public static class Image {
@@ -89,6 +107,7 @@ public class DashScopeConfig {
         private String defaultResolution = "1024*1024";
         private String defaultStyle = "";
         private String model = "qwen-image-2.0";
+        private String apiKey;
 
         public String getBaseUrl() {
             return baseUrl;
@@ -120,6 +139,14 @@ public class DashScopeConfig {
 
         public void setModel(String model) {
             this.model = model;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
         }
     }
 

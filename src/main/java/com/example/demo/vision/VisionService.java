@@ -27,6 +27,16 @@ public class VisionService {
         this.config = config;
     }
 
+    private String visionBaseUrl() {
+        String url = config.getVision().getBaseUrl();
+        return (url != null && !url.isBlank()) ? url : config.getBaseUrl();
+    }
+
+    private String visionApiKey() {
+        String key = config.getVision().getApiKey();
+        return (key != null && !key.isBlank()) ? key : config.getApiKey();
+    }
+
     private static final String PROMPT = "请分析图片内容，并以纯JSON格式返回以下信息，不要包含markdown标记：" +
             "{\"title\": \"图片标题\", \"description\": \"详细描述\", \"objects\": [\"物体1\",\"物体2\"], " +
             "\"scene\": \"场景描述\", \"emotion\": \"情感色彩\", \"tags\": [\"标签1\",\"标签2\"], \"text\": \"图片中的文字\"}";
@@ -69,8 +79,8 @@ public class VisionService {
         String jsonRequest = JSON.toJSONString(requestBody);
         
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(config.getBaseUrl() + "/chat/completions"))
-            .header("Authorization", "Bearer " + config.getApiKey())
+            .uri(URI.create(visionBaseUrl() + "/chat/completions"))
+            .header("Authorization", "Bearer " + visionApiKey())
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
             .build();
@@ -136,8 +146,8 @@ public class VisionService {
         String jsonRequest = JSON.toJSONString(requestBody);
         
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(config.getBaseUrl() + "/chat/completions"))
-            .header("Authorization", "Bearer " + config.getApiKey())
+            .uri(URI.create(visionBaseUrl() + "/chat/completions"))
+            .header("Authorization", "Bearer " + visionApiKey())
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
             .build();

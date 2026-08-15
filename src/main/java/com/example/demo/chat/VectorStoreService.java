@@ -346,6 +346,35 @@ public class VectorStoreService {
         }
     }
 
+    /**
+     * 列出知识库文档（按 sourceId 分组，仅统计显式入库的文档，跳过对话向量）。
+     */
+    public List<Map<String, Object>> listDocuments() {
+        List<VectorStore> all = vectorStoreRepository.findAll();
+        Map<String, Map<String, Object>> grouped = new LinkedHashMap<>();
+        for (VectorStore vs : all) {
+            if (vs.getSourceId() == null || vs.getSourceId().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> g = grouped.computeIfAbsent(vs.getSourceId(), k -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("sourceId", k);
+                m.put("count", 0);
+                m.put("sample", "");
+                m.put("timestamp", vs.getTimestamp());
+                return m;
+            });
+            g.put("count", ((Integer) g.get("count")) + 1);
+            if (((String) g.get("sample")).isEmpty()) {
+                g.put("sample", vs.getContent());
+            }
+            if (vs.getTimestamp() != null) {
+                g.put("timestamp", vs.getTimestamp());
+            }
+        }
+        return new ArrayList<>(grouped.values());
+    }
+
     public long countVectors() {
         return indexToContent.size();
     }

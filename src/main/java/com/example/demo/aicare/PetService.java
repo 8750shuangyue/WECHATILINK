@@ -30,7 +30,7 @@ public class PetService {
         this.petProfileRepository = petProfileRepository;
     }
 
-    public Map<String, Object> recognizePet(MultipartFile file) throws IOException {
+    public Map<String, Object> recognizePet(MultipartFile file, String userId) throws IOException {
         logger.info("Recognizing pet from image, filename: {}, size: {} bytes", 
                 file.getOriginalFilename(), file.getSize());
 
@@ -51,6 +51,7 @@ public class PetService {
         String imageUrl = "/uploads/" + file.getOriginalFilename();
 
         PetProfile profile = new PetProfile(species, species, imageUrl, healthStatus);
+        profile.setUserId(userId);
         petProfileRepository.save(profile);
 
         Map<String, Object> result = new HashMap<>();
@@ -65,8 +66,8 @@ public class PetService {
         return result;
     }
 
-    public List<PetProfile> listPets() {
-        return petProfileRepository.findAll();
+    public List<PetProfile> listPets(String userId) {
+        return petProfileRepository.findByUserId(userId);
     }
 
     private Map<String, Object> parseAnalysisResult(String jsonString) {

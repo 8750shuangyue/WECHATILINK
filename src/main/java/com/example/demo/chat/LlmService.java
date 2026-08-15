@@ -21,8 +21,12 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.function.Consumer;
 
 @Service
 public class LlmService {
@@ -119,6 +123,66 @@ public class LlmService {
         logger.debug("Chat with tools request, tools count: {}", tools != null ? tools.size() : 0);
         
         return executeChatRequestWithResponse(requestBody);
+    }
+
+    /**
+     * 流式对话：把 DeepSeek 的增量 token 逐个回调给调用方。
+     */
+    public void chatStream(String userMessage, String systemPrompt,
+                           Consumer<String> onToken, Runnable onDone) throws Exception {
+        JSONArray messages = new JSONArray();
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            JSONObject sys = new JSONObject();
+            sys.put("role", "system");
+            sys.put("content", systemPrompt);
+            messages.add(sys);
+        }
+        JSONObject user = new JSONObject();
+        user.put("role", "user");
+        user.put("content", userMessage);
+        messages.add(user);
+
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("model", config.getModel());
+        requestBody.put("messages", messages);
+        requestBody.put("stream", true);
+
+        HttpPost httpPost = new HttpPost(config.getBaseUrl() + "/chat/completions");
+        httpPost.setHeader("Content-Type", "application/json");
+        httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
+        httpPost.setEntity(new StringEntity(JSON.toJSONString(requestBody), ContentType.APPLICATION_JSON));
+
+        httpClient.execute(httpPost, response -> {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(response.getEntity().getContent(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data:")) {
+                        continue;
+                    }
+                    String data = line.substring(5).trim();
+                    if (data.isEmpty() || "[DONE]".equals(data)) {
+                        continue;
+                    }
+                    try {
+                        JSONObject json = JSON.parseObject(data);
+                        JSONArray choices = json.getJSONArray("choices");
+                        if (choices == null || choices.isEmpty()) {
+                            continue;
+                        }
+                        JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
+                        String content = delta != null ? delta.getString("content") : null;
+                        if (content != null && !content.isEmpty()) {
+                            onToken.accept(content);
+                        }
+                    } catch (Exception ignore) {
+                        // 跳过无法解析的增量
+                    }
+                }
+            }
+            onDone.run();
+            return null;
+        });
     }
 
     public String chatWithMemory(String conversationId, String userMessage) throws IOException {

@@ -26,6 +26,9 @@ public class PetProfile {
     @Column(name = "create_time")
     private LocalDateTime createTime;
 
+    @Column(name = "user_id", length = 100)
+    private String userId;
+
     public PetProfile() {
     }
 
@@ -83,5 +86,13 @@ public class PetProfile {
 
     public void setCreateTime(LocalDateTime createTime) {
         this.createTime = createTime;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }

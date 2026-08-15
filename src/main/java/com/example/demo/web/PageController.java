@@ -40,4 +40,19 @@ public class PageController {
     public String shopPublish() {
         return "forward:/shop-publish.html";
     }
+
+    @GetMapping("/reminders")
+    public String reminders() {
+        return "forward:/reminders.html";
+    }
+
+    @GetMapping("/briefing")
+    public String briefing() {
+        return "forward:/briefing.html";
+    }
+
+    @GetMapping("/kb")
+    public String kb() {
+        return "forward:/kb.html";
+    }
 }

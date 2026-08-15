@@ -18,7 +18,7 @@ async function subscribePush() {
         const reg = await navigator.serviceWorker.register('/js/service-worker.js');
         const sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array('BKfG-O8qPflqVK7oVXqCRHUQNi0u4Z2oT2wDvtqDpGOd5Iujq3cVEhuW6NviyHlJAzQEH0sOe0iAl1QpIVcNnns')
+            applicationServerKey: urlBase64ToUint8Array('BLrXSeSFooC3M926Z4JKDI5KFP9_eQ4UBTECVv6--H-hDrcPSBv-qRmilQxywzLw7hRO5qrLiciyeaU3dn4che8')
         });
         const key = sub.getKey('p256dh');
         const token = sub.getKey('auth');

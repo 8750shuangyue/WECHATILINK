@@ -29,8 +29,10 @@ public class WebPushService {
         try {
             java.security.Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
             tmp = new nl.martijndwars.webpush.PushService();
-            tmp.setPublicKey(vapidPublicKey);
-            tmp.setPrivateKey(vapidPrivateKey);
+            // web-push 库使用标准 Base64 解码密钥；VAPID 密钥是 URL-safe 编码，
+            // 必须转换（-/_ → +// 并补 =），否则解码出错导致 "Invalid point coordinates"
+            tmp.setPublicKey(toStandardBase64(vapidPublicKey));
+            tmp.setPrivateKey(toStandardBase64(vapidPrivateKey));
             tmp.setSubject(vapidSubject);
             tmpEnabled = true;
             logger.info("WebPush service initialized successfully");
@@ -39,6 +41,18 @@ public class WebPushService {
         }
         this.libraryPushService = tmp;
         this.enabled = tmpEnabled;
+    }
+
+    private static String toStandardBase64(String urlSafe) {
+        if (urlSafe == null) {
+            return null;
+        }
+        String std = urlSafe.replace('-', '+').replace('_', '/');
+        int pad = (4 - std.length() % 4) % 4;
+        for (int i = 0; i < pad; i++) {
+            std += '=';
+        }
+        return std;
     }
 
     public void subscribe(String userId, String endpoint, String p256dh, String auth, String userAgent) {

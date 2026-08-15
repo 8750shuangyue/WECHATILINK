@@ -442,6 +442,7 @@
             * { animation: none !important; transition: none !important; }
         }
     </style>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body>
 
@@ -468,7 +469,7 @@
     <h1 class="brand">Sekai PetPlant</h1>
     <span class="badge">AI 宠物 · 绿植护理助手</span>
     <p class="slogan">让每株植物、每只毛孩子<br>都被温柔以待</p>
-    <p class="desc">拍照识别宠物与植物、智能护理提醒、微信实时对话——一站式 AI 生活助手。</p>
+    <p class="desc">拍照识别宠物与植物、智能护理提醒、AI 实时对话——一站式 AI 生活助手。</p>
 
     <div class="tiles">
         <div class="tile">
@@ -483,8 +484,8 @@
         </div>
         <div class="tile">
             <span class="tile-icon">💬</span>
-            <span class="tile-title">微信对话</span>
-            <span class="tile-desc">多端实时同步</span>
+            <span class="tile-title">AI 对话</span>
+            <span class="tile-desc">智能应答与工具调用</span>
         </div>
     </div>
 
@@ -517,5 +518,7 @@ fetch('/api/auth/me').then(r => r.json()).then(data => {
     document.getElementById('checking').style.display = 'none';
 });
 </script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 </body>
 </html>

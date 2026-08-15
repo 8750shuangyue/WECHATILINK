@@ -125,7 +125,7 @@ public class AmapService {
                 + "&to=" + toLng + "," + toLat
                 + "&toname=" + urlEncode(toName)
                 + "&mode=car"
-                + "&src=ilink"
+                + "&src=web"
                 + "&coordinate=gaode"
                 + "&callnative=1";
     }
@@ -140,7 +140,7 @@ public class AmapService {
         return amapConfig.getWebNavBaseUrl() + "/marker"
                 + "?position=" + lng + "," + lat
                 + "&name=" + urlEncode(name)
-                + "&src=ilink"
+                + "&src=web"
                 + "&coordinate=gaode";
     }
 

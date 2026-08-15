@@ -6,15 +6,18 @@ import com.example.demo.care.service.CareRecordService;
 import com.example.demo.care.service.CareReminderService;
 import com.example.demo.care.service.MedicalTriageService;
 import com.example.demo.care.service.SpringAiCareWorkflowService;
+import com.example.demo.chat.LlmService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpSession;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @RestController
@@ -28,6 +31,7 @@ public class AiController {
     private final CareRecordService careRecordService;
     private final CareReminderService careReminderService;
     private final MedicalTriageService medicalTriageService;
+    private final LlmService llmService;
 
     @PostMapping("/chat")
     public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, String> request) {
@@ -47,6 +51,30 @@ public class AiController {
             response.put("error", e.getMessage());
         }
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/chat/stream")
+    public SseEmitter chatStream(@RequestBody Map<String, String> request) {
+        String message = request.get("message");
+        String systemPrompt = request.get("systemPrompt");
+        SseEmitter emitter = new SseEmitter(120000L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                llmService.chatStream(message, systemPrompt,
+                        token -> {
+                            try {
+                                emitter.send(SseEmitter.event().data(token));
+                            } catch (Exception e) {
+                                emitter.completeWithError(e);
+                            }
+                        },
+                        emitter::complete);
+            } catch (Exception e) {
+                log.error("AI chat stream failed", e);
+                emitter.completeWithError(e);
+            }
+        });
+        return emitter;
     }
 
     @PostMapping("/chat-with-tools")
@@ -132,8 +160,9 @@ public class AiController {
     }
 
     @PostMapping("/care/workflow")
-    public ResponseEntity<Map<String, Object>> careWorkflow(@RequestBody Map<String, String> request) {
-        String userId = request.get("userId");
+    public ResponseEntity<Map<String, Object>> careWorkflow(@RequestBody Map<String, String> request,
+                                                            HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         String message = request.get("message");
         String targetId = request.get("targetId");
         
@@ -181,7 +210,8 @@ public class AiController {
     }
 
     @PostMapping("/care/target")
-    public ResponseEntity<Map<String, Object>> createTarget(@RequestBody CareTarget target) {
+    public ResponseEntity<Map<String, Object>> createTarget(@RequestBody CareTarget target, HttpSession session) {
+        target.setUserId((String) session.getAttribute("user"));
         log.info("Create care target: userId={}, name={}, type={}", 
                 target.getUserId(), target.getName(), target.getType());
         
@@ -198,8 +228,9 @@ public class AiController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/care/targets/{userId}")
-    public ResponseEntity<Map<String, Object>> getTargets(@PathVariable String userId) {
+    @GetMapping("/care/targets")
+    public ResponseEntity<Map<String, Object>> getTargets(HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         log.info("Get care targets for userId={}", userId);
         
         Map<String, Object> response = new HashMap<>();
@@ -216,8 +247,9 @@ public class AiController {
     }
 
     @PostMapping("/care/reminder")
-    public ResponseEntity<Map<String, Object>> createReminder(@RequestBody Map<String, Object> request) {
-        String userId = (String) request.get("userId");
+    public ResponseEntity<Map<String, Object>> createReminder(@RequestBody Map<String, Object> request,
+                                                              HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         String targetId = (String) request.get("targetId");
         String title = (String) request.get("title");
         String content = (String) request.get("content");
@@ -240,8 +272,9 @@ public class AiController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/care/reminders/{userId}")
-    public ResponseEntity<Map<String, Object>> getPendingReminders(@PathVariable String userId) {
+    @GetMapping("/care/reminders")
+    public ResponseEntity<Map<String, Object>> getPendingReminders(HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         log.info("Get pending reminders for userId={}", userId);
         
         Map<String, Object> response = new HashMap<>();
@@ -279,9 +312,10 @@ public class AiController {
     }
 
     @PostMapping("/care/reminder/{id}/complete")
-    public ResponseEntity<Map<String, Object>> completeReminder(@PathVariable Long id, 
-                                                                @RequestBody Map<String, String> request) {
-        String userId = request.get("userId");
+    public ResponseEntity<Map<String, Object>> completeReminder(@PathVariable Long id,
+                                                                @RequestBody Map<String, String> request,
+                                                                HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         log.info("Complete reminder: id={}, userId={}", id, userId);
         
         Map<String, Object> response = new HashMap<>();
@@ -297,8 +331,9 @@ public class AiController {
     }
 
     @PostMapping("/care/records/medication")
-    public ResponseEntity<Map<String, Object>> saveMedication(@RequestBody Map<String, Object> request) {
-        String userId = (String) request.get("userId");
+    public ResponseEntity<Map<String, Object>> saveMedication(@RequestBody Map<String, Object> request,
+                                                              HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         String targetType = (String) request.get("targetType");
         Long targetId = request.get("targetId") != null ? ((Number) request.get("targetId")).longValue() : null;
         String medicine = (String) request.get("medicine");
@@ -322,8 +357,9 @@ public class AiController {
     }
 
     @PostMapping("/care/records/compare")
-    public ResponseEntity<Map<String, Object>> compareImages(@RequestBody Map<String, Object> request) {
-        String userId = (String) request.get("userId");
+    public ResponseEntity<Map<String, Object>> compareImages(@RequestBody Map<String, Object> request,
+                                                             HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         String type = (String) request.get("type");
 
         log.info("Compare images: userId={}, type={}", userId, type);
@@ -342,8 +378,9 @@ public class AiController {
     }
 
     @PostMapping("/care/plan/generate")
-    public ResponseEntity<Map<String, Object>> generateCarePlan(@RequestBody Map<String, Object> request) {
-        String userId = (String) request.get("userId");
+    public ResponseEntity<Map<String, Object>> generateCarePlan(@RequestBody Map<String, Object> request,
+                                                                HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         String targetType = (String) request.get("targetType");
         Long targetId = request.get("targetId") != null ? ((Number) request.get("targetId")).longValue() : null;
         String breed = (String) request.get("breed");
@@ -368,7 +405,8 @@ public class AiController {
     }
 
     @GetMapping("/care/records/check")
-    public ResponseEntity<Map<String, Object>> checkMedication(@RequestParam String userId) {
+    public ResponseEntity<Map<String, Object>> checkMedication(HttpSession session) {
+        String userId = (String) session.getAttribute("user");
         log.info("Check medication: userId={}", userId);
 
         Map<String, Object> response = new HashMap<>();

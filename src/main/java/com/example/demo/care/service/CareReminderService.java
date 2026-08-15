@@ -4,7 +4,6 @@ import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.model.CareTarget;
 import com.example.demo.care.repository.CareRecordRepository;
 import com.example.demo.care.repository.CareTargetRepository;
-import com.example.demo.core.ILinkMessageListener;
 import com.example.demo.push.WebPushService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,18 +25,15 @@ public class CareReminderService {
     private final CareTargetRepository careTargetRepository;
     private final CareRecordRepository careRecordRepository;
     private final WebPushService webPushService;
-    private final ILinkMessageListener wechatSender;
 
     public CareReminderService(JdbcTemplate jdbc,
                                CareTargetRepository careTargetRepository,
                                CareRecordRepository careRecordRepository,
-                               WebPushService webPushService,
-                               ILinkMessageListener wechatSender) {
+                               WebPushService webPushService) {
         this.jdbc = jdbc;
         this.careTargetRepository = careTargetRepository;
         this.careRecordRepository = careRecordRepository;
         this.webPushService = webPushService;
-        this.wechatSender = wechatSender;
     }
 
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
@@ -66,17 +62,11 @@ public class CareReminderService {
     }
 
     /**
-     * 把提醒真正送达用户：
-     * - 微信 ILink 用户（user_id 形如 xxx@im.wechat）→ 直接发微信消息
-     * - 网页用户 → WebPush 浏览器推送
+     * 把提醒送达用户：统一走 WebPush 浏览器推送
      */
     private void deliverReminder(String userId, String reminderText) {
         try {
-            if (userId != null && userId.contains("@im.wechat")) {
-                wechatSender.sendTextToUser(userId, reminderText);
-            } else {
-                webPushService.sendPushToUser(userId, "🌿 护理提醒", reminderText, "/home.html");
-            }
+            webPushService.sendPushToUser(userId, "🌿 护理提醒", reminderText, "/home.html");
         } catch (Exception e) {
             log.error("[Reminder] Failed to deliver reminder to user {}: {}", userId, e.getMessage(), e);
         }

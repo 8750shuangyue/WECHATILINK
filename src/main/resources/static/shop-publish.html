@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>发布商品 - PetPlant</title>
     <link rel="stylesheet" href="/css/shop.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body>
 <header>
@@ -166,5 +167,7 @@ async function logout(){await fetch('/api/auth/logout',{method:'POST'});location
 
 loadCategories();
 </script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 </body>
 </html>

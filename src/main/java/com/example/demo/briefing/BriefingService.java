@@ -2,6 +2,7 @@ package com.example.demo.briefing;
 
 import com.example.demo.care.service.CareReminderService;
 import com.example.demo.chat.LlmService;
+import com.example.demo.push.WebPushService;
 import com.example.demo.weather.model.WeatherResponse;
 import com.example.demo.weather.service.WeatherService;
 import org.slf4j.Logger;
@@ -23,14 +24,17 @@ public class BriefingService {
     private final WeatherService weatherService;
     private final CareReminderService careReminderService;
     private final LlmService llmService;
+    private final WebPushService webPushService;
     private final List<String> recentBriefings = new CopyOnWriteArrayList<>();
 
     public BriefingService(WeatherService weatherService,
                            CareReminderService careReminderService,
-                           LlmService llmService) {
+                           LlmService llmService,
+                           WebPushService webPushService) {
         this.weatherService = weatherService;
         this.careReminderService = careReminderService;
         this.llmService = llmService;
+        this.webPushService = webPushService;
     }
 
     @Scheduled(cron = "0 0 8 * * ?")
@@ -42,6 +46,8 @@ public class BriefingService {
             if (recentBriefings.size() > 10) {
                 recentBriefings.remove(recentBriefings.size() - 1);
             }
+            // 每天 8 点自动生成后推送给所有已订阅用户
+            webPushService.sendPushToAll("🌅 每日简报", briefing, "/briefing");
             log.info("[Briefing] Daily briefing generated, length: {}", briefing.length());
         } catch (Exception e) {
             log.error("[Briefing] Failed to generate daily briefing: {}", e.getMessage(), e);

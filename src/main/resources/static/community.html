@@ -1222,6 +1222,75 @@
             .pagination { flex-wrap: wrap; }
         }
     </style>
+    <style>
+        /* ===== 新设计系统覆盖层 v2 ===== */
+        :root {
+            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
+            --green-600:#1e8a50; --green-700:#126a3c; --teal:#2a9d8f;
+            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
+            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
+            --shadow:0 10px 30px rgba(20,60,40,.1);
+            --radius:18px;
+        }
+        body {
+            font-family:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+            background:
+                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
+                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
+                linear-gradient(165deg,#f7fbf8,#eef6f1) !important;
+            background-attachment:fixed; color:var(--ink);
+            -webkit-font-smoothing:antialiased;
+        }
+        ::selection{background:rgba(47,158,99,.22)}
+        .topbar{
+            background:rgba(255,255,255,.88) !important; color:var(--ink) !important;
+            backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+            border-bottom:1px solid var(--line); box-shadow:0 4px 18px rgba(20,60,40,.06);
+        }
+        .topbar-brand{color:var(--green-700) !important; font-weight:800; letter-spacing:.3px}
+        .topbar-right{color:var(--ink-2)}
+        .community-container{max-width:1180px; margin:28px auto 60px; padding:0 20px}
+        .com-header{background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:24px}
+        .com-tabs{display:flex; gap:8px; flex-wrap:wrap}
+        .com-tab,.tab-btn,.mode-tab{
+            border:0; padding:10px 18px; border-radius:999px; cursor:pointer;
+            font-size:15px; font-weight:600; color:var(--ink-2); background:transparent; transition:.2s;
+        }
+        .com-tab.active,.tab-btn.active,.mode-tab.active{background:var(--grad); color:#fff; box-shadow:0 6px 16px rgba(30,138,80,.3)}
+        .com-tab:hover,.tab-btn:hover,.mode-tab:hover{background:var(--green-100); color:var(--green-600)}
+        .post-card,.comment-item,.detail-card,.modal-card,.entry-card-wrapper{
+            background:#fff; border:1px solid var(--line); border-radius:16px;
+            box-shadow:0 2px 10px rgba(20,60,40,.06); transition:.25s;
+        }
+        .post-card:hover,.comment-item:hover,.entry-card-wrapper:hover{transform:translateY(-3px); border-color:rgba(47,158,99,.35)}
+        .detail-overlay,.modal-overlay,.modal{background:rgba(20,40,30,.5); backdrop-filter:blur(4px)}
+        .comment-count-badge,.detail-category-badge,.entry-type-badge,.category-badge,.confidence-badge{
+            background:var(--grad); color:#fff; border-radius:999px; padding:3px 10px; font-weight:700; font-size:12px;
+        }
+        .new-post-btn,.btn,.btn-save,.btn-confirm,.primary,.add-btn,.auto-btn,.save-btn{
+            border:0; border-radius:11px; padding:11px 18px; cursor:pointer; font-size:14px; font-weight:700; transition:.2s;
+            background:var(--grad); color:#fff; box-shadow:0 8px 18px rgba(30,138,80,.26);
+        }
+        .new-post-btn:hover,.btn:hover,.btn-save:hover,.btn-confirm:hover,.primary:hover,.add-btn:hover,.auto-btn:hover,.save-btn:hover{
+            transform:translateY(-1px); box-shadow:0 12px 24px rgba(30,138,80,.34);
+        }
+        .btn-cancel,.btn-delete,.btn-edit,.cancel-btn,.delete-btn,.c-delete-btn,.c-reply-btn,.modal-cancel,.modal-rt-btn,.like-btn,.text-btn,.minor,.danger{
+            background:var(--green-50); color:var(--green-700); border:1px solid var(--green-100);
+        }
+        .btn-cancel:hover,.btn-delete:hover,.btn-edit:hover,.cancel-btn:hover,.delete-btn:hover,.c-delete-btn:hover,.c-reply-btn:hover,.modal-cancel:hover,.modal-rt-btn:hover,.minor:hover,.danger:hover{background:var(--green-100)}
+        .like-btn.liked,.heart-icon{color:#e5484d}
+        input,select,textarea{
+            border:1.5px solid var(--line) !important; border-radius:11px !important;
+            padding:11px 14px !important; font:inherit; color:var(--ink); background:#fbfdfc; outline:none; transition:.2s;
+        }
+        input:focus,select:focus,textarea:focus{border-color:var(--green-500) !important; background:#fff; box-shadow:0 0 0 4px rgba(47,158,99,.12)}
+        .empty-state{color:var(--ink-2); text-align:center; padding:32px}
+        .empty-icon{font-size:40px}
+        .toast-container{position:fixed; right:24px; bottom:24px; z-index:100}
+        @media (max-width:860px){ .topbar{padding:0 14px} }
+        @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+    </style>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body>
     <!-- Toast -->
@@ -1639,7 +1708,7 @@
             html += '<span>👁 ' + (post.viewCount || 0) + ' 阅读</span>';
             html += '</div>';
             if (post.imageUrl) {
-                html += '<img class="detail-image" src="' + escapeHtml(post.imageUrl) + '" alt="帖子图片" onerror="this.style.display=\'none\'">';
+            html += '<img class="detail-image" src="' + escapeHtml(post.imageUrl) + '" alt="帖子图片" loading="lazy" onerror="this.style.display=\'none\'">';
             }
             html += '<div class="detail-content">' + escapeHtml(post.content) + '</div>';
             if (tags.length > 0) {
@@ -1913,5 +1982,7 @@
         });
     </script>
     <script src="/js/push.js"></script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 </body>
 </html>

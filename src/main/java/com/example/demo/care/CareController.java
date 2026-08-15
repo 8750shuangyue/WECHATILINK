@@ -76,7 +76,7 @@ public class CareController {
 
         List<Object> targets = new ArrayList<>();
         if ("PLANT".equalsIgnoreCase(type)) {
-            for (PlantProfile plant : plantProfileRepository.findAll()) {
+            for (PlantProfile plant : plantProfileRepository.findByUserId(userName)) {
                 Map<String, Object> map = new HashMap<>();
                 map.put("id", plant.getId());
                 map.put("name", plant.getName());
@@ -85,7 +85,7 @@ public class CareController {
                 targets.add(map);
             }
         } else if ("PET".equalsIgnoreCase(type)) {
-            for (PetProfile pet : petProfileRepository.findAll()) {
+            for (PetProfile pet : petProfileRepository.findByUserId(userName)) {
                 Map<String, Object> map = new HashMap<>();
                 map.put("id", pet.getId());
                 map.put("name", pet.getName());
@@ -99,15 +99,19 @@ public class CareController {
     }
 
     @PostMapping("/targets/{type}")
-    public Result<String> createTarget(@PathVariable String type, @RequestBody Map<String, Object> params) {
+    public Result<String> createTarget(@PathVariable String type, @RequestBody Map<String, Object> params,
+                                       HttpSession session) {
+        String userName = (String) session.getAttribute("user");
         String name = (String) params.get("name");
         String species = (String) params.get("species");
 
         if ("PLANT".equalsIgnoreCase(type)) {
             PlantProfile plant = new PlantProfile(name, species, null, null);
+            plant.setUserId(userName);
             plantProfileRepository.save(plant);
         } else if ("PET".equalsIgnoreCase(type)) {
             PetProfile pet = new PetProfile(name, species, null, null);
+            pet.setUserId(userName);
             petProfileRepository.save(pet);
         }
 
@@ -115,7 +119,17 @@ public class CareController {
     }
 
     @DeleteMapping("/targets/{type}/{id}")
-    public Result<String> deleteTarget(@PathVariable String type, @PathVariable Long id) {
+    public Result<String> deleteTarget(@PathVariable String type, @PathVariable Long id, HttpSession session) {
+        String userName = (String) session.getAttribute("user");
+        boolean owned = false;
+        if ("PLANT".equalsIgnoreCase(type)) {
+            owned = plantProfileRepository.findByIdAndUserId(id, userName).isPresent();
+        } else if ("PET".equalsIgnoreCase(type)) {
+            owned = petProfileRepository.findByIdAndUserId(id, userName).isPresent();
+        }
+        if (!owned) {
+            return Result.error("无权删除该档案");
+        }
         if ("PLANT".equalsIgnoreCase(type)) {
             plantProfileRepository.deleteById(id);
             careRecordRepository.deleteByTargetTypeAndTargetId("PLANT", id);
@@ -128,7 +142,12 @@ public class CareController {
     }
 
     @GetMapping("/records/{type}/{targetId}")
-    public Result<List<Map<String, Object>>> getRecords(@PathVariable String type, @PathVariable Long targetId) {
+    public Result<List<Map<String, Object>>> getRecords(@PathVariable String type, @PathVariable Long targetId,
+                                                        HttpSession session) {
+        String userName = (String) session.getAttribute("user");
+        if (!ownsTarget(type, targetId, userName)) {
+            return Result.error("无权访问该档案");
+        }
         List<CareRecord> records = careRecordRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(type, targetId);
         
         List<Map<String, Object>> result = new ArrayList<>();
@@ -145,16 +164,33 @@ public class CareController {
     }
 
     @PostMapping("/records")
-    public Result<String> createRecord(@RequestBody Map<String, Object> params) {
+    public Result<String> createRecord(@RequestBody Map<String, Object> params, HttpSession session) {
         String targetType = (String) params.get("targetType");
         Long targetId = ((Number) params.get("targetId")).longValue();
         String recordType = (String) params.get("recordType");
         String content = (String) params.get("content");
 
+        String userName = (String) session.getAttribute("user");
+        if (!ownsTarget(targetType, targetId, userName)) {
+            return Result.error("无权操作该档案");
+        }
         CareRecord record = new CareRecord(targetType, targetId, recordType, content);
         careRecordRepository.save(record);
 
         return Result.success("记录保存成功");
+    }
+
+    private boolean ownsTarget(String type, Long targetId, String userName) {
+        if (targetId == null || userName == null) {
+            return false;
+        }
+        if ("PLANT".equalsIgnoreCase(type)) {
+            return plantProfileRepository.findByIdAndUserId(targetId, userName).isPresent();
+        }
+        if ("PET".equalsIgnoreCase(type)) {
+            return petProfileRepository.findByIdAndUserId(targetId, userName).isPresent();
+        }
+        return false;
     }
 
     @PostMapping("/qa")
@@ -162,6 +198,11 @@ public class CareController {
         String question = (String) params.get("question");
         String targetType = (String) params.get("targetType");
         Long targetId = params.get("targetId") != null ? ((Number) params.get("targetId")).longValue() : null;
+
+        String userName = (String) session.getAttribute("user");
+        if (targetType != null && targetId != null && !ownsTarget(targetType, targetId, userName)) {
+            return Result.error("无权访问该档案");
+        }
 
         String conversationId = (String) session.getAttribute("conversationId");
         if (conversationId == null) {

@@ -30,7 +30,7 @@ public class PlantService {
         this.plantProfileRepository = plantProfileRepository;
     }
 
-    public Map<String, Object> recognizePlant(MultipartFile file) throws IOException {
+    public Map<String, Object> recognizePlant(MultipartFile file, String userId) throws IOException {
         logger.info("Recognizing plant from image, filename: {}, size: {} bytes", 
                 file.getOriginalFilename(), file.getSize());
 
@@ -50,6 +50,7 @@ public class PlantService {
         String imageUrl = "/uploads/" + file.getOriginalFilename();
 
         PlantProfile profile = new PlantProfile(species, species, imageUrl, careTips);
+        profile.setUserId(userId);
         plantProfileRepository.save(profile);
 
         Map<String, Object> result = new HashMap<>();
@@ -64,8 +65,8 @@ public class PlantService {
         return result;
     }
 
-    public List<PlantProfile> listPlants() {
-        return plantProfileRepository.findAll();
+    public List<PlantProfile> listPlants(String userId) {
+        return plantProfileRepository.findByUserId(userId);
     }
 
     private Map<String, Object> parseAnalysisResult(String jsonString) {

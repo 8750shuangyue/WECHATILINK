@@ -280,6 +280,85 @@
             .toast { max-width: 100%; }
         }
     </style>
+    <style>
+        /* ===== 新设计系统覆盖层 v2 ===== */
+        :root {
+            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
+            --green-600:#1e8a50; --green-700:#126a3c; --teal:#2a9d8f;
+            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
+            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
+            --shadow:0 10px 30px rgba(20,60,40,.1);
+            --radius:18px;
+        }
+        body {
+            font-family:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+            background:
+                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
+                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
+                linear-gradient(165deg,#f7fbf8,#eef6f1) !important;
+            background-attachment:fixed; color:var(--ink);
+            -webkit-font-smoothing:antialiased;
+        }
+        ::selection{background:rgba(47,158,99,.22)}
+        .topbar{
+            background:rgba(255,255,255,.88) !important; color:var(--ink) !important;
+            backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+            border-bottom:1px solid var(--line); box-shadow:0 4px 18px rgba(20,60,40,.06);
+        }
+        .topbar-brand{color:var(--green-700) !important; font-weight:800; letter-spacing:.3px}
+        .topbar-right{color:var(--ink-2)}
+        .disease-main,.inv-container{max-width:1180px; margin:28px auto 60px; padding:0 20px}
+        .mode-tabs,.tabs{display:flex; gap:8px; flex-wrap:wrap}
+        .mode-tab,.tabs button,.nav button{
+            border:0; padding:10px 18px; border-radius:999px; cursor:pointer;
+            font-size:15px; font-weight:600; color:var(--ink-2); background:transparent; transition:.2s;
+        }
+        .mode-tab.active,.tabs button.active{background:var(--grad); color:#fff; box-shadow:0 6px 16px rgba(30,138,80,.3)}
+        .mode-tab:hover,.tabs button:hover,.nav button:hover{background:var(--green-100); color:var(--green-600)}
+        .upload-section,.upload-area,.result-section,.history-section,.panel,.inv-header,.alerts-banner{
+            background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+            box-shadow:var(--shadow); padding:24px;
+        }
+        .upload-area,.upload-section{border-style:dashed; border-color:rgba(47,158,99,.4); background:var(--green-50)}
+        .upload-icon{font-size:42px}
+        .result-field,.history-item,.item-card,.item-info,.field-value,.hist-summary{
+            background:#fff; border:1px solid var(--line); border-radius:14px;
+            box-shadow:0 2px 10px rgba(20,60,40,.06); padding:16px;
+        }
+        .history-item,.item-card{transition:.25s}
+        .history-item:hover,.item-card:hover{transform:translateY(-3px); border-color:rgba(47,158,99,.35)}
+        .field-label,.hist-time,.item-meta,.hint,.disclaimer{color:var(--ink-2)}
+        input,select,textarea{
+            border:1.5px solid var(--line) !important; border-radius:11px !important;
+            padding:11px 14px !important; font:inherit; color:var(--ink); background:#fbfdfc; outline:none; transition:.2s;
+        }
+        input:focus,select:focus,textarea:focus{border-color:var(--green-500) !important; background:#fff; box-shadow:0 0 0 4px rgba(47,158,99,.12)}
+        .diag-btn,.clear-btn,.btn,.btn-save,.btn-confirm,.btn-consume,.primary,.add-btn{
+            border:0; border-radius:11px; padding:11px 18px; cursor:pointer;
+            font-size:14px; font-weight:700; transition:.2s;
+        }
+        .diag-btn,.btn,.btn-save,.btn-confirm,.btn-consume,.primary,.add-btn{
+            background:var(--grad); color:#fff; box-shadow:0 8px 18px rgba(30,138,80,.26);
+        }
+        .diag-btn:hover,.btn:hover,.btn-save:hover,.btn-confirm:hover,.btn-consume:hover,.primary:hover,.add-btn:hover{
+            transform:translateY(-1px); box-shadow:0 12px 24px rgba(30,138,80,.34);
+        }
+        .clear-btn,.btn-cancel,.btn-delete,.btn-edit,.btn-sm,.minor,.danger{
+            background:var(--green-50); color:var(--green-700); border:1px solid var(--green-100);
+        }
+        .clear-btn:hover,.btn-cancel:hover,.btn-delete:hover,.btn-edit:hover,.btn-sm:hover,.minor:hover,.danger:hover{background:var(--green-100)}
+        .confidence-badge,.category-badge{background:var(--grad); color:#fff; border-radius:999px; padding:4px 12px; font-weight:700}
+        .item-status{font-weight:700}
+        .empty-state{color:var(--ink-2); text-align:center; padding:32px}
+        .empty-icon{font-size:40px}
+        .modal-overlay,.modal{
+            background:rgba(20,40,30,.5); backdrop-filter:blur(4px);
+        }
+        .toast-container{position:fixed; right:24px; bottom:24px; z-index:100}
+        @media (max-width:860px){ .topbar{padding:0 14px} }
+        @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+    </style>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body>
 <header class="topbar">
@@ -788,5 +867,7 @@ document.addEventListener('keydown', function(e) {
 loadItems();
 </script>
 <script src="/js/push.js"></script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 </body>
 </html>

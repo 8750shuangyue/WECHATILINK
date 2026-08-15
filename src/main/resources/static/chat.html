@@ -3,77 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sekai PetPlant - Chat</title>
+    <title>Sekai PetPlant - AI 对话</title>
     <link rel="stylesheet" href="/css/app.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body style="background: #f0f4f2;">
 <header class="topbar">
     <div class="topbar-brand">
-        <a href="/home" style="color:#fff;text-decoration:none;">← Back</a>
-        &nbsp;|&nbsp; <span id="headerSys">PetPlant</span>
+        <a href="/home" style="color:#fff;text-decoration:none;">← 返回首页</a>
+        &nbsp;|&nbsp; <span id="headerSys">AI 对话助手</span>
     </div>
     <div class="topbar-right">
         <span id="greeting"></span>
-        <span class="badge" id="botStatus" style="background:#4a9;">Online</span>
-        <button onclick="logout()" class="text-btn">Exit</button>
+        <span class="badge" id="botStatus" style="background:#4a9;">在线</span>
+        <button onclick="logout()" class="text-btn">退出</button>
     </div>
 </header>
 
 <div class="chat-container">
     <aside class="chat-sidebar">
-        <div class="sidebar-header"><h3>🐾🌿 PetPlant</h3><p>v2.0.0</p></div>
-        <div class="sidebar-system"><div class="sys-label">Current System</div><div class="sys-name" id="sidebarSys">PetPlant Assistant</div></div>
-        <div class="sidebar-tools"><div class="tool-label">Capabilities</div>
+        <div class="sidebar-header"><h3>🐾🌿 PetPlant</h3><p>AI 护理助手</p></div>
+        <div class="sidebar-system"><div class="sys-label">当前系统</div><div class="sys-name" id="sidebarSys">Web AI 助手</div></div>
+        <div class="sidebar-tools"><div class="tool-label">能力清单</div>
             <div class="tool-list" id="toolList"></div>
         </div>
-        <button class="secondary-btn" onclick="location.href='/home'" style="margin-top:auto;">Switch System</button>
+        <button class="secondary-btn" onclick="clearChat()">清空会话</button>
+        <button class="secondary-btn" onclick="location.href='/home'" style="margin-top:auto;">返回首页</button>
     </aside>
 
     <div class="chat-main">
         <div class="chat-messages" id="chatMessages">
             <div class="msg system-msg">
                 <div class="msg-bubble system-bubble" id="welcomeMsg">
-                    Welcome to PetPlant Assistant!<br>Ask about pet care, plant safety, and more.
+                    欢迎使用 AI 护理助手！<br>可以询问宠物/植物护理、天气、生成图片、护理提醒等。
                 </div>
             </div>
         </div>
 
         <div class="chat-input-area">
+            <div class="quick-row">
+                <button class="quick-chip" onclick="quickPrompt('帮我查一下北京的天气')">🌤 查天气</button>
+                <button class="quick-chip" onclick="quickPrompt('帮我生成一张可爱的橘猫图片')">🖼 生成图片</button>
+                <button class="quick-chip" onclick="quickPrompt('绿萝叶子发黄该怎么办？')">🌱 护理问答</button>
+                <button class="quick-chip" onclick="location.href='/reminders.html'">⏰ 护理提醒</button>
+            </div>
             <div id="imagePreview" style="display:none;margin-bottom:8px;position:relative;">
                 <img id="previewImg" src="" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid #ddd;">
                 <span onclick="removeImage()" style="position:absolute;top:-8px;left:116px;cursor:pointer;font-size:18px;">&times;</span>
             </div>
             <div class="input-row">
-                <label class="icon-btn" title="Send image" style="cursor:pointer;">
+                <label class="icon-btn" title="发送图片" style="cursor:pointer;">
                     🖼
                     <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
                 </label>
-                <textarea id="msgInput" placeholder="Type a message... (Enter to send)" rows="1"></textarea>
-                <button class="send-btn" id="sendBtn">Send</button>
+                <textarea id="msgInput" placeholder="输入消息…（Enter 发送）" rows="1"></textarea>
+                <button class="send-btn" id="sendBtn">发送</button>
             </div>
         </div>
     </div>
 </div>
 
-<div id="toast" style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;padding:10px 24px;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;"></div>
-
 <script>
-var selected = sessionStorage.getItem('selectedSystem') || 'petplant';
-var sysLabel, capabilities, welcomeText;
-if (selected === 'petplant') {
-    sysLabel = '🐾🌿 PetPlant Assistant';
-    capabilities = ['🐾 Pet Care', '🌿 Plant Safety', '🌤 Weather', '🔍 Search'];
-    welcomeText = 'Welcome to PetPlant Assistant!<br>Ask about pet care, plant safety, and more.';
-} else {
-    sysLabel = '💬📱 WeChat iLink';
-    capabilities = ['🖼 Image Analysis', '🌤 Weather', '⏰ Time', '🔍 Web Search', '📎 File Analysis'];
-    welcomeText = 'Welcome to WeChat iLink!<br>Send images, files, or text. AI with vision + tools.';
-}
+document.getElementById('headerSys').textContent = 'AI 对话助手';
+document.getElementById('sidebarSys').textContent = 'Web AI 助手';
 
-document.getElementById('sidebarSys').textContent = sysLabel;
-document.getElementById('headerSys').textContent = sysLabel;
-document.getElementById('welcomeMsg').innerHTML = welcomeText;
-
+var capabilities = ['🐾 宠物护理', '🌿 植物安全', '🌤 天气查询', '🔍 联网搜索', '🖼 图片分析', '📎 文件解析'];
 var tl = document.getElementById('toolList');
 capabilities.forEach(function(c) {
     var s = document.createElement('span');
@@ -119,6 +113,17 @@ function addImageMessage(url, from, time) {
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
+function quickPrompt(text) {
+    document.getElementById('msgInput').value = text;
+    document.getElementById('msgInput').focus();
+}
+
+function clearChat() {
+    var box = document.getElementById('chatMessages');
+    box.innerHTML = '<div class="msg system-msg"><div class="msg-bubble system-bubble">已清空会话，可以开始新的提问。</div></div>';
+    document.getElementById('welcomeMsg') && null;
+}
+
 function handleImage(e) {
     var file = e.target.files[0];
     if (!file) return;
@@ -137,20 +142,37 @@ function removeImage() {
     document.getElementById('imageInput').value = '';
 }
 
-function showToast(msg) {
-    var t = document.getElementById('toast');
-    t.textContent = msg; t.style.opacity = '1';
-    clearTimeout(t._timer);
-    t._timer = setTimeout(function(){ t.style.opacity = '0'; }, 3000);
+function showThinking() {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    div.id = 'thinkingMsg';
+    div.innerHTML = '<div class="msg-bubble bot-bubble">AI 正在思考…</div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function hideThinking() {
+    var t = document.getElementById('thinkingMsg');
+    if (t) t.remove();
+}
+
+function addStreamingBubble() {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    div.innerHTML = '<div class="msg-bubble bot-bubble"></div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+    return div.querySelector('.msg-bubble');
 }
 
 async function sendText() {
     var text = document.getElementById('msgInput').value.trim();
-    if (!text && !imageBase64) { showToast('Please enter a message or select an image'); return; }
+    if (!text && !imageBase64) { showToast('请输入消息或选择图片'); return; }
 
-    var displayText = text || '[Image]';
-    addMessage(displayText, 'out', 'Me', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
-    
+    var displayText = text || '[图片]';
+    var now = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    addMessage(displayText, 'out', '我', now);
+
     if (imageBase64) {
         var imgDiv = document.createElement('div');
         imgDiv.className = 'msg user-msg';
@@ -159,24 +181,61 @@ async function sendText() {
     }
 
     document.getElementById('msgInput').value = '';
-    
-    var body = {text: text};
-    if (imageBase64) {
-        body.image = imageBase64;
-    }
-
     try {
-        var res = await fetch('/api/care/qa', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({question: text || '请分析这张图片'})
-        });
-        var x = await res.json();
-        if (x.data && x.data.reply) {
-            addMessage(x.data.reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+        if (text) {
+            var liveBubble = addStreamingBubble();
+            var res = await fetch('/api/ai/chat/stream', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: text })
+            });
+            if (!res.ok || !res.body) {
+                liveBubble.textContent = '连接失败，请稍后再试';
+                showToast('发送失败');
+                return;
+            }
+            var reader = res.body.getReader();
+            var decoder = new TextDecoder();
+            var buf = '';
+            var acc = '';
+            while (true) {
+                var r = await reader.read();
+                if (r.done) break;
+                buf += decoder.decode(r.value, { stream: true });
+                var parts = buf.split('\n\n');
+                buf = parts.pop();
+                for (var part of parts) {
+                    var line = part.split('\n').find(function (l) { return l.indexOf('data:') === 0; });
+                    if (!line) continue;
+                    var data = line.slice(5).trim();
+                    if (!data || data === '[DONE]') continue;
+                    try {
+                        acc += JSON.parse(data);
+                    } catch (e2) {
+                        acc += data;
+                    }
+                    liveBubble.textContent = acc;
+                    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+                }
+            }
+            if (!acc) liveBubble.textContent = 'AI 没有回复，请稍后再试';
+        } else {
+            var res = await fetch('/api/care/qa', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ question: '请分析这张图片' })
+            });
+            var x = await res.json();
+            var reply = (x.data && x.data.reply) ? x.data.reply : null;
+            if (reply) {
+                addMessage(reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+            } else {
+                showToast(x.error || 'AI 没有回复，请稍后再试');
+            }
         }
     } catch(e) {
-        showToast('Send failed: ' + e.message);
+        hideThinking();
+        showToast('发送失败: ' + e.message);
     }
 
     removeImage();
@@ -192,5 +251,22 @@ async function logout() {
     location.href = '/login';
 }
 </script>
+<style>
+    .quick-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .quick-chip {
+        border: 1px solid rgba(47,158,99,.3);
+        background: #f2f9f4;
+        color: #1e8a50;
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: .2s;
+    }
+    .quick-chip:hover { background: #dff0e6; transform: translateY(-1px); }
+</style>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 </body>
 </html>
