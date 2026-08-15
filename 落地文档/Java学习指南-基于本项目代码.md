@@ -226,7 +226,7 @@ public class ChatMemoryService {
 | 注解 | 用途 | 项目例子 |
 |---|---|---|
 | `@SpringBootApplication` | 入口类，组合了配置+扫描+自动配置 | `Application.java` |
-| `@Component` | 通用 Bean | `ILinkMessageListener` |
+| `@Component` | 通用 Bean | `WebAuthInterceptor`（鉴权拦截器）等 |
 | `@Service` | 业务服务 Bean | `AuthService`、`AgentService` |
 | `@RestController` | 返回 JSON 的 Web 控制器 | 所有 `*Controller` |
 | `@Configuration` | 配置类（定义 @Bean） | `SQLiteConfig`、`AsyncConfig` |
