@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
@@ -87,6 +88,12 @@ public class SQLiteConfig {
             return em;
         }
 
+        @Bean(name = "mysqlJdbcTemplate")
+        @Primary
+        public JdbcTemplate mysqlJdbcTemplate(@Qualifier("mysqlDataSource") DataSource dataSource) {
+            return new JdbcTemplate(dataSource);
+        }
+
         @Bean(name = "transactionManager")
         @Primary
         public PlatformTransactionManager transactionManager(
@@ -158,6 +165,11 @@ public class SQLiteConfig {
             JpaTransactionManager transactionManager = new JpaTransactionManager();
             transactionManager.setEntityManagerFactory(entityManagerFactory.getObject());
             return transactionManager;
+        }
+
+        @Bean(name = "sqliteJdbcTemplate")
+        public JdbcTemplate sqliteJdbcTemplate(@Qualifier("sqliteDataSource") DataSource dataSource) {
+            return new JdbcTemplate(dataSource);
         }
     }
 }

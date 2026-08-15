@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
@@ -28,15 +29,17 @@ public class ToolCallingService {
     private final LlmService llmService;
     private final SpringAiTools springAiTools;
     private final WeatherService weatherService;
+    private final JdbcTemplate jdbc;
     private final Map<String, ToolInfo> toolRegistry = new LinkedHashMap<>();
     private final ExecutorService toolExecutor;
 
     @Autowired
     public ToolCallingService(LlmService llmService, SpringAiTools springAiTools,
-                              WeatherService weatherService) {
+                              WeatherService weatherService, JdbcTemplate jdbc) {
         this.llmService = llmService;
         this.springAiTools = springAiTools;
         this.weatherService = weatherService;
+        this.jdbc = jdbc;
         this.toolExecutor = Executors.newFixedThreadPool(
                 Math.min(Runtime.getRuntime().availableProcessors(), 4),
                 r -> {
@@ -149,10 +152,15 @@ public class ToolCallingService {
     }
 
     public ToolCallResponse chatWithTools(String systemPrompt, String userMessage) {
-        return chatWithTools(systemPrompt, userMessage, null);
+        return chatWithTools(null, systemPrompt, userMessage, null);
     }
 
     public ToolCallResponse chatWithTools(String systemPrompt, String userMessage,
+                                           Set<String> allowedToolNames) {
+        return chatWithTools(null, systemPrompt, userMessage, allowedToolNames);
+    }
+
+    public ToolCallResponse chatWithTools(String userId, String systemPrompt, String userMessage,
                                            Set<String> allowedToolNames) {
         String traceId = UUID.randomUUID().toString().substring(0, 8);
         log.info("[Trace:{}] Tool chat started, message length: {}",
@@ -172,10 +180,10 @@ public class ToolCallingService {
         userMsg.put("content", userMessage);
         messages.add(userMsg);
 
-        return executeToolLoop(messages, allowedToolNames, traceId);
+        return executeToolLoop(userId, messages, allowedToolNames, traceId);
     }
 
-    private ToolCallResponse executeToolLoop(JSONArray messages, Set<String> allowedToolNames,
+    private ToolCallResponse executeToolLoop(String userId, JSONArray messages, Set<String> allowedToolNames,
                                               String traceId) {
         JSONArray tools = buildToolsSchema(allowedToolNames);
         List<ToolCallResult> toolCallHistory = new ArrayList<>();
@@ -231,6 +239,7 @@ public class ToolCallingService {
                             }
 
                             long duration = System.currentTimeMillis() - start;
+                            logToolCall(userId, tc.toolName, success, duration, errorMsg);
                             ToolCallResult callResult = success
                                     ? ToolCallResult.success(traceId, tc.toolName, tc.arguments, result, duration)
                                     : ToolCallResult.error(traceId, tc.toolName, tc.arguments, errorMsg, duration);
@@ -544,6 +553,24 @@ public class ToolCallingService {
         }
 
         return validTools;
+    }
+
+    /**
+     * 工具调用日志落库（供数据观测/统计面板使用），失败仅告警不阻断主流程。
+     */
+    private void logToolCall(String userId, String toolName, boolean success, long duration, String errorMsg) {
+        try {
+            String trimmedError = errorMsg;
+            if (trimmedError != null && trimmedError.length() > 500) {
+                trimmedError = trimmedError.substring(0, 500);
+            }
+            jdbc.update("""
+                    INSERT INTO tool_call_logs(user_id, tool_name, success, duration_ms, error_msg)
+                    VALUES(?,?,?,?,?)
+                    """, userId, toolName, success ? 1 : 0, duration, trimmedError);
+        } catch (Exception e) {
+            log.warn("[ToolLog] Failed to persist tool call log (tool={}): {}", toolName, e.getMessage());
+        }
     }
 
     @PreDestroy

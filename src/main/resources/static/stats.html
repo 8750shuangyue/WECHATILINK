@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - 数据概览</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📊%3C/text%3E%3C/svg%3E">
+    <style>
+        :root {
+            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
+            --green-600:#1e8a50; --green-700:#126a3c; --teal:#2a9d8f;
+            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
+            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
+            --shadow:0 10px 30px rgba(20,60,40,.1);
+            --radius:18px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+            color: var(--ink); min-height: 100vh;
+            background:
+                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
+                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
+                linear-gradient(165deg,#f7fbf8,#eef6f1);
+            background-attachment: fixed;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::selection { background: rgba(47,158,99,.22); }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 28px; color: #fff;
+            background: linear-gradient(120deg,#10351f,#1b4a2f 55%,#1e5a3a);
+            box-shadow: 0 8px 26px rgba(10,40,22,.28);
+        }
+        .topbar-brand { font-weight: 800; letter-spacing: .4px; display: flex; align-items: center; gap: 10px; }
+        .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+        .topbar a { color: #fff; text-decoration: none; opacity: .9; }
+        .topbar a:hover { opacity: 1; }
+        .topbar-btn {
+            background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25);
+            border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; color: #fff;
+        }
+        .topbar-btn:hover { background: rgba(255,255,255,.24); }
+
+        main { max-width: 1080px; margin: 32px auto 60px; padding: 0 20px; }
+        .page-title { font-size: 28px; font-weight: 800; color: var(--green-700); margin-bottom: 6px; }
+        .page-sub { color: var(--ink-2); margin-bottom: 24px; font-size: 14px; }
+
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+        .stat-card {
+            background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+            padding: 20px 18px; box-shadow: var(--shadow);
+            position: relative; overflow: hidden;
+        }
+        .stat-card::after {
+            content: ""; position: absolute; right: -28px; bottom: -28px; width: 90px; height: 90px;
+            border-radius: 50%; background: radial-gradient(circle, rgba(47,158,99,.14), transparent 70%);
+        }
+        .stat-label { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+        .stat-value { font-size: 30px; font-weight: 800; color: var(--green-700); line-height: 1; }
+        .stat-icon { float: right; font-size: 22px; opacity: .8; }
+
+        .card {
+            background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+            padding: 22px; box-shadow: var(--shadow); margin-bottom: 24px;
+        }
+        .card h2 { font-size: 17px; color: var(--green-700); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+        .rank-item { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .rank-name { width: 200px; font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rank-bar-wrap { flex: 1; background: var(--green-50); border-radius: 999px; height: 22px; overflow: hidden; }
+        .rank-bar { height: 100%; border-radius: 999px; background: var(--grad); min-width: 4px; transition: width .6s ease; }
+        .rank-meta { width: 190px; font-size: 12px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+        .rank-empty { color: var(--ink-2); font-size: 13px; padding: 10px 0; }
+
+        .trend-wrap { display: flex; align-items: flex-end; gap: 10px; height: 180px; padding: 6px 4px 0; }
+        .trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+        .trend-val { font-size: 12px; color: var(--green-700); font-weight: 700; margin-bottom: 6px; }
+        .trend-bar {
+            width: 70%; max-width: 42px; border-radius: 8px 8px 4px 4px; min-height: 3px;
+            background: var(--grad); transition: height .6s ease;
+        }
+        .trend-date { margin-top: 8px; font-size: 11.5px; color: var(--ink-2); }
+
+        .loading { color: var(--ink-2); font-size: 14px; padding: 18px 0; }
+
+        @media (max-width: 760px) {
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .rank-name { width: 110px; }
+            .rank-meta { width: 120px; }
+            .trend-wrap { height: 150px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-brand">📊 Sekai PetPlant · 数据概览</div>
+        <div class="topbar-right">
+            <a href="/home">返回首页</a>
+            <button class="topbar-btn" onclick="logout()">退出登录</button>
+        </div>
+    </header>
+
+    <main>
+        <h1 class="page-title">数据概览</h1>
+        <p class="page-sub">平台运行数据 · 工具调用观测 · 近 7 天对话趋势</p>
+
+        <div class="stats-row" id="statCards">
+            <div class="loading">加载中…</div>
+        </div>
+
+        <div class="card">
+            <h2>🏆 工具调用排行 Top 10</h2>
+            <div id="toolRanking"><div class="loading">加载中…</div></div>
+        </div>
+
+        <div class="card">
+            <h2>📈 近 7 天对话量</h2>
+            <div id="trendChart"><div class="loading">加载中…</div></div>
+        </div>
+    </main>
+
+    <script src="/js/guard.js"></script>
+    <script src="/js/common.js"></script>
+    <script>
+        var OVERVIEW_META = [
+            { key: 'users', label: '注册用户', icon: '👤' },
+            { key: 'messages', label: '对话消息', icon: '💬' },
+            { key: 'toolCalls', label: '工具调用', icon: '🛠️' },
+            { key: 'kbDocuments', label: '知识库条目', icon: '📚' },
+            { key: 'careTargets', label: '护理对象', icon: '🐾' },
+            { key: 'pendingReminders', label: '待办提醒', icon: '⏰' },
+            { key: 'posts', label: '社区帖子', icon: '💝' },
+            { key: 'products', label: '商城商品', icon: '🛒' }
+        ];
+
+        function renderCards(overview) {
+            var html = OVERVIEW_META.map(function (m) {
+                return '<div class="stat-card">' +
+                    '<span class="stat-icon">' + m.icon + '</span>' +
+                    '<div class="stat-label">' + m.label + '</div>' +
+                    '<div class="stat-value">' + (overview[m.key] != null ? overview[m.key] : '-') + '</div>' +
+                    '</div>';
+            }).join('');
+            document.getElementById('statCards').innerHTML = html;
+        }
+
+        function renderRanking(rows) {
+            var el = document.getElementById('toolRanking');
+            if (!rows || rows.length === 0) {
+                el.innerHTML = '<div class="rank-empty">还没有工具调用记录——去聊天页让 AI 调用几个工具试试吧。</div>';
+                return;
+            }
+            var max = Math.max.apply(null, rows.map(function (r) { return r.total; }));
+            el.innerHTML = rows.map(function (r) {
+                var pct = Math.round(r.total / max * 100);
+                var successRate = Math.round(r.successCount / r.total * 100);
+                return '<div class="rank-item">' +
+                    '<div class="rank-name" title="' + r.toolName + '">' + r.toolName + '</div>' +
+                    '<div class="rank-bar-wrap"><div class="rank-bar" style="width:' + pct + '%"></div></div>' +
+                    '<div class="rank-meta">' + r.total + ' 次 · 成功率 ' + successRate + '% · 均耗 ' + r.avgMs + 'ms</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function renderTrend(rows) {
+            var el = document.getElementById('trendChart');
+            if (!rows || rows.length === 0) { el.innerHTML = '<div class="rank-empty">暂无数据</div>'; return; }
+            var max = Math.max.apply(null, rows.map(function (r) { return r.count; })) || 1;
+            var html = '<div class="trend-wrap">' + rows.map(function (r) {
+                var h = Math.max(3, Math.round(r.count / max * 150));
+                return '<div class="trend-col">' +
+                    '<div class="trend-val">' + r.count + '</div>' +
+                    '<div class="trend-bar" style="height:' + h + 'px"></div>' +
+                    '<div class="trend-date">' + r.date.slice(5) + '</div>' +
+                    '</div>';
+            }).join('') + '</div>';
+            el.innerHTML = html;
+        }
+
+        (function init() {
+            Promise.all([
+                fetch('/api/stats/overview').then(function (r) { return r.json(); }),
+                fetch('/api/stats/tool-ranking').then(function (r) { return r.json(); }),
+                fetch('/api/stats/trend').then(function (r) { return r.json(); })
+            ]).then(function (results) {
+                renderCards(results[0]);
+                renderRanking(results[1]);
+                renderTrend(results[2]);
+            }).catch(function (e) {
+                document.getElementById('statCards').innerHTML = '<div class="loading">加载失败：' + e.message + '</div>';
+            });
+        })();
+    </script>
+</body>
+</html>

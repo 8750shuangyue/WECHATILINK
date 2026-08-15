@@ -77,7 +77,7 @@ src/main/java/com/example/demo/
 ├── tts/              # 讯飞语音合成
 ├── vision/           # 阿里云视觉分析
 ├── imagegen/         # 阿里云图像生成
-└── web/              # 页面路由（15 个静态页面）
+└── web/              # 页面路由（16 个静态页面）
 ```
 
 ## 快速开始（本地）
@@ -149,9 +149,10 @@ ssh root@<服务器> "systemctl stop ilink && mv /opt/ilink/demo-0.0.1-SNAPSHOT.
 | 鉴权 | `/api/auth/register` `/api/auth/login` `/api/auth/me` `/api/auth/logout` | 账号体系（除登录注册外均需会话） |
 | 对话 | `/api/ai/chat` `/api/ai/chat/stream` `/api/ai/chat-with-tools` | 普通 / 流式 / 工具对话 |
 | 工具 | `/api/ai/tools/registered` | 查看已注册工具 |
+| 数据观测 | `/api/stats/overview` `/api/stats/tool-ranking` `/api/stats/trend` | 平台概览 / 工具调用排行 / 趋势 |
 | 护理 | `/api/care/identify` `/api/care/targets/**` `/api/care/records/**` `/api/care/qa` | 识图诊断、档案、记录、问答 |
 | 知识库 | `/api/kb/upload` `/api/kb/list` `/api/kb/{sourceId}` | 上传 / 列表 / 删除知识条目 |
-| 页面 | `/login` `/register` `/home` `/chat` `/care` `/reminders` `/briefing` `/kb` `/shop` `/community` `/timeline` `/inventory` `/disease` | 前端页面 |
+| 页面 | `/login` `/register` `/home` `/chat` `/care` `/reminders` `/briefing` `/kb` `/stats` `/shop` `/community` `/timeline` `/inventory` `/disease` | 前端页面 |
 
 ## 文档
 

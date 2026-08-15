@@ -55,4 +55,9 @@ public class PageController {
     public String kb() {
         return "forward:/kb.html";
     }
+
+    @GetMapping("/stats")
+    public String stats() {
+        return "forward:/stats.html";
+    }
 }

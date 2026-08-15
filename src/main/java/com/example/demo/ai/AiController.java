@@ -78,7 +78,8 @@ public class AiController {
     }
 
     @PostMapping("/chat-with-tools")
-    public ResponseEntity<Map<String, Object>> chatWithTools(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> chatWithTools(@RequestBody Map<String, Object> request,
+                                                             jakarta.servlet.http.HttpServletRequest servletRequest) {
         String message = (String) request.get("message");
         String systemPrompt = (String) request.get("systemPrompt");
 
@@ -94,7 +95,8 @@ public class AiController {
             List<String> validatedTools = toolCallingService.validateToolNames(allowedTools);
             Set<String> allowedToolSet = validatedTools.isEmpty() ? null : new HashSet<>(validatedTools);
 
-            ToolCallResponse toolResponse = springAiChatService.chatWithTools(message, systemPrompt, allowedToolSet);
+            String userId = (String) servletRequest.getAttribute("userName");
+            ToolCallResponse toolResponse = springAiChatService.chatWithTools(userId, message, systemPrompt, allowedToolSet);
 
             response.put("success", true);
             response.put("content", toolResponse.getText());

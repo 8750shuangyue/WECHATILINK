@@ -98,8 +98,15 @@
 - 未登录统一返回 401 + `{"code":500,"message":"未登录"}`
 - 数据隔离：宠物/植物档案、护理记录、提醒均按 `user_id` 归属校验，防止越权
 
+## 十五、数据概览（/stats）
+
+- **平台统计**：注册用户、对话消息、工具调用、知识库条目、护理对象、待办提醒、社区帖子、商城商品
+- **工具调用排行 Top10**：调用次数 + 成功率 + 平均耗时（来自 `tool_call_logs` 埋点）
+- **近 7 天对话趋势**：按天统计消息量柱状图
+- 首页“数据概览”卡片直达；数据实时来自 `/api/stats/*`
+
 ## 技术特点
 
-- 15 个静态页面（index/login/register/home/chat/care/disease/shop/shop-publish/community/inventory/timeline/reminders/briefing/kb），无前端构建工具，直接 fetch REST API
+- 16 个静态页面（index/login/register/home/chat/care/disease/shop/shop-publish/community/inventory/timeline/reminders/briefing/kb/stats），无前端构建工具，直接 fetch REST API
 - 移动端响应式适配、现代视觉设计（渐变、玻璃拟态、动效）
 - 与后端共用同一套 AI 能力、记忆 RAG 与 MySQL 业务库

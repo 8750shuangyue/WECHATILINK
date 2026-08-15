@@ -28,10 +28,15 @@ public class CareSchemaInitializer {
 
     @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
+        executeSchemaFile("db/care_schema.sql");
+        executeSchemaFile("db/stats_schema.sql");
+    }
+
+    private void executeSchemaFile(String path) {
         try {
-            ClassPathResource resource = new ClassPathResource("db/care_schema.sql");
+            ClassPathResource resource = new ClassPathResource(path);
             if (!resource.exists()) {
-                log.warn("[Schema] db/care_schema.sql not found, skip schema initialization");
+                log.warn("[Schema] {} not found, skip schema initialization", path);
                 return;
             }
 
@@ -56,9 +61,9 @@ public class CareSchemaInitializer {
                     log.warn("[Schema] Statement skipped ({}): {}", e.getMessage(), firstLine(stmt));
                 }
             }
-            log.info("[Schema] Schema initialization completed, {} statement(s) executed", executed);
+            log.info("[Schema] {} completed, {} statement(s) executed", path, executed);
         } catch (Exception e) {
-            log.error("[Schema] Schema initialization failed", e);
+            log.error("[Schema] {} initialization failed", path, e);
         }
     }
 
