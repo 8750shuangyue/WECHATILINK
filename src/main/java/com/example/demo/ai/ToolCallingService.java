@@ -224,6 +224,10 @@ public class ToolCallingService {
                             boolean success = true;
                             String errorMsg = null;
 
+                            // 工具在独立线程执行，ThreadLocal 不会从请求线程传过来，
+                            // 必须在工具线程内显式设置用户上下文，finally 清理防止串号。
+                            String effectiveUserId = userId != null ? userId : UserContextHolder.getUserId();
+                            UserContextHolder.setUserId(effectiveUserId);
                             try {
                                 log.info("[Trace:{}] Executing tool: {} with args: {}",
                                         traceId, tc.toolName, tc.arguments);
@@ -236,10 +240,12 @@ public class ToolCallingService {
                                 result = "工具执行异常：" + e.getMessage();
                                 log.error("[Trace:{}] Tool {} failed: {}",
                                         traceId, tc.toolName, e.getMessage());
+                            } finally {
+                                UserContextHolder.clear();
                             }
 
                             long duration = System.currentTimeMillis() - start;
-                            logToolCall(userId, tc.toolName, success, duration, errorMsg);
+                            logToolCall(effectiveUserId, tc.toolName, success, duration, errorMsg);
                             ToolCallResult callResult = success
                                     ? ToolCallResult.success(traceId, tc.toolName, tc.arguments, result, duration)
                                     : ToolCallResult.error(traceId, tc.toolName, tc.arguments, errorMsg, duration);

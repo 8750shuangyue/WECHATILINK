@@ -91,11 +91,12 @@ public class AiController {
                 allowedTools);
 
         Map<String, Object> response = new HashMap<>();
+        String userId = (String) servletRequest.getAttribute("userName");
         try {
             List<String> validatedTools = toolCallingService.validateToolNames(allowedTools);
             Set<String> allowedToolSet = validatedTools.isEmpty() ? null : new HashSet<>(validatedTools);
 
-            String userId = (String) servletRequest.getAttribute("userName");
+            UserContextHolder.setUserId(userId);
             ToolCallResponse toolResponse = springAiChatService.chatWithTools(userId, message, systemPrompt, allowedToolSet);
 
             response.put("success", true);
@@ -127,6 +128,8 @@ public class AiController {
             log.error("AI chat with tools failed", e);
             response.put("success", false);
             response.put("error", e.getMessage());
+        } finally {
+            UserContextHolder.clear();
         }
         return ResponseEntity.ok(response);
     }
