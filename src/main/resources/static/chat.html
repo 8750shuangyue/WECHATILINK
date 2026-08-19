@@ -56,6 +56,7 @@
                     🖼
                     <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
                 </label>
+                <button class="icon-btn mic-btn" id="micBtn" title="语音输入" onclick="toggleMic()">🎤</button>
                 <textarea id="msgInput" placeholder="输入消息…（Enter 发送）" rows="1"></textarea>
                 <button class="send-btn" id="sendBtn">发送</button>
             </div>
@@ -246,6 +247,80 @@ document.getElementById('msgInput').onkeydown = function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
 };
 
+// ===== 语音输入 =====
+var mediaRecorder = null;
+var recordedChunks = [];
+var isRecording = false;
+
+async function toggleMic() {
+    if (isRecording) { stopMic(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('当前浏览器不支持录音');
+        return;
+    }
+    try {
+        var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        var mime = 'audio/webm;codecs=opus';
+        mediaRecorder = MediaRecorder.isTypeSupported(mime)
+            ? new MediaRecorder(stream, { mimeType: mime })
+            : new MediaRecorder(stream);
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onstop = uploadVoice;
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById('micBtn').classList.add('recording');
+        showToast('正在录音，再次点击结束');
+    } catch (e) {
+        showToast('无法访问麦克风：' + (e.message || '请检查权限'));
+    }
+}
+
+function stopMic() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    if (mediaRecorder && mediaRecorder.stream) {
+        mediaRecorder.stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+}
+
+async function uploadVoice() {
+    if (!recordedChunks.length) {
+        showToast('没有录到声音，请重试');
+        return;
+    }
+    var blob = new Blob(recordedChunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm' });
+    var fd = new FormData();
+    fd.append('file', blob, 'voice_' + Date.now() + '.webm');
+    showToast('正在识别语音…');
+    try {
+        var res = await fetch('/api/asr/transcribe', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (data.success && data.text) {
+            document.getElementById('msgInput').value = data.text;
+            document.getElementById('msgInput').focus();
+            showToast('识别完成，按 Enter 发送');
+        } else {
+            showToast('识别失败：' + (data.error || '没有识别到内容，请重试'));
+        }
+    } catch (e) {
+        showToast('识别请求失败，请稍后再试');
+    }
+}
+
+// 不支持录音的浏览器直接隐藏麦克风按钮
+(function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        var btn = document.getElementById('micBtn');
+        if (btn) btn.style.display = 'none';
+    }
+})();
+
 async function logout() {
     await fetch('/api/auth/logout', {method:'POST'});
     location.href = '/login';
@@ -265,6 +340,26 @@ async function logout() {
         transition: .2s;
     }
     .quick-chip:hover { background: #dff0e6; transform: translateY(-1px); }
+
+    .mic-btn {
+        border: none;
+        background: transparent;
+        font-size: 17px;
+        cursor: pointer;
+        border-radius: 10px;
+        width: 38px;
+        height: 38px;
+        transition: .2s;
+    }
+    .mic-btn:hover { background: #dff0e6; transform: scale(1.05); }
+    .mic-btn.recording {
+        background: #f43f5e;
+        animation: micPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes micPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,.35); }
+        50% { box-shadow: 0 0 0 8px rgba(244,63,94,0); }
+    }
 </style>
 <script src="/js/guard.js"></script>
 <script src="/js/common.js"></script>

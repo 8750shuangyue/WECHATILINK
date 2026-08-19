@@ -163,6 +163,70 @@ public class AudioConverterService {
         }
     }
 
+    /**
+     * 通用音频转 16kHz/16bit/单声道 WAV（Web 录音 webm/opus、mp3、m4a 等），
+     * 直接交给 ffmpeg 按内容识别，不做 AMR/SILK 头处理。
+     */
+    public byte[] convertAnyToWav16k16bitMono(byte[] inputData, String inputExtension) throws Exception {
+        logger.info("Generic audio conversion to WAV, input size: {} bytes, extension: {}",
+                inputData.length, inputExtension);
+        if (inputData == null || inputData.length == 0) {
+            throw new IllegalArgumentException("Input data is empty");
+        }
+        if (!isFfmpegAvailable()) {
+            throw new RuntimeException("ffmpeg is not available, cannot convert audio");
+        }
+
+        String safeExt = inputExtension == null ? "webm"
+                : inputExtension.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        if (safeExt.isEmpty()) {
+            safeExt = "webm";
+        }
+
+        File inputFile = null;
+        File outputFile = null;
+        try {
+            inputFile = File.createTempFile("audio_input_", "." + safeExt);
+            Files.write(inputFile.toPath(), inputData);
+
+            outputFile = File.createTempFile("audio_output_", ".wav");
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    ffmpegPath,
+                    "-y",
+                    "-loglevel", "error",
+                    "-i", inputFile.getAbsolutePath(),
+                    "-acodec", "pcm_s16le",
+                    "-ar", "16000",
+                    "-ac", "1",
+                    "-f", "wav",
+                    outputFile.getAbsolutePath()
+            );
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            byte[] errorOutput = process.getInputStream().readAllBytes();
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0) {
+                logger.error("ffmpeg generic conversion failed, exit code: {}, stderr: {}",
+                        exitCode, new String(errorOutput, java.nio.charset.StandardCharsets.UTF_8));
+                throw new RuntimeException("ffmpeg conversion failed, exit code: " + exitCode);
+            }
+
+            byte[] wavData = Files.readAllBytes(outputFile.toPath());
+            logger.info("Generic audio converted to WAV, size: {} bytes", wavData.length);
+            return wavData;
+        } finally {
+            if (inputFile != null && inputFile.exists()) {
+                inputFile.delete();
+            }
+            if (outputFile != null && outputFile.exists()) {
+                outputFile.delete();
+            }
+        }
+    }
+
     public byte[] convertToPcm16k16bitMono(byte[] inputData, String inputExtension) throws Exception {
         logger.info("Starting audio conversion, input size: {} bytes, extension: {}", inputData.length, inputExtension);
 

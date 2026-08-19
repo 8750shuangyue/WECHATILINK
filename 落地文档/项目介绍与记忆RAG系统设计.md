@@ -14,7 +14,7 @@
 | 工程形态 | 单模块 Maven（`com.example.demo`，141 个 Java 文件） |
 | 数据存储 | MySQL（主业务库 `ilink_chat`）+ SQLite（RAG 向量库 `rag_knowledge.sqlite`） |
 | 对话模型 | DeepSeek V4-Pro（OpenAI 兼容接口） |
-| 多模态模型 | qwen-vl-plus（视觉）、qwen-image-2.0（生图）、讯飞 TTS |
+| 多模态模型 | qwen-vl-plus（视觉）、qwen-image-2.0（生图）、讯飞 TTS、DashScope ASR（语音输入） |
 | 外部服务 | 心知天气、高德地图、百度搜索、WebPush |
 | 入口 | 浏览器 Web（16 个静态页面） |
 | 部署 | 阿里云轻量服务器（101.37.254.73:8080），systemd 托管 |
@@ -362,6 +362,7 @@ flowchart LR
 | 账号 | `/api/auth/register`、`/login`、`/logout`、`/me` | 注册登录（BCrypt + HttpSession） |
 | 对话 | `/api/ai/chat`、`/chat/stream`、`/chat-with-tools`、`/tools/registered` | 对话/流式/工具/工具清单 |
 | 数据观测 | `/api/stats/overview`、`/tool-ranking`、`/trend` | 平台概览 / 工具调用排行 / 近 7 天趋势 |
+| 语音 | `POST /api/asr/transcribe` | 浏览器录音转文字（ffmpeg → DashScope ASR） |
 
 ---
 

@@ -46,8 +46,14 @@ public class DashScopeAsrService {
             Files.write(tempFile, wavData);
             logger.info("Audio file saved to: {}", tempFile);
 
+            // DashScope 语音识别需要百炼（DashScope）的 API Key，
+            // 与 Embedding/视觉共用同一把 key；DeepSeek 的 key 不可用于 ASR。
+            String asrApiKey = (config.getEmbedding() != null && config.getEmbedding().getApiKey() != null)
+                    ? config.getEmbedding().getApiKey()
+                    : config.getApiKey();
+
             RecognitionParam param = RecognitionParam.builder()
-                    .apiKey(config.getApiKey())
+                    .apiKey(asrApiKey)
                     .model("fun-asr-realtime-2026-02-28")
                     .format("wav")
                     .sampleRate(16000)
