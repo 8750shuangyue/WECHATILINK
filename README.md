@@ -27,7 +27,9 @@
   - 自研 `BaseTool` 抽象：8 个（文件分析、图像分析/编辑/生成、TTS、网页搜索等）
   - Spring AI `@Tool` 方法：68 个（护理问答、健康检查、天气、地图、库存、商城、社区等业务工具）
 - **流式对话**：SSE 打字机式输出（`POST /api/ai/chat/stream`）
+- **工具对话模式**：聊天页 ⚙️ 开关一键切换，AI 真实调用工具，生成图片/语音直接在对话中渲染
 - **语音输入**：聊天页麦克风录音，ffmpeg 转 WAV 后经 DashScope ASR 识别为文字
+- **图片中心**：AI 生成图 / 上传分析图 / TTS 音频按用户归档，支持筛选、放大与删除
 - **记忆与 RAG**：对话历史持久化 + 语义摘要；文档上传自动分块 → Embedding 向量化 → SQLite 向量库检索增强回答
 
 ### 2. 智能护理
@@ -78,7 +80,7 @@ src/main/java/com/example/demo/
 ├── tts/              # 讯飞语音合成
 ├── vision/           # 阿里云视觉分析
 ├── imagegen/         # 阿里云图像生成
-└── web/              # 页面路由（16 个静态页面）
+└── web/              # 页面路由（17 个静态页面）
 ```
 
 ## 快速开始（本地）
@@ -150,11 +152,12 @@ ssh root@<服务器> "systemctl stop ilink && mv /opt/ilink/demo-0.0.1-SNAPSHOT.
 | 鉴权 | `/api/auth/register` `/api/auth/login` `/api/auth/me` `/api/auth/logout` | 账号体系（除登录注册外均需会话） |
 | 对话 | `/api/ai/chat` `/api/ai/chat/stream` `/api/ai/chat-with-tools` | 普通 / 流式 / 工具对话 |
 | 语音 | `POST /api/asr/transcribe` | 录音转文字（Web 语音输入） |
+| 图片中心 | `GET /api/gallery/list` `DELETE /api/gallery/{id}` | 媒体资产列表 / 删除 |
 | 工具 | `/api/ai/tools/registered` | 查看已注册工具 |
 | 数据观测 | `/api/stats/overview` `/api/stats/tool-ranking` `/api/stats/trend` | 平台概览 / 工具调用排行 / 趋势 |
 | 护理 | `/api/care/identify` `/api/care/targets/**` `/api/care/records/**` `/api/care/qa` | 识图诊断、档案、记录、问答 |
 | 知识库 | `/api/kb/upload` `/api/kb/list` `/api/kb/{sourceId}` | 上传 / 列表 / 删除知识条目 |
-| 页面 | `/login` `/register` `/home` `/chat` `/care` `/reminders` `/briefing` `/kb` `/stats` `/shop` `/community` `/timeline` `/inventory` `/disease` | 前端页面 |
+| 页面 | `/login` `/register` `/home` `/chat` `/care` `/reminders` `/briefing` `/kb` `/stats` `/gallery` `/shop` `/community` `/timeline` `/inventory` `/disease` | 前端页面 |
 
 ## 文档
 

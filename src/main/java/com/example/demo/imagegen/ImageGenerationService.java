@@ -3,7 +3,9 @@ package com.example.demo.imagegen;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.example.demo.ai.UserContextHolder;
 import com.example.demo.config.DashScopeConfig;
+import com.example.demo.gallery.MediaAssetService;
 import com.example.demo.vision.ImageAnalysisResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +30,12 @@ public class ImageGenerationService {
     private static final Logger logger = LoggerFactory.getLogger(ImageGenerationService.class);
 
     private final DashScopeConfig config;
+    private final MediaAssetService mediaAssetService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    public ImageGenerationService(DashScopeConfig config) {
+    public ImageGenerationService(DashScopeConfig config, MediaAssetService mediaAssetService) {
         this.config = config;
+        this.mediaAssetService = mediaAssetService;
     }
 
     private String imageApiKey() {
@@ -180,6 +184,7 @@ public class ImageGenerationService {
         Path targetPath = uploadsPath.resolve(filename);
         Files.write(targetPath, imageBytes);
         logger.info("Saved generated image to: {} ({} bytes)", targetPath.toAbsolutePath(), imageBytes.length);
+        mediaAssetService.record(UserContextHolder.getUserId(), filename, "image", "generated");
         return targetPath.toAbsolutePath().toString();
     }
 

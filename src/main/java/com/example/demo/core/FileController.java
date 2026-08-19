@@ -1,7 +1,9 @@
 package com.example.demo.core;
 
 import com.example.demo.chat.LlmService;
+import com.example.demo.ai.UserContextHolder;
 import com.example.demo.config.DashScopeConfig;
+import com.example.demo.gallery.MediaAssetService;
 import com.example.demo.imagegen.ImageGenerationService;
 import com.example.demo.vision.ImageAnalysisResponse;
 import com.example.demo.vision.VisionService;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
@@ -35,27 +38,32 @@ public class FileController {
     private final FileParserService fileParserService;
     private final LlmService llmService;
     private final DashScopeConfig config;
+    private final MediaAssetService mediaAssetService;
 
     private static final List<String> TEXT_EXTENSIONS = Arrays.asList("txt", "md", "json");
     private static final List<String> IMAGE_EXTENSIONS = Arrays.asList("jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff");
 
     public FileController(VisionService visionService, ImageGenerationService imageGenerationService,
                           FileStorageService fileStorageService, FileParserService fileParserService,
-                          LlmService llmService, DashScopeConfig config) {
+                          LlmService llmService, DashScopeConfig config,
+                          MediaAssetService mediaAssetService) {
         this.visionService = visionService;
         this.imageGenerationService = imageGenerationService;
         this.fileStorageService = fileStorageService;
         this.fileParserService = fileParserService;
         this.llmService = llmService;
         this.config = config;
+        this.mediaAssetService = mediaAssetService;
     }
 
     @PostMapping("/process")
     public ResponseEntity<Map<String, Object>> processFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "style", required = false) String style) {
+            @RequestParam(value = "style", required = false) String style,
+            HttpServletRequest servletRequest) {
         
         Map<String, Object> response = new HashMap<>();
+        UserContextHolder.setUserId((String) servletRequest.getAttribute("userName"));
         
         try {
             if (file.isEmpty()) {
@@ -86,6 +94,8 @@ public class FileController {
             logger.error("Error processing file", e);
             response.put("error", "处理文件时发生错误: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        } finally {
+            UserContextHolder.clear();
         }
     }
 
@@ -177,6 +187,8 @@ public class FileController {
         
         String extension = getFileExtension(file.getOriginalFilename());
         String imageUrl = fileStorageService.storeImage(file.getBytes(), extension);
+        String storedFileName = imageUrl.substring(imageUrl.lastIndexOf('/') + 1);
+        mediaAssetService.record(UserContextHolder.getUserId(), storedFileName, "image", "uploaded");
         
         ImageAnalysisResponse analysis = visionService.analyzeImageWithUrl(imageUrl);
         

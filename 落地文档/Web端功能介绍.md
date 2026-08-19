@@ -30,6 +30,7 @@
 
 - 对话接口：`/api/ai/chat`（普通）、`/api/ai/chat/stream`（**SSE 流式打字机输出**）、`/api/ai/chat-with-tools`（工具对话）
 - **语音输入**：输入框旁麦克风按钮，浏览器录音（webm/opus）→ ffmpeg 转 WAV → DashScope ASR 识别 → 自动填入输入框，按 Enter 发送
+- **工具模式开关（⚙️）**：开启后消息走 `/api/ai/chat-with-tools`，AI 真实调用工具；生成图片/语音直接渲染在聊天气泡中（含工具调用记录）；“生成图片”“查天气”快捷指令自动开启
 - 内置 **68 个 Spring AI @Tool 工具**：护理提醒创建/完成/查询、宠物与植物安全问答、症状分诊、用药记录、图片对比、护理计划生成、天气预警、附近服务、联网搜索、生图/图片分析等
 - 展示工具调用历史（成功/失败、耗时、参数）
 - 记忆与 RAG：对话历史 + 向量检索自动注入，模型“记得住”上下文
@@ -106,8 +107,15 @@
 - **近 7 天对话趋势**：按天统计消息量柱状图
 - 首页“数据概览”卡片直达；数据实时来自 `/api/stats/*`
 
+## 十六、图片中心（/gallery）
+
+- **资产归档**：AI 生成图（`gen_*`）、上传分析图、TTS 语音（`tts_*`）自动按用户记录到 `media_assets`
+- **浏览**：图片网格（点击放大）、音频卡片（内嵌播放器），按“全部/图片/音频”筛选
+- **删除**：资产可删除，物理文件与记录一并移除，仅限本人资产
+- 首页“图片中心”卡片直达；数据来自 `/api/gallery/*`
+
 ## 技术特点
 
-- 16 个静态页面（index/login/register/home/chat/care/disease/shop/shop-publish/community/inventory/timeline/reminders/briefing/kb/stats），无前端构建工具，直接 fetch REST API
+- 17 个静态页面（index/login/register/home/chat/care/disease/shop/shop-publish/community/inventory/timeline/reminders/briefing/kb/stats/gallery），无前端构建工具，直接 fetch REST API
 - 移动端响应式适配、现代视觉设计（渐变、玻璃拟态、动效）
 - 与后端共用同一套 AI 能力、记忆 RAG 与 MySQL 业务库

@@ -42,8 +42,8 @@
 
         <div class="chat-input-area">
             <div class="quick-row">
-                <button class="quick-chip" onclick="quickPrompt('帮我查一下北京的天气')">🌤 查天气</button>
-                <button class="quick-chip" onclick="quickPrompt('帮我生成一张可爱的橘猫图片')">🖼 生成图片</button>
+                <button class="quick-chip" onclick="quickPrompt('帮我查一下北京的天气', true)">🌤 查天气</button>
+                <button class="quick-chip" onclick="quickPrompt('帮我生成一张可爱的橘猫图片', true)">🖼 生成图片</button>
                 <button class="quick-chip" onclick="quickPrompt('绿萝叶子发黄该怎么办？')">🌱 护理问答</button>
                 <button class="quick-chip" onclick="location.href='/reminders.html'">⏰ 护理提醒</button>
             </div>
@@ -57,6 +57,7 @@
                     <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
                 </label>
                 <button class="icon-btn mic-btn" id="micBtn" title="语音输入" onclick="toggleMic()">🎤</button>
+                <button class="icon-btn tool-mode-btn" id="toolModeBtn" title="工具对话：生成图片/语音等" onclick="toggleToolMode()">⚙️</button>
                 <textarea id="msgInput" placeholder="输入消息…（Enter 发送）" rows="1"></textarea>
                 <button class="send-btn" id="sendBtn">发送</button>
             </div>
@@ -114,9 +115,25 @@ function addImageMessage(url, from, time) {
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
-function quickPrompt(text) {
+function quickPrompt(text, autoTool) {
+    if (autoTool) enableToolMode();
     document.getElementById('msgInput').value = text;
     document.getElementById('msgInput').focus();
+}
+
+var toolMode = false;
+
+function enableToolMode() {
+    toolMode = true;
+    var b = document.getElementById('toolModeBtn');
+    if (b) b.classList.add('active');
+}
+
+function toggleToolMode() {
+    toolMode = !toolMode;
+    var b = document.getElementById('toolModeBtn');
+    if (b) b.classList.toggle('active', toolMode);
+    showToast(toolMode ? '已开启工具对话（可生成图片/语音/查天气等）' : '已切换回普通流式对话');
 }
 
 function clearChat() {
@@ -166,6 +183,61 @@ function addStreamingBubble() {
     return div.querySelector('.msg-bubble');
 }
 
+function addBotText(text, small) {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    div.innerHTML = '<div class="msg-bubble bot-bubble"' + (small ? ' style="font-size:12px;opacity:.85;"' : '') + '>' +
+        text.replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function renderGeneratedAsset(path) {
+    var name = String(path).split('/').pop();
+    var url = '/uploads/' + encodeURIComponent(name);
+    var lower = name.toLowerCase();
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    if (lower.indexOf('.mp3') > -1 || lower.indexOf('.wav') > -1 || lower.indexOf('.m4a') > -1) {
+        div.innerHTML = '<div class="msg-bubble bot-bubble"><audio controls src="' + url + '" style="max-width:320px;"></audio></div>';
+    } else {
+        div.innerHTML = '<div class="msg-bubble bot-bubble"><img src="' + url + '" style="max-width:280px;border-radius:10px;cursor:pointer;" onclick="window.open(\'' + url + '\',\'_blank\')"></div>';
+    }
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+async function sendTextWithTools(text) {
+    showThinking();
+    try {
+        var res = await fetch('/api/ai/chat-with-tools', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+        });
+        var data = await res.json();
+        hideThinking();
+        if (!data.success) {
+            addBotText(data.error || '工具对话失败，请重试');
+            return;
+        }
+        var content = (data.content || '').replace(/\[(IMAGE|AUDIO):[^\]]*\]/g, '').trim();
+        addBotText(content || '处理完成');
+
+        if (data.toolCallHistory && data.toolCallHistory.length) {
+            var summary = '🔧 工具调用：' + data.toolCallHistory.map(function (t) {
+                return t.toolName + (t.success ? ' ✅' : ' ❌');
+            }).join('、');
+            addBotText(summary, true);
+        }
+
+        (data.generatedFiles || []).forEach(function (p) { renderGeneratedAsset(p); });
+    } catch (e) {
+        hideThinking();
+        addBotText('请求失败：' + e.message);
+    }
+}
+
 async function sendText() {
     var text = document.getElementById('msgInput').value.trim();
     if (!text && !imageBase64) { showToast('请输入消息或选择图片'); return; }
@@ -182,6 +254,10 @@ async function sendText() {
     }
 
     document.getElementById('msgInput').value = '';
+    if (toolMode && text) {
+        await sendTextWithTools(text);
+        return;
+    }
     try {
         if (text) {
             var liveBubble = addStreamingBubble();
@@ -355,6 +431,11 @@ async function logout() {
     .mic-btn.recording {
         background: #f43f5e;
         animation: micPulse 1.2s ease-in-out infinite;
+    }
+    .tool-mode-btn.active {
+        background: #1e8a50;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(30,138,80,.35);
     }
     @keyframes micPulse {
         0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,.35); }

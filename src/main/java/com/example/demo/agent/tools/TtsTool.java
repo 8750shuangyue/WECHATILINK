@@ -1,6 +1,8 @@
 package com.example.demo.agent.tools;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.example.demo.ai.UserContextHolder;
+import com.example.demo.gallery.MediaAssetService;
 import com.example.demo.tts.XfTtsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +24,12 @@ public class TtsTool extends BaseTool {
     private static final String UPLOAD_DIR = "./uploads";
 
     private final XfTtsService ttsService;
+    private final MediaAssetService mediaAssetService;
     private final ToolDefinition toolDefinition;
 
-    public TtsTool(XfTtsService ttsService) {
+    public TtsTool(XfTtsService ttsService, MediaAssetService mediaAssetService) {
         this.ttsService = ttsService;
+        this.mediaAssetService = mediaAssetService;
         this.toolDefinition = ToolDefinition.builder()
                 .name(TOOL_NAME)
                 .description(TOOL_DESCRIPTION)
@@ -84,6 +88,8 @@ public class TtsTool extends BaseTool {
         try (FileOutputStream fos = new FileOutputStream(filePath.toFile())) {
             fos.write(audioData);
         }
+
+        mediaAssetService.record(UserContextHolder.getUserId(), fileName, "audio", "tts");
         
         return filePath.toAbsolutePath().toString();
     }

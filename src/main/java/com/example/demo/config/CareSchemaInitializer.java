@@ -30,6 +30,7 @@ public class CareSchemaInitializer {
     public void initialize() {
         executeSchemaFile("db/care_schema.sql");
         executeSchemaFile("db/stats_schema.sql");
+        executeSchemaFile("db/gallery_schema.sql");
     }
 
     private void executeSchemaFile(String path) {

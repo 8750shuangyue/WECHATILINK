@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - 图片中心</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🖼%3C/text%3E%3C/svg%3E">
+    <style>
+        :root {
+            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
+            --green-600:#1e8a50; --green-700:#126a3c; --teal:#2a9d8f;
+            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
+            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
+            --shadow:0 10px 30px rgba(20,60,40,.1);
+            --radius:18px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+            color: var(--ink); min-height: 100vh;
+            background:
+                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
+                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
+                linear-gradient(165deg,#f7fbf8,#eef6f1);
+            background-attachment: fixed;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::selection { background: rgba(47,158,99,.22); }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 28px; color: #fff;
+            background: linear-gradient(120deg,#10351f,#1b4a2f 55%,#1e5a3a);
+            box-shadow: 0 8px 26px rgba(10,40,22,.28);
+        }
+        .topbar-brand { font-weight: 800; letter-spacing: .4px; display: flex; align-items: center; gap: 10px; }
+        .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+        .topbar a { color: #fff; text-decoration: none; opacity: .9; }
+        .topbar a:hover { opacity: 1; }
+        .topbar-btn {
+            background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25);
+            border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; color: #fff;
+        }
+        .topbar-btn:hover { background: rgba(255,255,255,.24); }
+
+        main { max-width: 1080px; margin: 32px auto 60px; padding: 0 20px; }
+        .page-title { font-size: 28px; font-weight: 800; color: var(--green-700); margin-bottom: 6px; }
+        .page-sub { color: var(--ink-2); margin-bottom: 20px; font-size: 14px; }
+
+        .filter-row { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
+        .filter-chip {
+            border: 1px solid rgba(47,158,99,.3); background: #fff; color: var(--green-600);
+            border-radius: 999px; padding: 8px 18px; font-size: 13.5px; font-weight: 600;
+            cursor: pointer; transition: .2s;
+        }
+        .filter-chip:hover { background: var(--green-50); transform: translateY(-1px); }
+        .filter-chip.active { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 6px 16px rgba(30,138,80,.3); }
+
+        .gallery-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .media-card {
+            background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+            overflow: hidden; box-shadow: var(--shadow); position: relative; transition: .25s;
+        }
+        .media-card:hover { transform: translateY(-4px); box-shadow: 0 16px 34px rgba(20,60,40,.16); }
+        .media-thumb {
+            width: 100%; height: 170px; object-fit: cover; cursor: zoom-in;
+            background: linear-gradient(135deg,#eef6f1,#f7fbf8);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .audio-card .media-thumb { cursor: default; font-size: 42px; }
+        .media-info { padding: 12px 14px; }
+        .media-meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink-2); }
+        .source-badge {
+            font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+            background: var(--green-100); color: var(--green-700);
+        }
+        .source-badge.audio { background: #e0f2f1; color: #00695c; }
+        .del-btn {
+            margin-top: 10px; width: 100%; padding: 7px; border-radius: 10px; border: 1px solid rgba(244,63,94,.3);
+            background: #fff; color: #e11d48; font-size: 12.5px; cursor: pointer; transition: .2s;
+        }
+        .del-btn:hover { background: #fff1f2; }
+        audio { width: 100%; margin-top: 10px; height: 34px; }
+
+        .empty { grid-column: 1 / -1; text-align: center; color: var(--ink-2); font-size: 14px; padding: 60px 0; }
+        .loading { color: var(--ink-2); font-size: 14px; padding: 30px 0; }
+
+        .lightbox {
+            display: none; position: fixed; inset: 0; background: rgba(10,25,16,.82);
+            z-index: 200; align-items: center; justify-content: center; padding: 30px; cursor: zoom-out;
+        }
+        .lightbox.show { display: flex; }
+        .lightbox img { max-width: 92vw; max-height: 86vh; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+
+        @media (max-width: 900px) { .gallery-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 520px) { .gallery-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-brand">🖼 Sekai PetPlant · 图片中心</div>
+        <div class="topbar-right">
+            <a href="/home">返回首页</a>
+            <button class="topbar-btn" onclick="logout()">退出登录</button>
+        </div>
+    </header>
+
+    <main>
+        <h1 class="page-title">图片中心</h1>
+        <p class="page-sub">AI 生成图 · 上传分析图 · 语音合成，按时间归档</p>
+
+        <div class="filter-row" id="filterRow">
+            <button class="filter-chip active" data-type="all" onclick="loadGallery('all', this)">全部</button>
+            <button class="filter-chip" data-type="image" onclick="loadGallery('image', this)">图片</button>
+            <button class="filter-chip" data-type="audio" onclick="loadGallery('audio', this)">音频</button>
+        </div>
+
+        <div class="gallery-grid" id="galleryGrid">
+            <div class="loading">加载中…</div>
+        </div>
+    </main>
+
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()"><img id="lightboxImg" src=""></div>
+
+    <script src="/js/guard.js"></script>
+    <script src="/js/common.js"></script>
+    <script>
+        var SOURCE_LABEL = { generated: 'AI 生成', uploaded: '上传分析', tts: '语音合成' };
+        var currentType = 'all';
+
+        function loadGallery(type, btn) {
+            currentType = type || 'all';
+            if (btn) {
+                document.querySelectorAll('.filter-chip').forEach(function (c) { c.classList.remove('active'); });
+                btn.classList.add('active');
+            }
+            var grid = document.getElementById('galleryGrid');
+            grid.innerHTML = '<div class="loading">加载中…</div>';
+            fetch('/api/gallery/list?type=' + currentType)
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (!res.success || !res.data || res.data.length === 0) {
+                        grid.innerHTML = '<div class="empty">还没有资产——去聊天页让 AI 生成图片或合成语音吧 🎤</div>';
+                        return;
+                    }
+                    grid.innerHTML = res.data.map(renderCard).join('');
+                })
+                .catch(function () {
+                    grid.innerHTML = '<div class="empty">加载失败，请稍后重试</div>';
+                });
+        }
+
+        function renderCard(item) {
+            var url = '/uploads/' + encodeURIComponent(item.fileName);
+            var badge = '<span class="source-badge' + (item.mediaType === 'audio' ? ' audio' : '') + '">' +
+                (SOURCE_LABEL[item.source] || item.source) + '</span>';
+            var date = item.createdAt ? item.createdAt.replace('T', ' ').slice(0, 16) : '';
+            var thumb;
+            if (item.mediaType === 'audio') {
+                thumb = '<div class="media-thumb">🎵</div>';
+            } else {
+                thumb = '<img class="media-thumb" src="' + url + '" loading="lazy" onclick="openLightbox(\'' + url + '\')">';
+            }
+            var player = item.mediaType === 'audio' ? '<audio controls preload="none" src="' + url + '"></audio>' : '';
+            return '<div class="media-card ' + (item.mediaType === 'audio' ? 'audio-card' : '') + '">' +
+                thumb +
+                '<div class="media-info">' +
+                '<div class="media-meta"><span>' + badge + '</span><span>' + date + '</span></div>' +
+                player +
+                '<button class="del-btn" onclick="deleteAsset(' + item.id + ')">删除</button>' +
+                '</div></div>';
+        }
+
+        function deleteAsset(id) {
+            if (!confirm('确定删除这条资产吗？文件将一并移除。')) return;
+            fetch('/api/gallery/' + id, { method: 'DELETE' })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    showToast(res.success ? '已删除' : '删除失败');
+                    if (res.success) loadGallery(currentType);
+                })
+                .catch(function () { showToast('删除失败'); });
+        }
+
+        function openLightbox(url) {
+            document.getElementById('lightboxImg').src = url;
+            document.getElementById('lightbox').classList.add('show');
+        }
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('show');
+        }
+
+        loadGallery('all');
+    </script>
+</body>
+</html>

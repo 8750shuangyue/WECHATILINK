@@ -60,4 +60,9 @@ public class PageController {
     public String stats() {
         return "forward:/stats.html";
     }
+
+    @GetMapping("/gallery")
+    public String gallery() {
+        return "forward:/gallery.html";
+    }
 }

@@ -16,7 +16,7 @@
 | 对话模型 | DeepSeek V4-Pro（OpenAI 兼容接口） |
 | 多模态模型 | qwen-vl-plus（视觉）、qwen-image-2.0（生图）、讯飞 TTS、DashScope ASR（语音输入） |
 | 外部服务 | 心知天气、高德地图、百度搜索、WebPush |
-| 入口 | 浏览器 Web（16 个静态页面） |
+| 入口 | 浏览器 Web（17 个静态页面） |
 | 部署 | 阿里云轻量服务器（101.37.254.73:8080），systemd 托管 |
 
 > 微信 ILink / 公众号接入已于 2026-08-15 移除，项目为纯 Web 端。
@@ -87,7 +87,7 @@ flowchart TB
 
 ### 1. 页面路由
 
-`PageController` 转发 16 个静态页面：`/`（落地页）、`/login`、`/register`、`/home`、`/chat`、`/care`、`/disease`、`/reminders`、`/briefing`、`/kb`、`/stats`、`/shop`、`/shop-publish`、`/community`、`/inventory`、`/timeline`。
+`PageController` 转发 17 个静态页面：`/`（落地页）、`/login`、`/register`、`/home`、`/chat`、`/care`、`/disease`、`/reminders`、`/briefing`、`/kb`、`/stats`、`/gallery`、`/shop`、`/shop-publish`、`/community`、`/inventory`、`/timeline`。
 
 ### 2. 接口鉴权
 
@@ -363,6 +363,7 @@ flowchart LR
 | 对话 | `/api/ai/chat`、`/chat/stream`、`/chat-with-tools`、`/tools/registered` | 对话/流式/工具/工具清单 |
 | 数据观测 | `/api/stats/overview`、`/tool-ranking`、`/trend` | 平台概览 / 工具调用排行 / 近 7 天趋势 |
 | 语音 | `POST /api/asr/transcribe` | 浏览器录音转文字（ffmpeg → DashScope ASR） |
+| 图片中心 | `GET /api/gallery/list`、`DELETE /api/gallery/{id}` | 媒体资产列表/删除 |
 
 ---
 
@@ -379,6 +380,7 @@ flowchart LR
 | 时间线 | timeline_entries |
 | 推送 | push_subscriptions |
 | 数据观测 | tool_call_logs（原生 SQL，工具调用埋点） |
+| 媒体资产 | media_assets（原生 SQL，图片中心） |
 | RAG 向量库（SQLite） | vector_store（content + BLOB 向量 + metadata_json） |
 
 > `care_reminder`、`identify_history` 由 `CareSchemaInitializer` 启动时自动建表；业务表由 Hibernate `ddl-auto=update` 维护。
@@ -387,9 +389,9 @@ flowchart LR
 
 ## 八、前端
 
-`src/main/resources/static` 下 16 个静态页面，无前端构建工具，直接 fetch REST API：
+`src/main/resources/static` 下 17 个静态页面，无前端构建工具，直接 fetch REST API：
 
-落地页（index）· 登录注册（login/register）· 首页（home）· 聊天（chat）· 护理（care）· 病害（disease）· 提醒（reminders）· 简报（briefing）· 知识库（kb）· 数据概览（stats）· 商城（shop + shop-publish）· 社区（community）· 库存（inventory）· 时间线（timeline）
+落地页（index）· 登录注册（login/register）· 首页（home）· 聊天（chat）· 护理（care）· 病害（disease）· 提醒（reminders）· 简报（briefing）· 知识库（kb）· 数据概览（stats）· 图片中心（gallery）· 商城（shop + shop-publish）· 社区（community）· 库存（inventory）· 时间线（timeline）
 
 JS：`common.js` / `guard.js`（登录态与鉴权守卫）、`push.js`（WebPush 订阅）、`service-worker.js`（推送接收）。
 
