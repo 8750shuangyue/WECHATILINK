@@ -161,7 +161,9 @@ public class WeatherService {
         }
 
         WeatherApiResponse.Result result = apiResponse.getResults().get(0);
-        String locationName = result.getLocation();
+        String locationName = Optional.ofNullable(result.getLocation())
+                .map(WeatherApiResponse.Location::getName)
+                .orElse(null);
         
         if (locationName == null || locationName.isEmpty()) {
             throw new WeatherApiException("位置信息为空");

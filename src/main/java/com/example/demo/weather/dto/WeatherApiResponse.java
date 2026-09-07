@@ -19,7 +19,7 @@ public class WeatherApiResponse {
     @Data
     public static class Result {
 
-        private String location;
+        private Location location;
 
         private List<Daily> daily;
 
