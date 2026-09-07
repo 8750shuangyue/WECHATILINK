@@ -130,11 +130,30 @@ public class LlmService {
      */
     public void chatStream(String userMessage, String systemPrompt,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
+        String effectivePrompt = systemPrompt;
+
+        // 普通流式对话没有工具调用能力，天气这类强实时需求需要提前取数注入，
+        // 否则模型只能凭系统提示拒绝回答。
+        if (weatherTool != null && WeatherTool.matchesIntent(userMessage)) {
+            String city = WeatherTool.extractCity(userMessage);
+            if (city != null) {
+                JSONObject weatherParams = new JSONObject();
+                weatherParams.put("city", city);
+                String weatherData = weatherTool.execute(weatherParams).getData();
+                String weatherSystem = "用户正在查询天气，以下是已获取到的「" + city + "」实时天气数据，"
+                        + "请直接基于这些真实数据回答用户，不要编造、不要提示开启联网搜索：\n" + weatherData;
+                effectivePrompt = (effectivePrompt == null || effectivePrompt.isEmpty())
+                        ? weatherSystem
+                        : effectivePrompt + "\n\n" + weatherSystem;
+                logger.info("Weather data injected into chatStream, city: {}", city);
+            }
+        }
+
         JSONArray messages = new JSONArray();
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+        if (effectivePrompt != null && !effectivePrompt.isEmpty()) {
             JSONObject sys = new JSONObject();
             sys.put("role", "system");
-            sys.put("content", systemPrompt);
+            sys.put("content", effectivePrompt);
             messages.add(sys);
         }
         JSONObject user = new JSONObject();
