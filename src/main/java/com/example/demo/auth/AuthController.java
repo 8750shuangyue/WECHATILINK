@@ -1,6 +1,7 @@
 package com.example.demo.auth;
 
 import com.example.demo.aicare.Result;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,9 +16,11 @@ public class AuthController {
     private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
 
     private final AuthService authService;
+    private final LoginAttemptService loginAttemptService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, LoginAttemptService loginAttemptService) {
         this.authService = authService;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @PostMapping("/register")
@@ -27,7 +30,7 @@ public class AuthController {
         String email = params.get("email");
         String phone = params.get("phone");
 
-        logger.info("Register request: {}", userName);
+        logger.info("Register request received");
 
         Map<String, Object> result = authService.register(userName, password, email, phone);
         if ((Integer) result.get("code") == 200) {
@@ -38,17 +41,34 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Result<Map<String, Object>> login(@RequestBody Map<String, String> params, HttpSession session) {
+    public Result<Map<String, Object>> login(@RequestBody Map<String, String> params,
+                                             HttpServletRequest request) {
         String userName = params.get("userName");
         String password = params.get("password");
 
-        logger.info("Login request: {}", userName);
+        if (isBlank(userName) || isBlank(password)) {
+            return Result.error(400, "用户名和密码不能为空");
+        }
+
+        String attemptKey = loginAttemptService.buildKey(userName, request.getRemoteAddr());
+        if (loginAttemptService.isBlocked(attemptKey)) {
+            return Result.error(429, "登录失败次数过多，请稍后再试");
+        }
+
+        logger.info("Login request received");
 
         Map<String, Object> result = authService.login(userName, password);
         if ((Integer) result.get("code") == 200) {
+            HttpSession oldSession = request.getSession(false);
+            if (oldSession != null) {
+                oldSession.invalidate();
+            }
+            HttpSession session = request.getSession(true);
             session.setAttribute("user", userName);
+            loginAttemptService.recordSuccess(attemptKey);
             return Result.success(result);
         } else {
+            loginAttemptService.recordFailure(attemptKey);
             return Result.error((String) result.get("message"));
         }
     }
@@ -67,5 +87,9 @@ public class AuthController {
             return Result.error("未登录");
         }
         return Result.success(Map.of("userName", userName));
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

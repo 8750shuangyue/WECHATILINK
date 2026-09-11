@@ -52,8 +52,9 @@ public class WebAuthInterceptor implements HandlerInterceptor {
         // 未登录：401 + 与 Result 一致的 JSON 结构，前端两种判断方式均可识别
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
+        response.setHeader("Cache-Control", "no-store");
         Map<String, Object> body = new HashMap<>();
-        body.put("code", 500);
+        body.put("code", HttpServletResponse.SC_UNAUTHORIZED);
         body.put("message", "未登录");
         body.put("data", null);
         response.getWriter().write(JSON.toJSONString(body));
