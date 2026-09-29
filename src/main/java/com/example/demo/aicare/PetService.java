@@ -1,5 +1,6 @@
 package com.example.demo.aicare;
 
+import com.example.demo.core.FileStorageService;
 import com.example.demo.chat.entity.PetProfile;
 import com.example.demo.chat.repository.mysql.PetProfileRepository;
 import com.example.demo.chat.LlmService;
@@ -22,20 +23,24 @@ public class PetService {
     private final VisionService visionService;
     private final LlmService llmService;
     private final PetProfileRepository petProfileRepository;
+    private final FileStorageService fileStorageService;
 
     public PetService(VisionService visionService, LlmService llmService, 
-                      PetProfileRepository petProfileRepository) {
+                      PetProfileRepository petProfileRepository,
+                      FileStorageService fileStorageService) {
         this.visionService = visionService;
         this.llmService = llmService;
         this.petProfileRepository = petProfileRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     public Map<String, Object> recognizePet(MultipartFile file, String userId) throws IOException {
         logger.info("Recognizing pet from image, filename: {}, size: {} bytes", 
                 file.getOriginalFilename(), file.getSize());
 
+        byte[] imageBytes = file.getBytes();
         String imageAnalysis = visionService.analyzeImageWithCustomPrompt(
-                file.getBytes(),
+                imageBytes,
                 "请识别图片中的宠物种类，并以JSON格式返回：{\"species\": \"宠物品种\", \"description\": \"宠物描述\", \"healthObservation\": \"健康观察\"}"
         );
 
@@ -48,7 +53,7 @@ public class PetService {
                 "你是一位专业的兽医，请用通俗易懂的语言提供健康评估和护理建议。"
         );
 
-        String imageUrl = "/uploads/" + file.getOriginalFilename();
+        String imageUrl = fileStorageService.storeImage(imageBytes, file.getOriginalFilename());
 
         PetProfile profile = new PetProfile(species, species, imageUrl, healthStatus);
         profile.setUserId(userId);

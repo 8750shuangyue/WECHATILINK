@@ -36,6 +36,7 @@ public class FileController {
     private final ImageGenerationService imageGenerationService;
     private final FileStorageService fileStorageService;
     private final FileParserService fileParserService;
+    private final FileUploadValidator fileUploadValidator;
     private final LlmService llmService;
     private final DashScopeConfig config;
     private final MediaAssetService mediaAssetService;
@@ -45,12 +46,13 @@ public class FileController {
 
     public FileController(VisionService visionService, ImageGenerationService imageGenerationService,
                           FileStorageService fileStorageService, FileParserService fileParserService,
-                          LlmService llmService, DashScopeConfig config,
+                          FileUploadValidator fileUploadValidator, LlmService llmService, DashScopeConfig config,
                           MediaAssetService mediaAssetService) {
         this.visionService = visionService;
         this.imageGenerationService = imageGenerationService;
         this.fileStorageService = fileStorageService;
         this.fileParserService = fileParserService;
+        this.fileUploadValidator = fileUploadValidator;
         this.llmService = llmService;
         this.config = config;
         this.mediaAssetService = mediaAssetService;
@@ -81,8 +83,10 @@ public class FileController {
             logger.info("Processing file: {}, extension: {}", filename, extension);
 
             if (TEXT_EXTENSIONS.contains(extension)) {
+                fileUploadValidator.validateText(file);
                 return processTextFile(file, style);
             } else if (IMAGE_EXTENSIONS.contains(extension)) {
+                fileUploadValidator.validateImage(file);
                 return processImageFile(file, style);
             } else {
                 response.put("error", "不支持的文件类型");
@@ -90,6 +94,10 @@ public class FileController {
                 return ResponseEntity.badRequest().body(response);
             }
 
+        } catch (FileValidationException e) {
+            logger.warn("Rejected file upload: {}", e.getMessage());
+            response.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         } catch (Exception e) {
             logger.error("Error processing file", e);
             response.put("error", "处理文件时发生错误: " + e.getMessage());
@@ -156,6 +164,7 @@ public class FileController {
                 return ResponseEntity.badRequest().body(response);
             }
 
+            fileUploadValidator.validateDocument(file);
             logger.info("Processing file QA: {}, question: {}", filename, question);
 
             String fileContent = fileParserService.parseFile(file);
@@ -175,6 +184,10 @@ public class FileController {
 
             return ResponseEntity.ok(response);
 
+        } catch (FileValidationException e) {
+            logger.warn("Rejected file QA upload: {}", e.getMessage());
+            response.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         } catch (Exception e) {
             logger.error("Error processing file QA", e);
             response.put("error", "处理文件问答时发生错误: " + e.getMessage());

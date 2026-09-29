@@ -1,5 +1,7 @@
 package com.example.demo.aicare;
 
+import com.example.demo.core.FileUploadValidator;
+import com.example.demo.core.FileValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
@@ -16,9 +18,11 @@ public class PlantController {
     private static final Logger logger = LoggerFactory.getLogger(PlantController.class);
 
     private final PlantService plantService;
+    private final FileUploadValidator fileUploadValidator;
 
-    public PlantController(PlantService plantService) {
+    public PlantController(PlantService plantService, FileUploadValidator fileUploadValidator) {
         this.plantService = plantService;
+        this.fileUploadValidator = fileUploadValidator;
     }
 
     @PostMapping("/recognize")
@@ -26,10 +30,14 @@ public class PlantController {
         String userName = (String) session.getAttribute("user");
         if (userName == null) return Result.error("未登录");
         try {
+            fileUploadValidator.validateImage(file);
             logger.info("Plant recognize request, filename: {}, size: {}", 
                     file.getOriginalFilename(), file.getSize());
             Map<String, Object> result = plantService.recognizePlant(file, userName);
             return Result.success(result);
+        } catch (FileValidationException e) {
+            logger.warn("Plant image upload rejected: {}", e.getMessage());
+            return Result.error(400, e.getMessage());
         } catch (IOException e) {
             logger.error("Plant recognition failed", e);
             return Result.error("植物识别失败：" + e.getMessage());

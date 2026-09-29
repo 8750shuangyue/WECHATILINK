@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * 接口鉴权拦截器（方案 A：Session + 拦截器）
  * - 拦截 /api/** 与 /uploads/**，除白名单外均要求登录
- * - 未登录统一返回 HTTP 401 + {"code":500,"message":"未登录"}
+ * - 未登录统一返回 HTTP 401 + {"code":401,"message":"未登录"}
  * - 已登录时把 userName 放入 request attribute，供后续 Controller 复用
  */
 @Component

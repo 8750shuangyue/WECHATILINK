@@ -6,10 +6,10 @@
 
 ## 〇、推荐阅读顺序
 
-1. `Application.java` —— 程序入口，认识 @SpringBootApplication
+1. `DemoApplication.java` —— 程序入口，认识 @SpringBootApplication
 2. `web/PageController.java` —— 最简 Controller
 3. `auth/AuthController.java` + `auth/AuthService.java` —— 一个完整的"请求→服务→数据库"链路
-4. `agent/tools/BaseTool.java` + `agent/tools/WeatherTool.java` —— 接口/抽象类/多态的经典例子
+4. `agent/tools/BaseTool.java` + `weather/tool/WeatherTool.java` —— 接口/抽象类/多态的经典例子
 5. `aicare/Result.java` —— 泛型
 6. `chat/ChatMemoryService.java` —— 依赖注入、@Value、事件
 7. `chat/config/SQLiteConfig.java` —— 配置类、多数据源
@@ -163,8 +163,7 @@ if (existing.isEmpty()) {
 ### 1.9 var（类型推断，Java 10+）
 
 ```java
-var msg = messages.get(0);   // 编译器自动推断为 WeixinMessage
-var p = await...;            // 局部变量类型可以省略
+var optionalUser = userRepository.findByUserName(userName); // 编译器自动推断为 Optional<User>
 ```
 
 只能用于局部变量，不能用于字段和方法参数。
@@ -225,7 +224,7 @@ public class ChatMemoryService {
 
 | 注解 | 用途 | 项目例子 |
 |---|---|---|
-| `@SpringBootApplication` | 入口类，组合了配置+扫描+自动配置 | `Application.java` |
+| `@SpringBootApplication` | 入口类，组合了配置+扫描+自动配置 | `DemoApplication.java` |
 | `@Component` | 通用 Bean | `WebAuthInterceptor`（鉴权拦截器）等 |
 | `@Service` | 业务服务 Bean | `AuthService`、`AgentService` |
 | `@RestController` | 返回 JSON 的 Web 控制器 | 所有 `*Controller` |
@@ -364,7 +363,7 @@ public Result<Map<String, Object>> me(HttpSession session) {
 }
 ```
 
-浏览器访问时自动带 Cookie（JSESSIONID），服务端据此识别"谁在登录"。注意：**本项目接口本身没有拦截器校验**，这是安全上的已知问题，也是你学"过滤器/拦截器/Spring Security"的切入点。
+浏览器访问时自动带 Cookie（本项目名称是 `ILINKSESSION`），服务端据此识别"谁在登录"。`WebAuthInterceptor` 会拦截 `/api/**` 与 `/uploads/**`，未登录请求直接返回 HTTP 401 + `code=401`；登录、注册和当前用户查询接口在白名单中。
 
 ### 3.4 静态资源与 CORS
 
@@ -372,18 +371,32 @@ public Result<Map<String, Object>> me(HttpSession session) {
 // core/WebConfig.java
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+    private final String[] allowedOrigins;
+
+    public WebConfig(@Value("${app.cors.allowed-origins}") String allowedOrigins) {
+        this.allowedOrigins = ...;
+        if (this.allowedOrigins.length == 0 || Arrays.asList(this.allowedOrigins).contains("*")) {
+            throw new IllegalArgumentException("app.cors.allowed-origins must contain explicit origins");
+        }
+    }
+
     @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/uploads/**")            // 访问路径
-                .addResourceLocations("file:" + uploadPath + "/");  // 磁盘目录
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(webAuthInterceptor)
+                .addPathPatterns("/api/**", "/uploads/**");   // 需要登录
     }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**").allowedOrigins("*") ...   // 跨域配置
+        registry.addMapping("/**")
+                .allowedOrigins(allowedOrigins)                // 只允许显式来源
+                .allowCredentials(true)
+                ...;
     }
 }
 ```
+
+项目通过 `APP_CORS_ALLOWED_ORIGINS` 配置允许来源，默认仅包含本地地址；`*` 会在启动校验时被拒绝。非安全 `/api/**` 请求还会经过 `CsrfProtectionFilter` 校验 `Origin` / `Referer`，并统一由 `SecurityHeadersFilter` 添加基础安全响应头。
 
 `src/main/resources/static/` 下的文件由 Spring Boot 自动当静态资源托管，所以 `index.html` 直接访问 `/` 就能看到。
 
@@ -714,7 +727,7 @@ for (Method method : toolObject.getClass().getDeclaredMethods()) {
 2. 亲手改一个小功能：比如给 `AuthService` 加一个"修改密码"方法（Controller → Service → Repository 全链路）
 3. 写一个自己的 REST 接口 + 实体 + Repository，体会 Spring Data 方法名查询
 4. 学会看日志和报错栈：本项目就是最好的练习题（Access denied、400 错误都是经典案例）
-5. 进阶方向：拦截器/Spring Security（本项目缺鉴权）、Stream 精进、多线程（AgentService 是绝佳教材）、单元测试（项目目前只有 contextLoads）
+5. 进阶方向：继续深入拦截器/过滤器/Spring Security、Stream 精进、多线程（AgentService 是绝佳教材）、单元测试（项目已有鉴权、CSRF、安全响应头和上传校验等 6 个测试类）
 
 ---
 
@@ -722,10 +735,10 @@ for (Method method : toolObject.getClass().getDeclaredMethods()) {
 
 | 想学什么 | 打开哪个文件 |
 |---|---|
-| 程序入口/自动配置 | `Application.java` |
+| 程序入口/自动配置 | `DemoApplication.java` |
 | REST 接口 | `AuthController.java`、`CareController.java` |
 | 依赖注入 | `ChatMemoryService.java` |
-| 接口多态 | `BaseTool.java` + `WeatherTool.java` |
+| 接口多态 | `BaseTool.java` + `weather/tool/WeatherTool.java` |
 | 泛型 | `Result.java` |
 | JPA 实体/仓储 | `Message.java` + `MessageRepository.java` |
 | 原生 SQL | `CareReminderService.java` |

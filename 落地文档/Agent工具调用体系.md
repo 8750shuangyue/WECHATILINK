@@ -1,6 +1,6 @@
 # Agent 工具调用体系
 
-> 项目当前以 Web 端为主：**Spring AI @Tool 注解体系（68 个）**是线上主通路；**自研 BaseTool 体系（8 个）**作为自研 Agent 引擎的能力沉淀保留。
+> 项目当前以 Web 端为主：**Spring AI @Tool 注解体系（24 个）**是线上主通路；**自研 BaseTool 体系（8 个）**作为自研 Agent 引擎的能力沉淀保留。
 
 ---
 
@@ -9,7 +9,7 @@
 | 维度 | 自研 BaseTool 体系 | Spring AI @Tool 体系 |
 |---|---|---|
 | 核心类 | `AgentService` + `BaseTool` | `ToolCallingService` + `@Tool` 注解 |
-| 数量 | **8 个** | **68 个**（SpringAiTools 66 + WeatherService 2） |
+| 数量 | **8 个** | **24 个**（SpringAiTools 23 + WeatherService 1） |
 | 注册方式 | 实现 `BaseTool`，Spring 自动注入 `List<BaseTool>` | 反射扫描 `@Tool` 注解方法 |
 | Schema 来源 | 手写 `ToolDefinition` | 从方法参数自动生成 |
 | 执行方式 | 并发执行 `execute(params)`（线程池 ≤4，15s 超时） | 反射 `method.invoke(...)` 并发执行 |
@@ -21,7 +21,7 @@
 
 ### 2.1 反射注册
 
-`ToolCallingService` 构造时扫描类中带 `@Tool` 注解的方法（`SpringAiTools` 66 个 + `WeatherService` 2 个 = 68 个）：
+`ToolCallingService` 构造时扫描类中带 `@Tool` 注解的方法（`SpringAiTools` 23 个 + `WeatherService` 1 个 = 24 个）：
 
 ```java
 for (Method method : toolObject.getClass().getDeclaredMethods()) {
@@ -49,13 +49,13 @@ public WeatherResponse getWeather(
 - **调用报告**：返回带 `traceId`、迭代次数、token 用量的响应，前端可展示工具调用历史
 - **白名单过滤**：`/api/ai/chat-with-tools` 可传 `allowedTools`，只放行指定工具
 
-### 2.3 68 个工具清单（按域划分）
+### 2.3 24 个工具清单（按域划分）
 
-**通用能力（约 12 个）**：getCurrentTime、getWeather、webSearch、professionalSearch、synthesizeSpeech、generateImage、analyzeImage、editImage、analyzeFile、searchNearbyService 等
+**通用能力（11 个）**：getCurrentTime、getWeather、queryWeather、webSearch、professionalSearch、synthesizeSpeech、generateImage、analyzeImage、editImage、analyzeFile、searchNearbyService
 
-**护理域（约 14 个）**：createCareReminder、completeCareReminder、listCareReminders、queryPetCare、queryPlantSafety、queryFoodSafety、triageSymptoms、saveMedication、checkMedication、compareImages、generateCarePlan、weatherAlert、diagnoseDisease、queryWeather
+**护理与健康能力（13 个）**：createCareReminder、completeCareReminder、listCareReminders、queryPetCare、queryPlantSafety、queryFoodSafety、triageSymptoms、saveMedication、checkMedication、compareImages、generateCarePlan、weatherAlert、diagnoseDisease
 
-**业务域（40+ 个）**：商城、库存、社区、时间线、简报、知识库、护理档案/记录等业务操作类工具
+> 商城、库存、社区、时间线、简报、知识库等业务当前由 REST 接口和业务服务承载，**没有注册为 Spring AI `@Tool`**。
 
 > 完整清单以运行时接口 `/api/ai/tools/registered` 返回为准。
 
@@ -99,7 +99,7 @@ for (BaseTool tool : tools) {
 | `generateImage` | ImageGenerationTool | qwen-image 文生图 |
 | `editImage` | ImageEditTool | 图片编辑（换风格/改背景） |
 | `analyzeImage` | ImageAnalysisTool | qwen-vl 图片分析 |
-| `analyzeFile` | FileAnalysisTool | PDF/Word/TXT 解析与问答 |
+| `analyzeFile` | FileAnalysisTool | `txt` / `md` / `json` / `csv` / `log` / `pdf` / `docx` 解析与问答 |
 | `synthesizeSpeech` | TtsTool | 讯飞 TTS 语音合成 |
 | `searchNearbyService` | NearbyServiceTool | 高德附近宠物医院/园艺店等 |
 
@@ -153,7 +153,7 @@ flowchart LR
 
 | 维度 | BaseTool（自研） | @Tool（Spring AI） |
 |---|---|---|
-| 工具数量 | 8 | 68 |
+| 工具数量 | 8 | 24 |
 | 加工具成本 | 新建类继承 BaseTool | 新增一个带注解的方法 |
 | 参数 Schema | 手写 ToolDefinition | 注解自动生成 |
 | 自动补参 | ✅（userId / fileUrl 等） | ❌ 需在方法内处理 |

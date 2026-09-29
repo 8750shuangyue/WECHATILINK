@@ -3,6 +3,8 @@ package com.example.demo.disease;
 import com.example.demo.aicare.Result;
 import com.example.demo.care.model.IdentifyHistory;
 import com.example.demo.care.repository.IdentifyHistoryRepository;
+import com.example.demo.core.FileUploadValidator;
+import com.example.demo.core.FileValidationException;
 import com.example.demo.disease.model.DiseaseResult;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -24,11 +26,14 @@ public class DiseaseController {
 
     private final DiseaseRecognitionService diseaseRecognitionService;
     private final IdentifyHistoryRepository identifyHistoryRepository;
+    private final FileUploadValidator fileUploadValidator;
 
     public DiseaseController(DiseaseRecognitionService diseaseRecognitionService,
-                             IdentifyHistoryRepository identifyHistoryRepository) {
+                             IdentifyHistoryRepository identifyHistoryRepository,
+                             FileUploadValidator fileUploadValidator) {
         this.diseaseRecognitionService = diseaseRecognitionService;
         this.identifyHistoryRepository = identifyHistoryRepository;
+        this.fileUploadValidator = fileUploadValidator;
     }
 
     @PostMapping("/diagnose")
@@ -44,9 +49,13 @@ public class DiseaseController {
                 type, file.getOriginalFilename(), userName);
 
         try {
+            fileUploadValidator.validateImage(file);
             byte[] imageBytes = file.getBytes();
             DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userName, null);
             return Result.success(result);
+        } catch (FileValidationException e) {
+            logger.warn("Disease image upload rejected: {}", e.getMessage());
+            return Result.error(400, e.getMessage());
         } catch (IOException e) {
             logger.error("Disease diagnosis failed", e);
             return Result.error("病害诊断失败：" + e.getMessage());

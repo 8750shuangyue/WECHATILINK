@@ -1,5 +1,7 @@
 # Spring AI Alibaba Tools 落地实施指南
 
+> 说明：本文是**通用接入教程和示例**，不是当前仓库依赖配置的直接镜像。当前项目使用 Spring Boot `3.5.14`、Spring AI `1.0.9` 和 OpenAI-compatible starter（`spring-ai-starter-model-openai`），配置入口是 `src/main/resources/application.properties`，并通过 OpenAI 兼容地址调用 DeepSeek。下面出现 Alibaba starter、`application.yml` 或不同版本号时，应按本项目现有 `pom.xml` 和配置文件调整。
+
 ## 1. 核心概念：什么是 Tools？
 
 Tools 是 Agent 用来执行操作的组件。它通过定义好的输入和输出，让模型能够与外部系统交互。主要分为两类：

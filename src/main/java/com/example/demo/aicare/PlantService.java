@@ -1,5 +1,6 @@
 package com.example.demo.aicare;
 
+import com.example.demo.core.FileStorageService;
 import com.example.demo.chat.entity.PlantProfile;
 import com.example.demo.chat.repository.mysql.PlantProfileRepository;
 import com.example.demo.chat.LlmService;
@@ -22,20 +23,24 @@ public class PlantService {
     private final VisionService visionService;
     private final LlmService llmService;
     private final PlantProfileRepository plantProfileRepository;
+    private final FileStorageService fileStorageService;
 
     public PlantService(VisionService visionService, LlmService llmService, 
-                        PlantProfileRepository plantProfileRepository) {
+                        PlantProfileRepository plantProfileRepository,
+                        FileStorageService fileStorageService) {
         this.visionService = visionService;
         this.llmService = llmService;
         this.plantProfileRepository = plantProfileRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     public Map<String, Object> recognizePlant(MultipartFile file, String userId) throws IOException {
         logger.info("Recognizing plant from image, filename: {}, size: {} bytes", 
                 file.getOriginalFilename(), file.getSize());
 
+        byte[] imageBytes = file.getBytes();
         String imageAnalysis = visionService.analyzeImageWithCustomPrompt(
-                file.getBytes(),
+                imageBytes,
                 "请识别图片中的植物种类，并以JSON格式返回：{\"species\": \"植物品种\", \"description\": \"植物描述\"}"
         );
 
@@ -47,7 +52,7 @@ public class PlantService {
                 "你是一位专业的园艺师，请用通俗易懂的语言提供养护建议。"
         );
 
-        String imageUrl = "/uploads/" + file.getOriginalFilename();
+        String imageUrl = fileStorageService.storeImage(imageBytes, file.getOriginalFilename());
 
         PlantProfile profile = new PlantProfile(species, species, imageUrl, careTips);
         profile.setUserId(userId);

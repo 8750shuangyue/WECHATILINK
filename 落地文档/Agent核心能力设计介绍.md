@@ -2,7 +2,7 @@
 
 > 本文介绍项目自研 Agent（`AgentService`）的核心能力设计：多轮推理循环、上下文构建、工具调用、记忆 RAG、可靠性保障与多模态处理。
 >
-> 状态说明：`AgentService` 为自研 Agent 引擎，曾是微信时代的对话主通路；微信接入移除后代码保留沉淀，Web 端对话主通路为 **Spring AI + `ToolCallingService`（68 个 @Tool）**。
+> 状态说明：`AgentService` 为自研 Agent 引擎，曾是微信时代的对话主通路；微信接入移除后代码保留沉淀，Web 端对话主通路为 **Spring AI + `ToolCallingService`（24 个 @Tool）**。
 
 ---
 
@@ -64,7 +64,7 @@ flowchart LR
 
 自研引擎保留 **8 个 BaseTool**：天气、联网搜索、文生图、图片编辑、图片分析、文件分析、语音合成、附近服务。
 
-> 完整工具调用体系（含 Web 端 68 个 @Tool、并发执行、自动补参、三层兜底）见《Agent工具调用体系.md》。
+> 完整工具调用体系（含 Web 端 24 个 @Tool、并发执行、自动补参、三层兜底）见《Agent工具调用体系.md》。
 
 ### 4.2 自动补参与特殊产物
 

@@ -2,6 +2,8 @@ package com.example.demo.kb;
 
 import com.example.demo.chat.VectorStoreService;
 import com.example.demo.core.FileParserService;
+import com.example.demo.core.FileUploadValidator;
+import com.example.demo.core.FileValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -24,11 +26,14 @@ public class KnowledgeBaseController {
     private static final int CHUNK_LENGTH = 500;
 
     private final FileParserService fileParserService;
+    private final FileUploadValidator fileUploadValidator;
     private final VectorStoreService vectorStoreService;
 
     public KnowledgeBaseController(FileParserService fileParserService,
+                                   FileUploadValidator fileUploadValidator,
                                    VectorStoreService vectorStoreService) {
         this.fileParserService = fileParserService;
+        this.fileUploadValidator = fileUploadValidator;
         this.vectorStoreService = vectorStoreService;
     }
 
@@ -36,6 +41,7 @@ public class KnowledgeBaseController {
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
         Map<String, Object> r = new HashMap<>();
         try {
+            fileUploadValidator.validateDocument(file);
             String text = fileParserService.parseFile(file);
             String fileName = file.getOriginalFilename();
             String sourceId = "kb_" + System.currentTimeMillis() + "_" + fileName;
@@ -49,6 +55,11 @@ public class KnowledgeBaseController {
             r.put("success", true);
             r.put("count", chunks.size());
             r.put("chars", text.length());
+        } catch (FileValidationException e) {
+            log.warn("[KB] Upload rejected: {}", e.getMessage());
+            r.put("success", false);
+            r.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(r);
         } catch (Exception e) {
             log.error("[KB] Upload failed", e);
             r.put("success", false);

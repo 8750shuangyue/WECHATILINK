@@ -12,25 +12,45 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
+    private final FileUploadValidator fileUploadValidator;
+
     private Path uploadPath;
+
+    public FileStorageService(FileUploadValidator fileUploadValidator) {
+        this.fileUploadValidator = fileUploadValidator;
+    }
 
     @PostConstruct
     public void init() throws IOException {
-        uploadPath = Paths.get("./uploads");
+        uploadPath = Paths.get("./uploads").toAbsolutePath().normalize();
         if (!Files.exists(uploadPath)) {
             Files.createDirectories(uploadPath);
         }
     }
 
     public String storeImage(byte[] imageBytes, String extension) throws IOException {
-        String filename = UUID.randomUUID().toString() + (extension != null ? extension : ".jpg");
-        Path targetPath = uploadPath.resolve(filename);
+        String canonicalExtension = fileUploadValidator.canonicalImageExtension(imageBytes, extension);
+        String filename = UUID.randomUUID() + "." + canonicalExtension;
+        Path targetPath = uploadPath.resolve(filename).normalize();
+        if (!targetPath.startsWith(uploadPath)) {
+            throw new IllegalArgumentException("Invalid upload path");
+        }
         Files.write(targetPath, imageBytes);
         return "/uploads/" + filename;
     }
 
     public void deleteFile(String fileName) throws IOException {
-        Path path = uploadPath.resolve(fileName);
+        if (fileName == null || fileName.isBlank()) {
+            return;
+        }
+        Path safeName = Paths.get(fileName).getFileName();
+        if (safeName == null) {
+            return;
+        }
+        Path path = uploadPath.resolve(safeName).normalize();
+        if (!path.startsWith(uploadPath)) {
+            throw new IllegalArgumentException("Invalid file path");
+        }
         Files.deleteIfExists(path);
     }
 }

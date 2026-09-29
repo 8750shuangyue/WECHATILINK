@@ -40,12 +40,21 @@
 | `webpush.vapid.public-key` | `WEBPUSH_VAPID_PUBLIC_KEY` | 无需账号，本地生成 | 浏览器推送 | 可选 |
 | `webpush.vapid.private-key` | `WEBPUSH_VAPID_PRIVATE_KEY` | 无需账号，本地生成 | 浏览器推送 | 可选 |
 
+### 可选部署变量（不是本地运行最低要求）
+
+| 环境变量 | 默认值 | 用途 |
+|---|---|---|
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:8080,http://127.0.0.1:8080` | 显式 CORS 来源白名单；本地直接使用默认值即可，部署域名后改为真实 HTTPS 来源 |
+| `SESSION_COOKIE_SECURE` | `false` | 是否给 Session Cookie 设置 `Secure`；仅在 HTTPS 环境设为 `true` |
+| `RAG_DB_PATH` | `jdbc:sqlite:rag_knowledge.sqlite` | SQLite 向量库 JDBC 地址；只在需要调整数据库文件位置时设置 |
+
 说明：
 
 - `spring.ai.openai.api-key` 复用 `DASHSCOPE_API_KEY`，不需要单独申请。
 - `dashscope.vision.api-key`、`dashscope.image.api-key` 复用 Embedding Key，同样不需要单独申请。
 - `xunfei.tts.app-id` 在 `application.properties` 里有一个默认值，那是原作者的 App ID。
   **同事请用自己的 App ID 覆盖**，否则调用会失败或计入别人的额度。
+- 上表的三个部署变量都有本地默认值，**不填不会阻止本地启动**；它们主要用于域名上线、HTTPS 或数据目录调整。
 
 ---
 

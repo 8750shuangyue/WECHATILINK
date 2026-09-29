@@ -1,5 +1,7 @@
 package com.example.demo.asr;
 
+import com.example.demo.core.FileUploadValidator;
+import com.example.demo.core.FileValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -24,11 +26,14 @@ public class AsrController {
 
     private final AudioConverterService audioConverterService;
     private final DashScopeAsrService asrService;
+    private final FileUploadValidator fileUploadValidator;
 
     public AsrController(AudioConverterService audioConverterService,
-                         DashScopeAsrService asrService) {
+                         DashScopeAsrService asrService,
+                         FileUploadValidator fileUploadValidator) {
         this.audioConverterService = audioConverterService;
         this.asrService = asrService;
+        this.fileUploadValidator = fileUploadValidator;
     }
 
     @PostMapping(value = "/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -41,20 +46,18 @@ public class AsrController {
                 return ResponseEntity.badRequest().body(r);
             }
 
-            String originalName = file.getOriginalFilename();
-            String ext = "webm";
-            if (originalName != null) {
-                int idx = originalName.lastIndexOf('.');
-                if (idx >= 0 && idx < originalName.length() - 1) {
-                    ext = originalName.substring(idx + 1).toLowerCase();
-                }
-            }
+            String ext = fileUploadValidator.validateAudio(file);
 
             byte[] wav = audioConverterService.convertAnyToWav16k16bitMono(file.getBytes(), ext);
             String text = asrService.recognize(wav);
 
             r.put("success", true);
             r.put("text", text == null ? "" : text.trim());
+        } catch (FileValidationException e) {
+            log.warn("[ASR] Upload rejected: {}", e.getMessage());
+            r.put("success", false);
+            r.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(r);
         } catch (Exception e) {
             log.error("[ASR] transcribe failed", e);
             r.put("success", false);

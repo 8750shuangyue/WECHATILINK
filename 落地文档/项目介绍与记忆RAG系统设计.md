@@ -10,13 +10,13 @@
 
 | 维度 | 内容 |
 |---|---|
-| 语言 / 框架 | Java 21 · Spring Boot 3.5.14 · Spring AI |
-| 工程形态 | 单模块 Maven（`com.example.demo`，141 个 Java 文件） |
+| 语言 / 框架 | Java 21 · Spring Boot 3.5.14 · Spring AI 1.0.9 |
+| 工程形态 | 单模块 Maven（`com.example.demo`，150 个 Java 文件） |
 | 数据存储 | MySQL（主业务库 `ilink_chat`）+ SQLite（RAG 向量库 `rag_knowledge.sqlite`） |
 | 对话模型 | DeepSeek V4-Pro（OpenAI 兼容接口） |
 | 多模态模型 | qwen-vl-plus（视觉）、qwen-image-2.0（生图）、讯飞 TTS、DashScope ASR（语音输入） |
 | 外部服务 | 心知天气、高德地图、百度搜索、WebPush |
-| 入口 | 浏览器 Web（17 个静态页面） |
+| 入口 | 浏览器 Web（17 个业务页面 + 1 个 404 页面） |
 | 部署 | 阿里云轻量服务器（101.37.254.73:8080），systemd 托管 |
 
 > 微信 ILink / 公众号接入已于 2026-08-15 移除，项目为纯 Web 端。
@@ -28,13 +28,13 @@
 ```mermaid
 flowchart TB
     subgraph E["入口层"]
-        WEB["浏览器 Web 端<br/>15 个静态 HTML 页面"]
+        WEB["浏览器 Web 端<br/>18 个静态 HTML（17 业务 + 404）"]
         AUTH["WebAuthInterceptor<br/>Session 鉴权 · 白名单"]
     end
 
     subgraph C["AI 核心层"]
         SAI["SpringAiChatService<br/>Spring AI 对话 · SSE 流式"]
-        TCS["ToolCallingService<br/>68 个 @Tool · 5 轮循环"]
+        TCS["ToolCallingService<br/>24 个 @Tool · 5 轮循环"]
         AGENT["AgentService（保留）<br/>8 个 BaseTool · 120s 超时"]
         ROUTER["MessageRouter<br/>LLM 路由 + 关键词兜底"]
         MEM["记忆系统<br/>历史 + 滚动摘要 + RAG"]
@@ -94,7 +94,7 @@ flowchart TB
 `WebAuthInterceptor` 拦截 `/api/**` 与 `/uploads/**`：
 
 - 白名单：`/api/auth/login`、`/api/auth/register`、`/api/auth/me`、OPTIONS 预检
-- 未登录统一返回 401 + `{"code":500,"message":"未登录"}`
+- 未登录统一返回 401 + `{"code":401,"message":"未登录"}`
 - 登录态存入 `HttpSession`，拦截器将 `userName` 放入 request attribute 供 Controller 复用
 
 ### 3. 数据隔离
@@ -109,7 +109,7 @@ flowchart TB
 
 - `SpringAiChatService`：Spring AI `ChatModel`（DeepSeek V4-Pro）+ 系统提示词（意图路由规则）+ RAG 向量检索注入 + 工具调用
 - 流式：`POST /api/ai/chat/stream`（SseEmitter，前端打字机效果）
-- 工具循环：`ToolCallingService` 自研循环（最多 5 轮、并发执行、结果回填），反射注册 **68 个 @Tool**（SpringAiTools 66 + WeatherService 2）
+- 工具循环：`ToolCallingService` 自研循环（最多 5 轮、并发执行、结果回填），反射注册 **24 个 @Tool**（SpringAiTools 23 + WeatherService 1）
 
 ### 2. 自研 Agent 引擎（AgentService，保留）
 
@@ -125,10 +125,10 @@ flowchart TB
 
 | 维度 | BaseTool（自研） | @Tool（Spring AI） |
 |---|---|---|
-| 数量 | 8 个 | 68 个 |
+| 数量 | 8 个 | 24 个 |
 | 注册 | 实现 `BaseTool` + Spring 注入 | 反射扫描 `@Tool` 注解 |
 | 状态 | 保留引擎 | Web 线上主通路 |
-| 护理域覆盖 | 少（通用 8 个） | 全（护理域 14 个 + 业务域 40+） |
+| 能力覆盖 | 8 个通用工具 | 11 个通用工具 + 13 个护理与健康工具；商城等业务由 REST 接口承载 |
 
 > 详见《Agent工具调用体系.md》与《Agent核心能力设计介绍.md》。
 
@@ -305,7 +305,7 @@ flowchart LR
 
 `/kb` 页面 + `/api/kb/*` 接口：
 
-- **上传**：`POST /api/kb/upload` → 文件解析（PDF/Word/TXT）→ 按 500 字分块 → 每块 `saveDocument(sourceId, chunk, meta)` 向量化入库，`sourceId = kb_时间戳_文件名`
+- **上传**：`POST /api/kb/upload` → 文件解析（`txt`、`md`、`json`、`csv`、`log`、`pdf`、`docx`）→ 按 500 字分块 → 每块 `saveDocument(sourceId, chunk, meta)` 向量化入库，`sourceId = kb_时间戳_文件名`
 - **列表**：`GET /api/kb/list`（按来源聚合展示）
 - **删除**：`DELETE /api/kb/{sourceId}` 按来源清理全部向量
 - **检索复用**：入库后对话的 RAG 检索自动覆盖知识库内容
