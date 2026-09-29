@@ -67,7 +67,8 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
         }
 
         String normalizedOrigin = normalizeOrigin(origin);
-        if (normalizedOrigin == null || !allowedOrigins.contains(normalizedOrigin)) {
+        if (normalizedOrigin == null
+                || (!isSameOrigin(request, normalizedOrigin) && !allowedOrigins.contains(normalizedOrigin))) {
             reject(response);
             return;
         }
@@ -98,6 +99,33 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
         } catch (URISyntaxException e) {
             return null;
         }
+    }
+
+    private boolean isSameOrigin(HttpServletRequest request, String normalizedOrigin) {
+        String requestOrigin = normalizeOrigin(
+                request.getScheme(),
+                request.getServerName(),
+                request.getServerPort());
+        return requestOrigin != null && requestOrigin.equals(normalizedOrigin);
+    }
+
+    private String normalizeOrigin(String scheme, String host, int port) {
+        if (scheme == null || scheme.isBlank() || host == null || host.isBlank()) {
+            return null;
+        }
+        scheme = scheme.toLowerCase(Locale.ROOT);
+        host = host.toLowerCase(Locale.ROOT);
+        if (port < 0) {
+            if ("http".equals(scheme)) {
+                port = 80;
+            } else if ("https".equals(scheme)) {
+                port = 443;
+            }
+        }
+        if (port < 0) {
+            return null;
+        }
+        return scheme + "://" + host + ":" + port;
     }
 
     private void reject(HttpServletResponse response) throws IOException {

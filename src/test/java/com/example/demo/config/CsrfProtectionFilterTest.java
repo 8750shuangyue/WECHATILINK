@@ -41,6 +41,38 @@ class CsrfProtectionFilterTest {
     }
 
     @Test
+    void allowsStateChangingRequestFromSameOriginNotInAllowlist() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setScheme("http");
+        request.setServerName("101.37.254.73");
+        request.setServerPort(8080);
+        request.addHeader("Origin", "http://101.37.254.73:8080");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNotNull(chain.getRequest());
+    }
+
+    @Test
+    void allowsSameOriginRefererWithDefaultPort() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setScheme("http");
+        request.setServerName("example.test");
+        request.setServerPort(80);
+        request.addHeader("Referer", "http://example.test/login");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNotNull(chain.getRequest());
+    }
+
+    @Test
     void rejectsStateChangingRequestFromUnknownOrigin() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/chat");
         request.addHeader("Origin", "https://evil.example");
