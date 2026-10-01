@@ -422,6 +422,16 @@
             letter-spacing: .5px;
         }
 
+        .foot a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .foot a:hover {
+            color: var(--green-500);
+            text-decoration: underline;
+        }
+
         .loading-text {
             font-size: 13px;
             color: rgba(255,255,255,.6);
@@ -495,7 +505,11 @@
     </div>
 
     <p class="loading-text" id="checking">正在检查登录状态…</p>
-    <p class="foot">Sekai PetPlant &copy; 2026 · 用心守护每一个小生命</p>
+    <p class="foot">
+        Sekai PetPlant &copy; 2026 · 用心守护每一个小生命
+        <br>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">苏ICP备2026075056号-1</a>
+    </p>
 </main>
 
 <script>
