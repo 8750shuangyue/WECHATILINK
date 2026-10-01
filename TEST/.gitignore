@@ -1,0 +1,6 @@
+.env
+.env.local
+target/
+eval/results/*.jsonl
+eval/results/*.md
+!eval/results/.gitkeep
