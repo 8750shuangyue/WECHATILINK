@@ -54,13 +54,14 @@ public class AiController {
     }
 
     @PostMapping("/chat/stream")
-    public SseEmitter chatStream(@RequestBody Map<String, String> request) {
+    public SseEmitter chatStream(@RequestBody Map<String, String> request, HttpSession session) {
         String message = request.get("message");
         String systemPrompt = request.get("systemPrompt");
+        String conversationId = getOrCreateConversationId(session);
         SseEmitter emitter = new SseEmitter(120000L);
         CompletableFuture.runAsync(() -> {
             try {
-                llmService.chatStream(message, systemPrompt,
+                llmService.chatStream(conversationId, message, systemPrompt,
                         token -> {
                             try {
                                 emitter.send(SseEmitter.event().data(token));
@@ -75,6 +76,15 @@ public class AiController {
             }
         });
         return emitter;
+    }
+
+    private String getOrCreateConversationId(HttpSession session) {
+        String conversationId = (String) session.getAttribute("conversationId");
+        if (conversationId == null || conversationId.isBlank()) {
+            conversationId = "web_" + System.currentTimeMillis() + "_" + System.nanoTime();
+            session.setAttribute("conversationId", conversationId);
+        }
+        return conversationId;
     }
 
     @PostMapping("/chat-with-tools")

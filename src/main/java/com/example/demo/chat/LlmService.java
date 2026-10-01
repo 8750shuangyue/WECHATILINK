@@ -130,6 +130,14 @@ public class LlmService {
      */
     public void chatStream(String userMessage, String systemPrompt,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
+        chatStream(null, userMessage, systemPrompt, onToken, onDone);
+    }
+
+    /**
+     * 带会话记忆的流式对话。只有正常收到上游 [DONE] 且完整结束后才保存本轮消息。
+     */
+    public void chatStream(String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onToken, Runnable onDone) throws Exception {
         String effectivePrompt = systemPrompt;
 
         // 普通流式对话没有工具调用能力，天气这类强实时需求需要提前取数注入，
@@ -150,16 +158,30 @@ public class LlmService {
         }
 
         JSONArray messages = new JSONArray();
-        if (effectivePrompt != null && !effectivePrompt.isEmpty()) {
-            JSONObject sys = new JSONObject();
-            sys.put("role", "system");
-            sys.put("content", effectivePrompt);
-            messages.add(sys);
+        if (conversationId != null && !conversationId.isBlank()) {
+            List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
+                    conversationId,
+                    effectivePrompt,
+                    userMessage
+            );
+            for (ChatMessage message : promptMessages) {
+                JSONObject messageObj = new JSONObject();
+                messageObj.put("role", message.getRole());
+                messageObj.put("content", message.getContent());
+                messages.add(messageObj);
+            }
+        } else {
+            if (effectivePrompt != null && !effectivePrompt.isEmpty()) {
+                JSONObject sys = new JSONObject();
+                sys.put("role", "system");
+                sys.put("content", effectivePrompt);
+                messages.add(sys);
+            }
+            JSONObject user = new JSONObject();
+            user.put("role", "user");
+            user.put("content", userMessage);
+            messages.add(user);
         }
-        JSONObject user = new JSONObject();
-        user.put("role", "user");
-        user.put("content", userMessage);
-        messages.add(user);
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", config.getModel());
@@ -171,7 +193,13 @@ public class LlmService {
         httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
         httpPost.setEntity(new StringEntity(JSON.toJSONString(requestBody), ContentType.APPLICATION_JSON));
 
+        StringBuilder fullReply = new StringBuilder();
         httpClient.execute(httpPost, response -> {
+            if (response.getCode() != 200) {
+                throw new IOException("Streaming LLM request failed with status: " + response.getCode());
+            }
+
+            boolean completed = false;
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(response.getEntity().getContent(), StandardCharsets.UTF_8))) {
                 String line;
@@ -180,8 +208,12 @@ public class LlmService {
                         continue;
                     }
                     String data = line.substring(5).trim();
-                    if (data.isEmpty() || "[DONE]".equals(data)) {
+                    if (data.isEmpty()) {
                         continue;
+                    }
+                    if ("[DONE]".equals(data)) {
+                        completed = true;
+                        break;
                     }
                     try {
                         JSONObject json = JSON.parseObject(data);
@@ -192,6 +224,7 @@ public class LlmService {
                         JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
                         String content = delta != null ? delta.getString("content") : null;
                         if (content != null && !content.isEmpty()) {
+                            fullReply.append(content);
                             onToken.accept(content);
                         }
                     } catch (Exception ignore) {
@@ -199,9 +232,22 @@ public class LlmService {
                     }
                 }
             }
-            onDone.run();
+
+            if (!completed) {
+                throw new IOException("Streaming LLM response ended before [DONE]");
+            }
+
+            if (conversationId != null && !conversationId.isBlank() && fullReply.length() > 0) {
+                try {
+                    chatMemoryService.saveMessagePair(conversationId, userMessage, fullReply.toString());
+                } catch (Exception e) {
+                    logger.error("Failed to save streaming conversation memory, conversationId: {}",
+                            conversationId, e);
+                }
+            }
             return null;
         });
+        onDone.run();
     }
 
     public String chatWithMemory(String conversationId, String userMessage) throws IOException {

@@ -48,16 +48,16 @@ class AiEvalRunnerTest {
         String runId = "eval-" + RUN_ID_TIME.format(startedAt.atZone(ZoneId.systemDefault()));
         List<EvalResult> results = new ArrayList<>();
 
-        try (EvalHttpClient client = new EvalHttpClient(config, objectMapper)) {
-            client.login();
-            client.verifyLogin();
+        long consumedTokens = 0;
+        boolean stoppedByBudget = false;
+        outer:
+        for (EvalCase evalCase : cases) {
+            int repetitions = evalCase.critical() ? 3 : 1;
+            for (int repetition = 1; repetition <= repetitions; repetition++) {
+                try (EvalHttpClient client = new EvalHttpClient(config, objectMapper)) {
+                    client.login();
+                    client.verifyLogin();
 
-            long consumedTokens = 0;
-            boolean stoppedByBudget = false;
-            outer:
-            for (EvalCase evalCase : cases) {
-                int repetitions = evalCase.critical() ? 3 : 1;
-                for (int repetition = 1; repetition <= repetitions; repetition++) {
                     List<String> turns = evalCase.turns();
                     for (int turnIndex = 0; turnIndex < turns.size(); turnIndex++) {
                         String question = turns.get(turnIndex);
@@ -82,42 +82,42 @@ class AiEvalRunnerTest {
                     }
                 }
             }
-
-            EvalReportWriter.ReportPaths reportPaths = new EvalReportWriter(objectMapper).write(
-                    config,
-                    runId,
-                    startedAt,
-                    results,
-                    stoppedByBudget
-            );
-
-            long qualitySamples = results.stream()
-                    .filter(result -> result.autoScore != null)
-                    .count();
-            System.out.printf(
-                    "AI evaluation completed: records=%d, qualitySamples=%d, passed=%d, stoppedByBudget=%s%n"
-                            + "JSONL=%s%nMarkdown=%s%nFailures=%s%n",
-                    results.size(),
-                    qualitySamples,
-                    results.stream()
-                            .filter(result -> result.autoScore != null && result.passed)
-                            .count(),
-                    stoppedByBudget,
-                    reportPaths.jsonl().toAbsolutePath(),
-                    reportPaths.markdown().toAbsolutePath(),
-                    reportPaths.failures().toAbsolutePath()
-            );
-
-            long infrastructureFailures = results.stream()
-                    .filter(this::isInfrastructureFailure)
-                    .count();
-            assertEquals(
-                    0L,
-                    infrastructureFailures,
-                    "The evaluation completed, but infrastructure or API-level failures occurred. "
-                            + "Inspect the generated failures report."
-            );
         }
+
+        EvalReportWriter.ReportPaths reportPaths = new EvalReportWriter(objectMapper).write(
+                config,
+                runId,
+                startedAt,
+                results,
+                stoppedByBudget
+        );
+
+        long qualitySamples = results.stream()
+                .filter(result -> result.autoScore != null)
+                .count();
+        System.out.printf(
+                "AI evaluation completed: records=%d, qualitySamples=%d, passed=%d, stoppedByBudget=%s%n"
+                        + "JSONL=%s%nMarkdown=%s%nFailures=%s%n",
+                results.size(),
+                qualitySamples,
+                results.stream()
+                        .filter(result -> result.autoScore != null && result.passed)
+                        .count(),
+                stoppedByBudget,
+                reportPaths.jsonl().toAbsolutePath(),
+                reportPaths.markdown().toAbsolutePath(),
+                reportPaths.failures().toAbsolutePath()
+        );
+
+        long infrastructureFailures = results.stream()
+                .filter(this::isInfrastructureFailure)
+                .count();
+        assertEquals(
+                0L,
+                infrastructureFailures,
+                "The evaluation completed, but infrastructure or API-level failures occurred. "
+                        + "Inspect the generated failures report."
+        );
     }
 
     private EvalHttpClient.HttpResult execute(
