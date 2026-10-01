@@ -44,6 +44,39 @@ function logout() {
     fetch('/api/auth/logout', { method: 'POST' }).then(function () { location.href = '/login'; });
 }
 
+/* 统一补充 ICP 备案页脚，已有备案链接的页面会自动跳过。 */
+(function ensureIcpFooter() {
+    var ICP_TEXT = '苏ICP备2026075056号-1';
+    var ICP_URL = 'https://beian.miit.gov.cn/';
+
+    function render() {
+        if (document.querySelector('a[href*="beian.miit.gov.cn"]')) return;
+
+        var footer = document.createElement('footer');
+        footer.id = 'site-icp-footer';
+        footer.style.cssText = 'margin:20px auto 18px;padding:0 16px;text-align:center;' +
+            'font-size:12px;line-height:1.6;color:#6b7280;';
+
+        var link = document.createElement('a');
+        link.href = ICP_URL;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = ICP_TEXT;
+        link.style.cssText = 'color:inherit;text-decoration:none;';
+        link.addEventListener('mouseenter', function () { link.style.textDecoration = 'underline'; });
+        link.addEventListener('mouseleave', function () { link.style.textDecoration = 'none'; });
+
+        footer.appendChild(link);
+        document.body.appendChild(footer);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', render);
+    } else {
+        render();
+    }
+})();
+
 /* toast 别名（兼容旧页面） */
 function toast(msg, ms) {
     showToast(msg, ms);

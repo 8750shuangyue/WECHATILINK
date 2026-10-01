@@ -17,7 +17,7 @@
 | 多模态模型 | qwen-vl-plus（视觉）、qwen-image-2.0（生图）、讯飞 TTS、DashScope ASR（语音输入） |
 | 外部服务 | 心知天气、高德地图、百度搜索、WebPush |
 | 入口 | 浏览器 Web（17 个业务页面 + 1 个 404 页面） |
-| 部署 | 阿里云轻量服务器（101.37.254.73:8080），systemd 托管 |
+| 部署 | 阿里云轻量服务器，`https://sekaipetplant.com`；Nginx + HTTPS + systemd 托管 |
 
 > 微信 ILink / 公众号接入已于 2026-08-15 移除，项目为纯 Web 端。
 
@@ -410,4 +410,4 @@ JS：`common.js` / `guard.js`（登录态与鉴权守卫）、`push.js`（WebPus
 3. 从项目根目录 `mvn spring-boot:run` 或 `./mvnw spring-boot:run`
 4. 访问 `http://localhost:8080`，注册账号后即可使用
 
-**服务器部署**：`mvn -B clean package -DskipTests` 打包后替换 `/opt/ilink/demo-0.0.1-SNAPSHOT.jar`，`systemctl restart ilink`；密钥放 `/opt/ilink/application-local.properties`。
+**服务器部署**：`mvn -B clean package -DskipTests` 打包后，将 JAR 上传到 `/opt/ilink/`，通过 systemd 重启 `ilink` 服务；密钥放 `/opt/ilink/application-local.properties`。生产入口为 `https://sekaipetplant.com` 和 `https://www.sekaipetplant.com`，Nginx 反向代理到 `127.0.0.1:8080`，公网应用端口已关闭。

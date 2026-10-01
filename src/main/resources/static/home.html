@@ -783,6 +783,16 @@
             font-size: 12px;
         }
 
+        .footer a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+
         .footer::before {
             content: '';
             position: absolute;
@@ -1018,7 +1028,11 @@
 
 </main>
 
-<div class="footer">Sekai PetPlant &copy; 2026 · 用心守护每一个小生命</div>
+<div class="footer">
+    Sekai PetPlant &copy; 2026 · 用心守护每一个小生命
+    <br>
+    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">苏ICP备2026075056号-1</a>
+</div>
 
 <script>
 const VAPID_PUBLIC_KEY = 'BLrXSeSFooC3M926Z4JKDI5KFP9_eQ4UBTECVv6--H-hDrcPSBv-qRmilQxywzLw7hRO5qrLiciyeaU3dn4che8';

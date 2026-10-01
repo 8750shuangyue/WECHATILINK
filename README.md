@@ -1,6 +1,6 @@
 # Sekai PetPlant · AI 宠物 / 绿植护理平台
 
-> 最近更新：2026-09-29（Web 端安全基线与上线准备）
+> 最近更新：2026-10-01（正式域名 HTTPS 上线）
 
 一个以 **AI Agent 为核心**的一站式宠物与绿植智能护理 Web 平台：覆盖养护问答、AI 识图诊断、护理档案与提醒、知识库 RAG、商城库存、社区分享、每日简报、数据观测等全链路场景。
 
@@ -8,7 +8,7 @@
 
 ## 在线地址
 
-临时演示环境（阿里云，HTTP 8080，非正式域名入口）：<http://101.37.254.73:8080>
+正式环境（阿里云，Nginx + HTTPS）：<https://sekaipetplant.com> / <https://www.sekaipetplant.com>
 
 本地开发环境：<http://localhost:8080>
 
@@ -18,13 +18,13 @@
 
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
-| 第一批：安全与运行基线 | 基本完成 | 密钥外置、401 统一响应、Session Cookie、CORS、CSRF 来源校验、上传校验和安全响应头已落地；正式上线仍需 HTTPS、反向代理、限流和密钥轮换 |
+| 第一批：安全与运行基线 | 已完成（持续加固） | 密钥外置、401 统一响应、Session Cookie、CORS、CSRF 来源校验、上传校验、安全响应头、Nginx HTTPS、域名备案和端口收敛已完成；密钥轮换与全局限流仍待处理 |
 | 第二批：AI 评测基线 | 未开始 | 需要建立 30～50 条固定评测问题，记录答案正确率、召回率、工具成功率和延迟 |
 | 第三批：记忆与 RAG | 未开始 | 继续完善用户隔离、混合召回、重排、上下文压缩和引用 |
 | 第四批：UI 与范围收敛 | 未开始 | 后续处理旧入口、公共前端模块和核心路径简化 |
 | 第五批：工程清理与可观测 | 未开始 | 后续处理死代码、统一异常、健康检查和监控 |
 
-当前服务器是阿里云临时演示环境，直接使用 HTTP `8080`，不是正式域名入口。正式发布前必须完成反向代理、`80/443`、HTTPS、备案、生产 CORS、限流及密钥轮换。
+正式环境已通过阿里云服务器上的 Nginx 提供 HTTPS 入口，应用仅监听 `127.0.0.1:8080`，公网 `8080` 已关闭。ICP 备案号为 `苏ICP备2026075056号-1`，公安备案正在审核。后续仍需完成外部服务密钥轮换、全局限流、监控和备份恢复演练。
 
 ---
 
@@ -353,33 +353,59 @@ java -jar target/demo-0.0.1-SNAPSHOT.jar
 
 仓库已配置 `.github/workflows/build.yml`，每次 push 到 `main` 自动执行 Maven 打包校验，保证提交可构建。
 
-### 手动部署到阿里云
+### 生产部署（Nginx + systemd）
 
-```bash
-# 1. 本地打包
+生产入口：
+
+- `https://sekaipetplant.com`
+- `https://www.sekaipetplant.com`
+- Nginx 反向代理到 `http://127.0.0.1:8080`
+- systemd 服务：`ilink.service`
+- 构建产物：`/opt/ilink/demo-0.0.1-SNAPSHOT.jar`
+- 生产环境变量：`/etc/systemd/system/ilink.service.d/production.conf`
+- Nginx 站点配置：`/etc/nginx/sites-enabled/sekaipetplant.com`
+
+本地打包并上传新版本，覆盖前会保留旧 JAR：
+
+```powershell
 mvn -B clean package -DskipTests
-
-# 2. 上传新版本（先不覆盖当前运行 jar）
-scp target/demo-0.0.1-SNAPSHOT.jar root@<服务器IP>:/opt/ilink/demo-0.0.1-SNAPSHOT.jar.new
-
-# 3. 服务器上备份 → 替换 → 重启（systemd 服务名 ilink）
-ssh root@<服务器IP> "
-  cp /opt/ilink/demo-0.0.1-SNAPSHOT.jar /opt/ilink/demo-0.0.1-SNAPSHOT.jar.bak-$(date +%Y%m%d) &&
-  mv /opt/ilink/demo-0.0.1-SNAPSHOT.jar.new /opt/ilink/demo-0.0.1-SNAPSHOT.jar &&
-  chown admin:admin /opt/ilink/demo-0.0.1-SNAPSHOT.jar &&
-  systemctl restart ilink
-"
+scp .\target\demo-0.0.1-SNAPSHOT.jar admin@101.37.254.73:/opt/ilink/demo-0.0.1-SNAPSHOT.jar.new
 ```
 
-服务器密钥文件位于 `/opt/ilink/application-local.properties`（以 `spring.config.import` 方式加载，不随 jar 提交）。
+登录服务器后备份、替换并重启：
 
-部署后可用以下命令快速验证：
+```bash
+cd /opt/ilink
+cp demo-0.0.1-SNAPSHOT.jar demo-0.0.1-SNAPSHOT.jar.bak-$(date +%Y%m%d-%H%M%S)
+mv demo-0.0.1-SNAPSHOT.jar.new demo-0.0.1-SNAPSHOT.jar
+chown admin:admin demo-0.0.1-SNAPSHOT.jar
+sudo systemctl restart ilink
+sleep 60
+```
+
+生产环境变量至少包含：
+
+```properties
+APP_CORS_ALLOWED_ORIGINS=https://sekaipetplant.com,https://www.sekaipetplant.com
+SESSION_COOKIE_SECURE=true
+SERVER_ADDRESS=127.0.0.1
+```
+
+密钥文件位于 `/opt/ilink/application-local.properties`，以 `spring.config.import` 方式加载，不随 JAR 提交。
+
+部署后验证：
 
 ```bash
 systemctl is-active ilink
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/home
+ss -ltnp | grep ':8080'
+curl -I http://127.0.0.1:8080/
+curl -I https://sekaipetplant.com
+curl -I https://www.sekaipetplant.com
+sudo nginx -t
 tail -n 30 /opt/ilink/app.log
 ```
+
+证书由 Certbot 自动续期。域名相关运维详见 [域名上线完成记录](落地文档/域名上线准备评估.md)。
 
 ---
 
@@ -394,7 +420,7 @@ tail -n 30 /opt/ilink/app.log
 - [Web 端功能介绍](落地文档/Web端功能介绍.md)
 - [鉴权与安全设计](落地文档/鉴权与安全设计.md)
 - [安全风险与上线检查清单](落地文档/安全风险与上线检查清单.md)
-- [域名上线准备评估](落地文档/域名上线准备评估.md)
+- [域名上线完成记录](落地文档/域名上线准备评估.md)
 - [架构图（六层解耦）](落地文档/架构图-六层解耦.md)
 - [Java 学习指南（基于本项目代码）](落地文档/Java学习指南-基于本项目代码.md)
 

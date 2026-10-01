@@ -1,6 +1,6 @@
 # Web 端功能介绍
 
-> 覆盖平台：浏览器 Web（`localhost:8080` / 阿里云临时演示地址 `101.37.254.73:8080`）。
+> 覆盖平台：浏览器 Web（本地 `localhost:8080`；线上 `https://sekaipetplant.com` / `https://www.sekaipetplant.com`）。
 > 微信 ILink / 公众号接入已于 2026-08-15 移除，项目为纯 Web 端。
 
 ---
