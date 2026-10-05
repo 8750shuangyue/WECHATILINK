@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="公安备案">
+  <circle cx="16" cy="16" r="14" fill="#d92d20" stroke="#e8b63f" stroke-width="2"/>
+  <circle cx="16" cy="16" r="11" fill="none" stroke="#ffd77a" stroke-width="1.2"/>
+  <path d="m16 7.2 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4-3.9-3.8 5.4-.8L16 7.2Z" fill="#ffd45c" stroke="#fff0b5" stroke-width=".7" stroke-linejoin="round"/>
+  <path d="M10.7 24.8c3.1 1.6 7.5 1.6 10.6 0l-1.1 2.5c-2.6 1.1-5.8 1.1-8.4 0l-1.1-2.5Z" fill="#e8b63f"/>
+</svg>
