@@ -63,7 +63,7 @@ function logout() {
             '.site-beian__item{display:inline-flex;align-items:center;justify-content:center;' +
                 'gap:6px;color:inherit;font:inherit;line-height:inherit;white-space:nowrap;' +
                 'text-decoration:none;}',
-            '.site-beian__icon{display:block;width:18px;height:18px;flex:0 0 18px;}',
+            '.site-beian__icon{display:block;width:18px;height:18px;flex:0 0 18px;object-fit:contain;}',
             '#site-beian-footer{margin:20px auto 18px;padding:0 16px;color:#6b7280;' +
                 'font-size:12px;line-height:1.6;}',
             '#site-beian-footer a:hover{text-decoration:underline;}'
@@ -90,7 +90,7 @@ function logout() {
             if (withIcon) {
                 var icon = document.createElement('img');
                 icon.className = 'site-beian__icon';
-                icon.src = '/images/public-security-badge.svg';
+                icon.src = '/images/public-security-badge.png';
                 icon.alt = '';
                 link.appendChild(icon);
             }
