@@ -138,6 +138,11 @@ public class LlmService {
      */
     public void chatStream(String conversationId, String userMessage, String systemPrompt,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
+        chatStream(null, conversationId, userMessage, systemPrompt, onToken, onDone);
+    }
+
+    public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onToken, Runnable onDone) throws Exception {
         String effectivePrompt = systemPrompt;
 
         // 普通流式对话没有工具调用能力，天气这类强实时需求需要提前取数注入，
@@ -239,7 +244,7 @@ public class LlmService {
 
             if (conversationId != null && !conversationId.isBlank() && fullReply.length() > 0) {
                 try {
-                    chatMemoryService.saveMessagePair(conversationId, userMessage, fullReply.toString());
+                    chatMemoryService.saveMessagePair(userId, conversationId, userMessage, fullReply.toString());
                 } catch (Exception e) {
                     logger.error("Failed to save streaming conversation memory, conversationId: {}",
                             conversationId, e);
@@ -255,11 +260,15 @@ public class LlmService {
     }
 
     public String chatWithMemory(String conversationId, String userMessage, String systemPrompt) throws IOException {
-        logger.info("Chat with memory, conversationId: {}, userMessage: {}", conversationId, userMessage);
+        return chatWithMemory(null, conversationId, userMessage, systemPrompt);
+    }
+
+    public String chatWithMemory(String userId, String conversationId, String userMessage, String systemPrompt) throws IOException {
+        logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}", userId, conversationId, userMessage);
         
         List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(conversationId, systemPrompt, userMessage);
         
-        String ragContext = retrieveRagContext(userMessage, conversationId);
+        String ragContext = retrieveRagContext(userId, userMessage, conversationId);
         if (ragContext != null && !ragContext.isEmpty()) {
             String ragSystemMessage = "参考以下历史对话信息，帮助回答用户当前问题：\n\n" + ragContext;
             if (systemPrompt == null) {
@@ -314,19 +323,19 @@ public class LlmService {
         logger.debug("Full request with history: {}", JSON.toJSONString(requestBody));
         
         String reply = executeChatRequest(requestBody);
-        chatMemoryService.saveMessagePair(conversationId, userMessage, reply);
+        chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
         
-        asyncSaveVector(conversationId, userMessage, reply);
+        asyncSaveVector(userId, conversationId, userMessage, reply);
         
         return reply;
     }
     
-    private String retrieveRagContext(String query, String conversationId) {
+    private String retrieveRagContext(String userId, String query, String conversationId) {
         try {
             if (vectorStoreService == null) {
                 return null;
             }
-            List<String> similarMessages = vectorStoreService.searchSimilar(query, conversationId);
+            List<String> similarMessages = vectorStoreService.searchSimilar(query, userId, conversationId);
             if (similarMessages.isEmpty()) {
                 return null;
             }
@@ -344,9 +353,14 @@ public class LlmService {
     
     @Async
     public void asyncSaveVector(String conversationId, String userMessage, String assistantReply) {
+        asyncSaveVector(null, conversationId, userMessage, assistantReply);
+    }
+
+    @Async
+    public void asyncSaveVector(String userId, String conversationId, String userMessage, String assistantReply) {
         try {
             if (vectorStoreService != null) {
-                vectorStoreService.saveMessage(conversationId, userMessage, assistantReply);
+                vectorStoreService.saveMessage(userId, conversationId, userMessage, assistantReply);
             }
         } catch (Exception e) {
             logger.error("Failed to async save vector", e);

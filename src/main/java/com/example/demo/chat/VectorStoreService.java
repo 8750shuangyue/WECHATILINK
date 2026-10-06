@@ -1,6 +1,7 @@
 package com.example.demo.chat;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.chat.entity.sqlite.VectorStore;
 import com.example.demo.chat.repository.sqlite.VectorStoreRepository;
@@ -11,8 +12,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -23,8 +31,12 @@ public class VectorStoreService {
 
     private static final Logger logger = LoggerFactory.getLogger(VectorStoreService.class);
 
+    private static final String ORIGIN_PUBLIC_KB = "public_kb";
+    private static final String ORIGIN_CONVERSATION = "conversation_memory";
+
     private final VectorStoreRepository vectorStoreRepository;
     private final EmbeddingService embeddingService;
+    private final RagRetrievalLogService ragRetrievalLogService;
 
     @Value("${chat.vectorstore.top-k:5}")
     private int topK;
@@ -33,13 +45,16 @@ public class VectorStoreService {
     private double similarityThreshold;
 
     private final List<float[]> vectorIndex = new ArrayList<>();
-    private final Map<Integer, String> indexToContent = new ConcurrentHashMap<>();
+    private final Map<Integer, IndexEntry> indexEntries = new ConcurrentHashMap<>();
     private final AtomicBoolean indexReady = new AtomicBoolean(false);
     private final ReadWriteLock indexLock = new ReentrantReadWriteLock();
 
-    public VectorStoreService(VectorStoreRepository vectorStoreRepository, EmbeddingService embeddingService) {
+    public VectorStoreService(VectorStoreRepository vectorStoreRepository,
+                              EmbeddingService embeddingService,
+                              RagRetrievalLogService ragRetrievalLogService) {
         this.vectorStoreRepository = vectorStoreRepository;
         this.embeddingService = embeddingService;
+        this.ragRetrievalLogService = ragRetrievalLogService;
     }
 
     @PostConstruct
@@ -56,7 +71,12 @@ public class VectorStoreService {
         indexLock.writeLock().lock();
         try {
             List<VectorStore> allVectors = vectorStoreRepository.findAll();
+            vectorIndex.clear();
+            indexEntries.clear();
             for (VectorStore vs : allVectors) {
+                if (vs.getId() == null) {
+                    continue;
+                }
                 float[] vector = deserializeVector(vs.getVector());
                 if (vector.length > 0) {
                     int idx = vs.getId().intValue();
@@ -64,11 +84,18 @@ public class VectorStoreService {
                         vectorIndex.add(null);
                     }
                     vectorIndex.set(idx, vector);
-                    indexToContent.put(idx, vs.getContent());
+                    indexEntries.put(idx, new IndexEntry(
+                            vs.getDocumentId(),
+                            vs.getContent(),
+                            vs.getUserId(),
+                            vs.getConversationId(),
+                            vs.getSourceId(),
+                            vs.getMetadataJson()
+                    ));
                 }
             }
             indexReady.set(true);
-            logger.info("Vector index loaded with {} vectors", indexToContent.size());
+            logger.info("Vector index loaded with {} vectors", indexEntries.size());
         } catch (Exception e) {
             logger.error("Failed to load vector index from SQLite", e);
             indexReady.set(false);
@@ -78,12 +105,18 @@ public class VectorStoreService {
     }
 
     public void saveMessage(String conversationId, String userMessage, String assistantReply) {
+        saveMessage(null, conversationId, userMessage, assistantReply);
+    }
+
+    /**
+     * 保存一轮对话的向量记忆，显式带用户身份，避免不同用户之间互相检索。
+     */
+    public void saveMessage(String userId, String conversationId, String userMessage, String assistantReply) {
         try {
-            logger.info("[VectorStore] saveMessage start, conversationId: {}, content length: {}", conversationId, (userMessage + assistantReply).length());
+            logger.info("[VectorStore] saveMessage start, userId: {}, conversationId: {}, content length: {}",
+                    userId, conversationId, (userMessage + assistantReply).length());
             String combinedContent = "用户: " + userMessage + "\n助手: " + assistantReply;
-            logger.info("[VectorStore] Calling embed() for content: {} chars", combinedContent.length());
             float[] embedding = embeddingService.embed(combinedContent);
-            logger.info("[VectorStore] embed() returned, vector dim: {}", embedding.length);
 
             if (embedding.length == 0) {
                 logger.warn("[VectorStore] Embedding is empty, skipping save");
@@ -92,18 +125,18 @@ public class VectorStoreService {
 
             String docId = UUID.randomUUID().toString();
             byte[] vectorBytes = serializeVector(embedding);
-            logger.info("[VectorStore] Serialized vector to {} bytes", vectorBytes.length);
 
             VectorStore vs = new VectorStore(docId, combinedContent, vectorBytes);
+            vs.setUserId(userId);
             vs.setConversationId(conversationId);
             VectorStore saved = vectorStoreRepository.save(vs);
-            logger.info("[VectorStore] Saved to DB, id: {}", saved.getId());
 
             if (saved.getId() != null) {
-                addToIndex(saved.getId().intValue(), combinedContent, embedding);
-                logger.info("[VectorStore] Index updated for rowId: {}, vector dim: {}", saved.getId(), embedding.length);
+                addToIndex(saved.getId().intValue(), combinedContent, embedding,
+                        saved.getDocumentId(), userId, conversationId, null, null);
+                logger.info("[VectorStore] Saved message vector, rowId: {}, userId: {}, conversationId: {}",
+                        saved.getId(), userId, conversationId);
             }
-
         } catch (Exception e) {
             logger.error("[VectorStore] Failed to save vector, cause: {}", e.getMessage(), e);
         }
@@ -131,156 +164,227 @@ public class VectorStoreService {
             VectorStore saved = vectorStoreRepository.save(vectorStore);
 
             if (saved.getId() != null) {
-                addToIndex(saved.getId().intValue(), content, embedding);
-                logger.info("Saved document vector, sourceId: {}, docId: {}, rowId: {}, vector dim: {}", 
-                    sourceId, docId, saved.getId(), embedding.length);
+                addToIndex(saved.getId().intValue(), content, embedding,
+                        saved.getDocumentId(), null, null, sourceId, saved.getMetadataJson());
+                logger.info("Saved public knowledge vector, sourceId: {}, docId: {}, rowId: {}, vector dim: {}",
+                        sourceId, docId, saved.getId(), embedding.length);
             }
-
         } catch (Exception e) {
             logger.error("Failed to save document vector to SQLite", e);
         }
     }
 
     public synchronized void addToIndex(int rowId, String content, float[] vector) {
+        addToIndex(rowId, content, vector, null, null, null, null, null);
+    }
+
+    public void addToIndex(int rowId, String content, float[] vector,
+                           String documentId, String userId, String conversationId,
+                           String sourceId, String metadataJson) {
         indexLock.writeLock().lock();
         try {
             while (vectorIndex.size() <= rowId) {
                 vectorIndex.add(null);
             }
             vectorIndex.set(rowId, vector);
-            indexToContent.put(rowId, content);
+            indexEntries.put(rowId, new IndexEntry(
+                    documentId, content, userId, conversationId, sourceId, metadataJson));
         } finally {
             indexLock.writeLock().unlock();
         }
     }
 
     public List<String> searchSimilar(String query) {
-        return searchSimilar(query, null);
+        return searchSimilar(query, null, null);
     }
 
     public List<String> searchSimilar(String query, String conversationId) {
-        indexLock.readLock().lock();
-        try {
-            if (!indexReady.get()) {
-                logger.warn("Vector index not ready");
-                return List.of();
-            }
+        return searchSimilar(query, null, conversationId);
+    }
 
-            float[] queryEmbedding = embeddingService.embed(query);
-            if (queryEmbedding.length == 0) {
-                logger.warn("Query embedding is empty");
-                return List.of();
-            }
-
-            List<SimilarityResult> similarityResults = new ArrayList<>();
-
-            for (int i = 0; i < vectorIndex.size(); i++) {
-                float[] storedVector = vectorIndex.get(i);
-                if (storedVector == null) {
-                    continue;
-                }
-
-                if (storedVector.length != queryEmbedding.length) {
-                    continue;
-                }
-
-                double similarity = cosineSimilarity(queryEmbedding, storedVector);
-                if (similarity >= similarityThreshold) {
-                    similarityResults.add(new SimilarityResult(similarity, indexToContent.get(i)));
-                }
-            }
-
-            similarityResults.sort((a, b) -> Double.compare(b.similarity, a.similarity));
-
-            List<String> results = new ArrayList<>();
-            int count = 0;
-            for (SimilarityResult sr : similarityResults) {
-                if (count >= topK) {
-                    break;
-                }
-                results.add(sr.content);
-                count++;
-            }
-
-            logger.info("Search found {} results (top {} requested)", results.size(), topK);
-            return results;
-
-        } catch (Exception e) {
-            logger.error("Failed to search vector", e);
-            return List.of();
-        } finally {
-            indexLock.readLock().unlock();
+    public List<String> searchSimilar(String query, String userId, String conversationId) {
+        List<SearchResult> results = searchInternal(query, userId, conversationId);
+        List<String> contents = new ArrayList<>(results.size());
+        for (SearchResult result : results) {
+            contents.add(result.getContent());
         }
+        return contents;
     }
 
     public List<SearchResult> searchSimilarWithMetadata(String query) {
-        return searchSimilarWithMetadata(query, null);
+        return searchSimilarWithMetadata(query, null, null);
     }
 
     public List<SearchResult> searchSimilarWithMetadata(String query, String conversationId) {
-        indexLock.readLock().lock();
+        return searchSimilarWithMetadata(query, null, conversationId);
+    }
+
+    public List<SearchResult> searchSimilarWithMetadata(String query, String userId, String conversationId) {
+        return searchInternal(query, userId, conversationId);
+    }
+
+    private List<SearchResult> searchInternal(String query, String userId, String conversationId) {
+        long startNanos = System.nanoTime();
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+        List<SearchResult> results = new ArrayList<>();
         try {
-            if (!indexReady.get()) {
-                logger.warn("Vector index not ready");
-                return List.of();
-            }
-
-            float[] queryEmbedding = embeddingService.embed(query);
-            if (queryEmbedding.length == 0) {
-                logger.warn("Query embedding is empty");
-                return List.of();
-            }
-
-            List<VectorStore> allVectors;
-            if (conversationId != null && !conversationId.isEmpty()) {
-                allVectors = vectorStoreRepository.findByConversationId(conversationId);
-            } else {
-                allVectors = vectorStoreRepository.findAll();
-            }
-
-            List<SearchResult> similarityResults = new ArrayList<>();
-            for (VectorStore vs : allVectors) {
-                float[] storedVector = deserializeVector(vs.getVector());
-                if (storedVector.length != queryEmbedding.length) {
-                    continue;
-                }
-
-                double similarity = cosineSimilarity(queryEmbedding, storedVector);
-                if (similarity >= similarityThreshold) {
-                    JSONObject metadata = null;
-                    if (vs.getMetadataJson() != null && !vs.getMetadataJson().isEmpty()) {
-                        metadata = JSON.parseObject(vs.getMetadataJson());
+            indexLock.readLock().lock();
+            try {
+                if (!indexReady.get()) {
+                    logger.warn("[RAG] Vector index not ready, traceId: {}", traceId);
+                } else if (query == null || query.isBlank()) {
+                    logger.debug("[RAG] Empty query, traceId: {}", traceId);
+                } else {
+                    float[] queryEmbedding = embeddingService.embed(query);
+                    if (queryEmbedding.length == 0) {
+                        logger.warn("[RAG] Query embedding is empty, traceId: {}", traceId);
+                    } else {
+                        collectSimilar(queryEmbedding, userId, conversationId, results);
                     }
-                    similarityResults.add(new SearchResult(
-                        vs.getDocumentId(),
-                        vs.getSourceId(),
-                        vs.getContent(),
-                        similarity,
-                        metadata
-                    ));
                 }
+            } finally {
+                indexLock.readLock().unlock();
             }
 
-            similarityResults.sort((a, b) -> Double.compare(b.similarity, a.similarity));
-
-            List<SearchResult> results = new ArrayList<>();
-            int count = 0;
-            for (SearchResult sr : similarityResults) {
-                if (count >= topK) {
-                    break;
-                }
-                results.add(sr);
-                count++;
+            results.sort((a, b) -> Double.compare(b.getSimilarity(), a.getSimilarity()));
+            if (results.size() > topK) {
+                results = new ArrayList<>(results.subList(0, topK));
             }
-
-            logger.info("Search found {} results with metadata (top {} requested)", results.size(), topK);
-            return results;
-
+            logger.info("[RAG] traceId={}, userId={}, conversationId={}, retrieved={}, topK={}",
+                    traceId, userId, conversationId, results.size(), topK);
         } catch (Exception e) {
-            logger.error("Failed to search vector with metadata", e);
-            return List.of();
+            logger.error("[RAG] Vector search failed, traceId: {}", traceId, e);
+            results = new ArrayList<>();
         } finally {
-            indexLock.readLock().unlock();
+            long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
+            recordRetrievalLog(traceId, userId, conversationId, query, results, durationMs);
+        }
+        return results;
+    }
+
+    private void collectSimilar(float[] queryEmbedding, String userId, String conversationId,
+                                List<SearchResult> results) {
+        for (Map.Entry<Integer, IndexEntry> entry : indexEntries.entrySet()) {
+            int rowId = entry.getKey();
+            IndexEntry indexEntry = entry.getValue();
+            if (indexEntry == null || !isVisible(indexEntry, userId, conversationId)) {
+                continue;
+            }
+            if (rowId < 0 || rowId >= vectorIndex.size()) {
+                continue;
+            }
+            float[] storedVector = vectorIndex.get(rowId);
+            if (storedVector == null || storedVector.length != queryEmbedding.length) {
+                continue;
+            }
+            double similarity = cosineSimilarity(queryEmbedding, storedVector);
+            if (similarity >= similarityThreshold) {
+                JSONObject metadata = null;
+                if (indexEntry.metadataJson != null && !indexEntry.metadataJson.isEmpty()) {
+                    metadata = JSON.parseObject(indexEntry.metadataJson);
+                }
+                results.add(new SearchResult(
+                        indexEntry.documentId,
+                        indexEntry.sourceId,
+                        indexEntry.content,
+                        similarity,
+                        metadata,
+                        isPublicKnowledge(indexEntry) ? ORIGIN_PUBLIC_KB : ORIGIN_CONVERSATION
+                ));
+            }
+        }
+    }
+
+    /**
+     * 可见性规则：
+     * 1. 公共知识库（有 sourceId 且无 conversationId）对所有用户可见；
+     * 2. 对话记忆必须命中当前会话；
+     * 3. 只返回匹配 userId 的对话记忆，未携带用户身份时默认拒绝会话记忆。
+     */
+    private boolean isVisible(IndexEntry entry, String userId, String conversationId) {
+        if (isPublicKnowledge(entry)) {
+            return true;
+        }
+        if (userId == null || userId.isEmpty() || conversationId == null || conversationId.isEmpty()) {
+            return false;
+        }
+        if (!conversationId.equals(entry.conversationId)) {
+            return false;
+        }
+        return userId.equals(entry.userId);
+    }
+
+    private boolean isPublicKnowledge(IndexEntry entry) {
+        return entry.sourceId != null && !entry.sourceId.isEmpty()
+                && (entry.conversationId == null || entry.conversationId.isEmpty());
+    }
+
+    private void recordRetrievalLog(String traceId, String userId, String conversationId,
+                                    String query, List<SearchResult> results, long durationMs) {
+        try {
+            JSONArray array = new JSONArray();
+            for (SearchResult result : results) {
+                JSONObject item = new JSONObject();
+                item.put("documentId", result.getDocumentId());
+                item.put("sourceId", result.getSourceId());
+                item.put("similarity", Math.round(result.getSimilarity() * 10000.0) / 10000.0);
+                item.put("origin", result.getOrigin());
+                array.add(item);
+            }
+            ragRetrievalLogService.record(
+                    traceId,
+                    userId,
+                    conversationId,
+                    sha256(query),
+                    resolveScope(results),
+                    topK,
+                    similarityThreshold,
+                    results.size(),
+                    durationMs,
+                    array.toJSONString()
+            );
+        } catch (Exception e) {
+            logger.warn("[RAG] Failed to build retrieval log, traceId: {}, cause: {}", traceId, e.getMessage());
+        }
+    }
+
+    private String resolveScope(List<SearchResult> results) {
+        boolean hasPublic = false;
+        boolean hasConversation = false;
+        for (SearchResult result : results) {
+            if (ORIGIN_PUBLIC_KB.equals(result.getOrigin())) {
+                hasPublic = true;
+            } else if (ORIGIN_CONVERSATION.equals(result.getOrigin())) {
+                hasConversation = true;
+            }
+        }
+        if (hasPublic && hasConversation) {
+            return "mixed";
+        }
+        if (hasPublic) {
+            return "public_only";
+        }
+        if (hasConversation) {
+            return "conversation";
+        }
+        return "none";
+    }
+
+    private String sha256(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (Exception e) {
+            logger.warn("[RAG] Failed to hash query: {}", e.getMessage());
+            return null;
         }
     }
 
@@ -347,13 +451,14 @@ public class VectorStoreService {
     }
 
     /**
-     * 列出知识库文档（按 sourceId 分组，仅统计显式入库的文档，跳过对话向量）。
+     * 列出公共知识库文档（按 sourceId 分组，跳过对话向量）。
      */
     public List<Map<String, Object>> listDocuments() {
         List<VectorStore> all = vectorStoreRepository.findAll();
         Map<String, Map<String, Object>> grouped = new LinkedHashMap<>();
         for (VectorStore vs : all) {
-            if (vs.getSourceId() == null || vs.getSourceId().isEmpty()) {
+            if (vs.getSourceId() == null || vs.getSourceId().isEmpty()
+                    || (vs.getConversationId() != null && !vs.getConversationId().isEmpty())) {
                 continue;
             }
             Map<String, Object> g = grouped.computeIfAbsent(vs.getSourceId(), k -> {
@@ -376,20 +481,29 @@ public class VectorStoreService {
     }
 
     public long countVectors() {
-        return indexToContent.size();
+        return indexEntries.size();
     }
 
     public long countVectorsBySource(String sourceId) {
         return vectorStoreRepository.countBySourceId(sourceId);
     }
 
-    private static class SimilarityResult {
-        final double similarity;
+    private static class IndexEntry {
+        final String documentId;
         final String content;
+        final String userId;
+        final String conversationId;
+        final String sourceId;
+        final String metadataJson;
 
-        SimilarityResult(double similarity, String content) {
-            this.similarity = similarity;
+        IndexEntry(String documentId, String content, String userId, String conversationId,
+                   String sourceId, String metadataJson) {
+            this.documentId = documentId;
             this.content = content;
+            this.userId = userId;
+            this.conversationId = conversationId;
+            this.sourceId = sourceId;
+            this.metadataJson = metadataJson;
         }
     }
 
@@ -399,13 +513,20 @@ public class VectorStoreService {
         private final String content;
         private final double similarity;
         private final JSONObject metadata;
+        private final String origin;
 
         public SearchResult(String documentId, String sourceId, String content, double similarity, JSONObject metadata) {
+            this(documentId, sourceId, content, similarity, metadata, null);
+        }
+
+        public SearchResult(String documentId, String sourceId, String content, double similarity,
+                            JSONObject metadata, String origin) {
             this.documentId = documentId;
             this.sourceId = sourceId;
             this.content = content;
             this.similarity = similarity;
             this.metadata = metadata;
+            this.origin = origin;
         }
 
         public String getDocumentId() {
@@ -426,6 +547,10 @@ public class VectorStoreService {
 
         public JSONObject getMetadata() {
             return metadata;
+        }
+
+        public String getOrigin() {
+            return origin;
         }
     }
 }

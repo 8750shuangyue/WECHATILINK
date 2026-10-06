@@ -12,8 +12,11 @@ public interface VectorStoreRepository extends JpaRepository<VectorStore, Long> 
     Optional<VectorStore> findByDocumentId(String documentId);
     List<VectorStore> findBySourceId(String sourceId);
     List<VectorStore> findByConversationId(String conversationId);
+    List<VectorStore> findByUserIdAndConversationId(String userId, String conversationId);
+    List<VectorStore> findByConversationIdAndUserIdIsNull(String conversationId);
     void deleteByDocumentId(String documentId);
     void deleteBySourceId(String sourceId);
     void deleteByConversationId(String conversationId);
+    void deleteByUserIdAndConversationId(String userId, String conversationId);
     long countBySourceId(String sourceId);
 }

@@ -217,6 +217,11 @@ public class AgentService {
     }
     
     public AgentResult runAgent(String conversationId, String userMessage, String fileInfo, ProgressCallback progressCallback) {
+        return runAgent(null, conversationId, userMessage, fileInfo, progressCallback);
+    }
+
+    public AgentResult runAgent(String userId, String conversationId, String userMessage,
+                                String fileInfo, ProgressCallback progressCallback) {
         logger.info("Running agent, conversationId: {}, messageLen: {}, hasFile: {}", 
                 conversationId, userMessage != null ? userMessage.length() : 0, fileInfo != null);
 
@@ -245,7 +250,7 @@ public class AgentService {
         try {
             future = CompletableFuture.supplyAsync(() -> {
                 try {
-                    return executeAgentLoop(conversationId, userMessage, fileInfo);
+                    return executeAgentLoop(userId, conversationId, userMessage, fileInfo);
                 } catch (Exception e) {
                     logger.error("Agent execution failed", e);
                     return AgentResult.failure(exceptionHandler.handleException(e));
@@ -276,14 +281,14 @@ public class AgentService {
         }
     }
 
-    private AgentResult executeAgentLoop(String conversationId, String userMessage, String fileInfo) throws Exception {
+    private AgentResult executeAgentLoop(String userId, String conversationId, String userMessage, String fileInfo) throws Exception {
         String effectiveMessage = userMessage;
         if (fileInfo != null && !fileInfo.isEmpty()) {
             effectiveMessage = "用户上传了文件：" + fileInfo + "\n\n用户问题：" + (userMessage != null ? userMessage : "请分析这个文件");
         }
         logger.info("Effective message: {}", effectiveMessage.length() > 100 ? effectiveMessage.substring(0, 100) + "..." : effectiveMessage);
 
-        JSONArray messages = buildContextMessages(conversationId, effectiveMessage);
+        JSONArray messages = buildContextMessages(userId, conversationId, effectiveMessage);
         
         JSONArray tools = buildToolsSchema();
         
@@ -369,7 +374,7 @@ public class AgentService {
                         
                         String resultText;
                         if (result.isSuccess()) {
-                            resultText = processSuccessfulToolResult(task, result, conversationId, userMessage,
+                            resultText = processSuccessfulToolResult(task, result, userId, conversationId, userMessage,
                                     messages, lastImageRef, lastAudioRef, lastTextRef);
                         } else {
                             resultText = result.getMessage();
@@ -387,19 +392,19 @@ public class AgentService {
                         
                         if (iteration == 1 && shouldUseToolDirectly(userMessage, reply)) {
                             logger.info("LLM didn't call tool but message is tool-related, trying direct tool call");
-                            AgentResult toolResult = tryDirectToolCall(conversationId, userMessage);
+                            AgentResult toolResult = tryDirectToolCall(userId, conversationId, userMessage);
                             if (toolResult.isSuccess()) {
                                 return toolResult;
                             }
                         }
                         
-                        AgentResult parsedToolResult = tryParseNaturalLanguageToolCall(conversationId, filteredReply);
+                        AgentResult parsedToolResult = tryParseNaturalLanguageToolCall(userId, conversationId, filteredReply);
                         if (parsedToolResult.isSuccess()) {
                             return parsedToolResult;
                         }
                         
                         lastTextRef[0] = filteredReply;
-                        chatMemoryService.saveMessagePair(conversationId, userMessage, filteredReply);
+                        chatMemoryService.saveMessagePair(userId, conversationId, userMessage, filteredReply);
                         
                         boolean needsImage = userMessage != null && (userMessage.contains("画") || userMessage.contains("生成图片") || 
                                 userMessage.contains("生成一张") || userMessage.contains("画图") || userMessage.contains("画一张")) &&
@@ -619,8 +624,8 @@ public class AgentService {
         }
     }
     
-    private String processSuccessfulToolResult(ToolCallTask task, ToolResult<?> result, 
-                                                 String conversationId, String userMessage,
+    private String processSuccessfulToolResult(ToolCallTask task, ToolResult<?> result,
+                                                 String userId, String conversationId, String userMessage,
                                                  JSONArray messages, final String[] lastImageRef,
                                                  final String[] lastAudioRef, final String[] lastTextRef) {
         String toolName = task.toolName();
@@ -628,7 +633,7 @@ public class AgentService {
         
         if ("synthesizeSpeech".equals(toolName) && result.getData() instanceof String) {
             lastAudioRef[0] = (String) result.getData();
-            chatMemoryService.saveMessagePair(conversationId, userMessage, "语音合成完成");
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage, "语音合成完成");
             return "语音合成完成";
         }
         
@@ -640,7 +645,7 @@ public class AgentService {
             if (imageStyle != null && !imageStyle.isEmpty()) {
                 imageDesc += "，风格：" + imageStyle;
             }
-            chatMemoryService.saveMessagePair(conversationId, userMessage, imageDesc);
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage, imageDesc);
             return "图片生成成功";
         }
         
@@ -650,14 +655,15 @@ public class AgentService {
             if (editPrompt == null) {
                 editPrompt = arguments.getString("description");
             }
-            chatMemoryService.saveMessagePair(conversationId, userMessage, "已编辑图片：" + (editPrompt != null ? editPrompt : ""));
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage,
+                    "已编辑图片：" + (editPrompt != null ? editPrompt : ""));
             return "图片编辑成功";
         }
         
         if ("analyzeImage".equals(toolName) && result.getData() instanceof String) {
             String text = (String) result.getData();
             lastTextRef[0] = text;
-            chatMemoryService.saveMessagePair(conversationId, userMessage, text);
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage, text);
             return text;
         }
         
@@ -666,7 +672,7 @@ public class AgentService {
         if ("analyzeFile".equals(toolName) || "getWeather".equals(toolName) 
                 || "searchNearbyService".equals(toolName)) {
             lastTextRef[0] = resultText;
-            chatMemoryService.saveMessagePair(conversationId, userMessage, resultText);
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage, resultText);
         }
         
         if ("getWeather".equals(toolName)) {
@@ -692,7 +698,8 @@ public class AgentService {
                         if (imageResult.isSuccess() && imageResult.getData() instanceof String) {
                             lastImageRef[0] = (String) imageResult.getData();
                             messages.add(createToolMessage("auto", "generateImage", "图片生成成功"));
-                            chatMemoryService.saveMessagePair(conversationId, userMessage, "已生成图片：" + imagePrompt);
+                            chatMemoryService.saveMessagePair(userId, conversationId, userMessage,
+                                    "已生成图片：" + imagePrompt);
                         }
                     } catch (Exception e) {
                         logger.error("Auto generateImage after weather failed", e);
@@ -746,13 +753,13 @@ public class AgentService {
         return "****";
     }
     
-    private JSONArray buildContextMessages(String conversationId, String userMessage) {
+    private JSONArray buildContextMessages(String userId, String conversationId, String userMessage) {
         JSONArray messages = new JSONArray();
         
         StringBuilder systemContent = new StringBuilder();
         systemContent.append(SYSTEM_PROMPT);
         
-        List<String> ragResults = searchRagKnowledge(userMessage, conversationId);
+        List<String> ragResults = searchRagKnowledge(userId, userMessage, conversationId);
         if (!ragResults.isEmpty()) {
             systemContent.append("\n\n# RAG知识库检索结果\n");
             systemContent.append("根据您的提问，从知识库中检索到以下相关信息，供您参考：\n");
@@ -828,13 +835,13 @@ public class AgentService {
         return messages;
     }
     
-    private List<String> searchRagKnowledge(String query, String conversationId) {
+    private List<String> searchRagKnowledge(String userId, String query, String conversationId) {
         try {
             if (query == null || query.isEmpty()) {
                 return List.of();
             }
             
-            List<String> results = vectorStoreService.searchSimilar(query, conversationId);
+            List<String> results = vectorStoreService.searchSimilar(query, userId, conversationId);
             logger.info("RAG search completed, query: '{}', results: {}", 
                     query.length() > 50 ? query.substring(0, 50) + "..." : query, results.size());
             
@@ -962,7 +969,7 @@ public class AgentService {
         return isWeatherRequest && llmSaysCantDoIt;
     }
 
-    private AgentResult tryDirectToolCall(String conversationId, String userMessage) {
+    private AgentResult tryDirectToolCall(String userId, String conversationId, String userMessage) {
         try {
             BaseTool weatherTool = toolRegistry.get("getWeather");
             if (weatherTool != null) {
@@ -975,7 +982,7 @@ public class AgentService {
                     
                     if (result.isSuccess()) {
                         String reply = "根据实时数据，" + formatToolResult(result.getData());
-                        chatMemoryService.saveMessagePair(conversationId, userMessage, reply);
+                        chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
                         return AgentResult.success(reply);
                     }
                 }
@@ -990,7 +997,7 @@ public class AgentService {
                 
                 if (result.isSuccess()) {
                     String reply = formatToolResult(result.getData());
-                    chatMemoryService.saveMessagePair(conversationId, userMessage, reply);
+                    chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
                     return AgentResult.success(reply);
                 }
             }
@@ -1021,7 +1028,7 @@ public class AgentService {
         return null;
     }
     
-    private AgentResult tryParseNaturalLanguageToolCall(String conversationId, String reply) {
+    private AgentResult tryParseNaturalLanguageToolCall(String userId, String conversationId, String reply) {
         if (reply == null || reply.isEmpty()) {
             return AgentResult.failure("");
         }
@@ -1061,24 +1068,24 @@ public class AgentService {
                     if (result.isSuccess()) {
                         if ("synthesizeSpeech".equals(toolName) && result.getData() instanceof String) {
                             String audioFilePath = (String) result.getData();
-                            chatMemoryService.saveMessagePair(conversationId, "语音合成", "语音合成完成");
+                            chatMemoryService.saveMessagePair(userId, conversationId, "语音合成", "语音合成完成");
                             return AgentResult.successWithAudio("语音合成完成", audioFilePath);
                         }
                         
                         if ("generateImage".equals(toolName) && result.getData() instanceof String) {
                             String imageFilePath = (String) result.getData();
-                            chatMemoryService.saveMessagePair(conversationId, "图片生成", "图片生成完成");
+                            chatMemoryService.saveMessagePair(userId, conversationId, "图片生成", "图片生成完成");
                             return AgentResult.successWithImage("图片生成完成", imageFilePath);
                         }
                         
                         if ("editImage".equals(toolName) && result.getData() instanceof String) {
                             String imageFilePath = (String) result.getData();
-                            chatMemoryService.saveMessagePair(conversationId, "图片编辑", "图片编辑完成");
+                            chatMemoryService.saveMessagePair(userId, conversationId, "图片编辑", "图片编辑完成");
                             return AgentResult.successWithImage("图片编辑完成", imageFilePath);
                         }
                         
                         String resultText = formatToolResult(result.getData());
-                        chatMemoryService.saveMessagePair(conversationId, "工具调用", resultText);
+                        chatMemoryService.saveMessagePair(userId, conversationId, "工具调用", resultText);
                         return AgentResult.success(resultText);
                     } else {
                         logger.warn("Tool execution failed: {}", result.getMessage());

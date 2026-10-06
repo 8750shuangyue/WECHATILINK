@@ -38,15 +38,19 @@ class AiControllerSessionTest {
                 llmService
         );
         MockHttpSession firstSession = new MockHttpSession();
+        firstSession.setAttribute("user", "user-a");
         MockHttpSession secondSession = new MockHttpSession();
+        secondSession.setAttribute("user", "user-b");
 
         controller.chatStream(Map.of("message", "first"), firstSession);
         controller.chatStream(Map.of("message", "second"), firstSession);
         controller.chatStream(Map.of("message", "third"), secondSession);
 
+        ArgumentCaptor<String> userIds = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> conversationIds = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> messages = ArgumentCaptor.forClass(String.class);
         verify(llmService, timeout(2_000).times(3)).chatStream(
+                userIds.capture(),
                 conversationIds.capture(),
                 messages.capture(),
                 isNull(),
@@ -58,8 +62,15 @@ class AiControllerSessionTest {
                 messages.getAllValues(),
                 conversationIds.getAllValues()
         );
+        Map<String, String> userByMessage = zipToMap(
+                messages.getAllValues(),
+                userIds.getAllValues()
+        );
         assertEquals(conversationByMessage.get("first"), conversationByMessage.get("second"));
         assertNotEquals(conversationByMessage.get("first"), conversationByMessage.get("third"));
+        assertEquals("user-a", userByMessage.get("first"));
+        assertEquals("user-a", userByMessage.get("second"));
+        assertEquals("user-b", userByMessage.get("third"));
     }
 
     private Map<String, String> zipToMap(List<String> keys, List<String> values) {

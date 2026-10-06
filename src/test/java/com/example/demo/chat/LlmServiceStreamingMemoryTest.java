@@ -79,6 +79,7 @@ class LlmServiceStreamingMemoryTest {
         AtomicBoolean done = new AtomicBoolean(false);
 
         service.chatStream(
+                "user-a",
                 "conversation-a",
                 "What is my dog's name and age?",
                 "Be concise.",
@@ -94,6 +95,7 @@ class LlmServiceStreamingMemoryTest {
         );
         assertEquals(List.of("Doudou", " is 5."), tokens);
         verify(memoryService).saveMessagePair(
+                "user-a",
                 "conversation-a",
                 "What is my dog's name and age?",
                 "Doudou is 5."
@@ -120,6 +122,7 @@ class LlmServiceStreamingMemoryTest {
         assertThrows(
                 IOException.class,
                 () -> service.chatStream(
+                        "user-a",
                         "conversation-a",
                         "What is my dog's name?",
                         null,
@@ -131,6 +134,7 @@ class LlmServiceStreamingMemoryTest {
         );
 
         verify(memoryService, never()).saveMessagePair(
+                "user-a",
                 "conversation-a",
                 "What is my dog's name?",
                 "Doudou"

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Table(name = "vector_store", indexes = {
     @Index(name = "idx_source_id", columnList = "source_id"),
     @Index(name = "idx_conversation_id", columnList = "conversation_id"),
+    @Index(name = "idx_user_id", columnList = "user_id"),
     @Index(name = "idx_timestamp", columnList = "timestamp")
 })
 public class VectorStore {
@@ -32,6 +33,9 @@ public class VectorStore {
 
     @Column(name = "conversation_id", length = 255)
     private String conversationId;
+
+    @Column(name = "user_id", length = 100)
+    private String userId;
 
     @Column(name = "timestamp")
     private LocalDateTime timestamp;
@@ -101,6 +105,14 @@ public class VectorStore {
 
     public void setConversationId(String conversationId) {
         this.conversationId = conversationId;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public LocalDateTime getTimestamp() {

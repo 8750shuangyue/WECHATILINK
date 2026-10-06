@@ -34,15 +34,16 @@ public class AiController {
     private final LlmService llmService;
 
     @PostMapping("/chat")
-    public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, String> request, HttpSession session) {
         String message = request.get("message");
         String systemPrompt = request.get("systemPrompt");
+        String userId = (String) session.getAttribute("user");
         
         log.info("AI chat request: message={}", message != null && message.length() > 50 ? message.substring(0, 50) + "..." : message);
         
         Map<String, Object> response = new HashMap<>();
         try {
-            String result = springAiChatService.chat(message, systemPrompt);
+            String result = springAiChatService.chat(userId, message, systemPrompt, null);
             response.put("success", true);
             response.put("content", result);
         } catch (Exception e) {
@@ -58,10 +59,11 @@ public class AiController {
         String message = request.get("message");
         String systemPrompt = request.get("systemPrompt");
         String conversationId = getOrCreateConversationId(session);
+        String userId = (String) session.getAttribute("user");
         SseEmitter emitter = new SseEmitter(120000L);
         CompletableFuture.runAsync(() -> {
             try {
-                llmService.chatStream(conversationId, message, systemPrompt,
+                llmService.chatStream(userId, conversationId, message, systemPrompt,
                         token -> {
                             try {
                                 emitter.send(SseEmitter.event().data(token));

@@ -189,11 +189,15 @@ public class ChatMemoryService {
     }
 
     public void saveMessagePair(String conversationId, String userMessage, String assistantReply) {
+        saveMessagePair(null, conversationId, userMessage, assistantReply);
+    }
+
+    public void saveMessagePair(String userId, String conversationId, String userMessage, String assistantReply) {
         repository.addMessage(conversationId, new ChatMessage(USER_ROLE, userMessage));
         repository.addMessage(conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
-        logger.debug("Saved message pair for conversation: {}", conversationId);
+        logger.debug("Saved message pair for user: {}, conversation: {}", userId, conversationId);
         
-        eventPublisher.publishEvent(new VectorSaveEvent(conversationId, userMessage, assistantReply));
+        eventPublisher.publishEvent(new VectorSaveEvent(userId, conversationId, userMessage, assistantReply));
         eventPublisher.publishEvent(new SummaryUpdateEvent(conversationId));
     }
 

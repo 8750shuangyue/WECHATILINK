@@ -76,8 +76,12 @@ public class SpringAiChatService {
     }
 
     public String chat(String userMessage, String systemPrompt, String conversationId) {
-        log.info("Spring AI chat called, userMessage: {}, conversationId: {}", 
-                userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage, conversationId);
+        return chat(null, userMessage, systemPrompt, conversationId);
+    }
+
+    public String chat(String userId, String userMessage, String systemPrompt, String conversationId) {
+        log.info("Spring AI chat called, userId: {}, userMessage: {}, conversationId: {}",
+                userId, userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage, conversationId);
 
         List<Message> messages = new ArrayList<>();
 
@@ -85,7 +89,7 @@ public class SpringAiChatService {
 
         if (conversationId != null && vectorStoreService != null) {
             try {
-                List<String> ragResults = vectorStoreService.searchSimilar(userMessage, conversationId);
+                List<String> ragResults = vectorStoreService.searchSimilar(userMessage, userId, conversationId);
                 if (!ragResults.isEmpty()) {
                     StringBuilder ragContext = new StringBuilder();
                     ragContext.append("\n\n# RAG知识库检索结果\n");

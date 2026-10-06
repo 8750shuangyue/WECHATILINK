@@ -28,7 +28,7 @@ public class MemoryEventListener {
     public void handleVectorSaveEvent(VectorSaveEvent event) {
         try {
             logger.debug("Processing VectorSaveEvent for conversation: {}", event.getConversationId());
-            vectorStoreService.saveMessage(event.getConversationId(), 
+            vectorStoreService.saveMessage(event.getUserId(), event.getConversationId(),
                     event.getUserMessage(), event.getAssistantReply());
             logger.debug("Vector saved successfully for conversation: {}", event.getConversationId());
         } catch (Exception e) {
