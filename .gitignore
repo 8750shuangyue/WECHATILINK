@@ -1,0 +1,50 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Runtime data & local state (never commit) ###
+uploads/
+tmp/
+login_state.json
+rag_knowledge.sqlite
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+query
+
+### Local secrets & config ###
+.env
+application-local.properties
+### Eval temp files ###
+eval/_*.py

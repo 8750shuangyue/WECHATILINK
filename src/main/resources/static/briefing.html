@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - 每日简报</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
+    <style>
+        :root {
+            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
+            --green-600:#1e8a50; --green-700:#126a3c; --amber:#f59e0b;
+            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
+            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
+            --shadow:0 10px 30px rgba(20,60,40,.1);
+            --radius:18px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+            color: var(--ink); min-height: 100vh;
+            background:
+                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
+                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
+                linear-gradient(165deg,#f7fbf8,#eef6f1);
+            background-attachment: fixed;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::selection { background: rgba(47,158,99,.22); }
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 28px; color: #fff;
+            background: linear-gradient(120deg,#10351f,#1b4a2f 55%,#1e5a3a);
+            box-shadow: 0 8px 26px rgba(10,40,22,.28);
+        }
+        .topbar-brand { font-weight: 800; letter-spacing: .4px; }
+        .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+        .topbar a { color: #fff; text-decoration: none; opacity: .9; }
+        .topbar a:hover { opacity: 1; }
+        main { max-width: 860px; margin: 32px auto 60px; padding: 0 20px; }
+        .page-title { font-size: 28px; font-weight: 800; color: var(--green-700); }
+        .page-sub { color: var(--ink-2); margin: 6px 0 24px; }
+        .actions { display: flex; gap: 10px; margin-bottom: 20px; }
+        .primary {
+            border: 0; border-radius: 11px; padding: 11px 20px;
+            font-size: 14px; font-weight: 700; color: #fff; cursor: pointer;
+            background: var(--grad); box-shadow: 0 8px 18px rgba(30,138,80,.26); transition: .2s;
+        }
+        .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(30,138,80,.34); }
+        .briefing-card {
+            background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+            padding: 28px; box-shadow: var(--shadow); white-space: pre-wrap;
+            line-height: 1.9; font-size: 15px;
+        }
+        .briefing-card .empty { color: var(--ink-2); text-align: center; padding: 40px 0; }
+        .loading-text { color: var(--ink-2); text-align: center; padding: 40px 0; }
+        @media (max-width: 860px) { .topbar { padding: 12px 16px; } }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div class="topbar-brand">🌅 每日简报</div>
+    <div class="topbar-right">
+        <span id="greeting"></span>
+        <a href="/home">返回首页</a>
+        <a href="javascript:logout()">退出</a>
+    </div>
+</header>
+
+<main>
+    <h1 class="page-title">每日简报</h1>
+    <p class="page-sub">结合今日天气、护理待办与养护知识，生成你的专属日报。</p>
+    <div class="actions">
+        <button class="primary" id="genBtn" onclick="generateBriefing()">生成简报</button>
+    </div>
+    <div class="briefing-card" id="briefingBox"><div class="empty">点击"生成简报"，为你生成今天的日报。</div></div>
+</main>
+
+<script>
+requireLogin(function (data) {
+    document.getElementById('greeting').textContent = '你好，' + data.userName;
+});
+
+async function generateBriefing() {
+    var box = document.getElementById('briefingBox');
+    var btn = document.getElementById('genBtn');
+    btn.disabled = true;
+    box.innerHTML = '<div class="loading-text">AI 正在生成日报…</div>';
+    try {
+        var res = await apiFetch('/api/briefing/generate', { method: 'POST' });
+        var x = await res.json();
+        if (x.code === 200 && x.data) {
+            box.innerHTML = escapeHtml(x.data).replace(/\n/g, '<br>');
+        } else {
+            box.innerHTML = '<div class="empty">生成失败：' + escapeHtml(x.message || '未知错误') + '</div>';
+        }
+    } catch (e) {
+        box.innerHTML = '<div class="empty">生成失败，请稍后重试</div>';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+}
+</script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
+</body>
+</html>

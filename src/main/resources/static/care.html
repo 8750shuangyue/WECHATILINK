@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>植物与宠物 AI 护理助手</title>
+    <style>
+        :root {
+            --green-50: #f2f9f4;
+            --green-100: #dff0e6;
+            --green-500: #2f9e63;
+            --green-600: #1e8a50;
+            --green-700: #126a3c;
+            --teal: #2a9d8f;
+            --ink: #1c2b22;
+            --ink-2: #5b6f63;
+            --ink-3: #93a49a;
+            --line: rgba(28, 60, 44, 0.1);
+            --grad: linear-gradient(135deg, #2f9e63, #1e8a50 55%, #2a9d8f);
+            --shadow: 0 10px 30px rgba(20, 60, 40, 0.1);
+            --shadow-sm: 0 2px 10px rgba(20, 60, 40, 0.06);
+            --radius: 18px;
+            --font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font);
+            color: var(--ink);
+            min-height: 100vh;
+            background:
+                radial-gradient(1000px 520px at 85% -10%, rgba(42, 157, 143, 0.14), transparent 60%),
+                radial-gradient(900px 480px at -10% 110%, rgba(47, 158, 99, 0.12), transparent 55%),
+                linear-gradient(165deg, #f7fbf8, #eef6f1);
+            background-attachment: fixed;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        ::selection { background: rgba(47, 158, 99, 0.22); }
+
+        /* ---- 顶栏 ---- */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 0 4%;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--line);
+            box-shadow: 0 4px 18px rgba(20, 60, 40, 0.06);
+        }
+
+        header h2 { margin: 0; font-size: 19px; font-weight: 800; color: var(--green-700); }
+
+        .tabs { display: flex; gap: 6px; }
+        .nav { display: flex; align-items: center; gap: 10px; }
+
+        .nav button, .tabs button {
+            border: 0;
+            background: transparent;
+            padding: 10px 18px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--ink-2);
+            transition: 0.2s;
+        }
+
+        .tabs button.active {
+            background: var(--grad);
+            color: #fff;
+            box-shadow: 0 6px 16px rgba(30, 138, 80, 0.3);
+        }
+
+        .tabs button:hover, .nav button:hover { background: var(--green-100); color: var(--green-600); }
+        .nav span { font-size: 13px; color: var(--ink-2); }
+
+        /* ---- 主体 ---- */
+        main { max-width: 1180px; margin: 28px auto 60px; padding: 0 20px; }
+
+        /* ---- Hero ---- */
+        .hero {
+            padding: 36px 38px;
+            border-radius: 26px;
+            background:
+                radial-gradient(600px 300px at 85% 10%, rgba(255, 255, 255, 0.12), transparent 60%),
+                linear-gradient(135deg, #14532d, #1e6b3c 55%, #2a9d8f);
+            display: grid;
+            grid-template-columns: 1.25fr 0.75fr;
+            gap: 28px;
+            align-items: center;
+            color: #fff;
+            box-shadow: 0 20px 50px rgba(20, 60, 40, 0.22);
+        }
+
+        .hero h1 { font-size: 30px; font-weight: 800; margin: 0 0 12px; }
+        .hero p { color: rgba(255, 255, 255, 0.85); line-height: 1.8; }
+
+        .upload {
+            border: 2px dashed rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 170px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.25s;
+        }
+
+        .upload:hover { background: rgba(255, 255, 255, 0.18); }
+        .upload input { display: none; }
+        .upload strong { display: block; font-size: 18px; margin: 7px; color: #fff; }
+        .upload .muted { color: rgba(255, 255, 255, 0.75); }
+
+        /* ---- 面板 ---- */
+        .grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 22px; margin-top: 22px; }
+
+        .panel {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .panel h3 { margin: 0 0 16px; font-size: 18px; font-weight: 700; color: var(--green-700); }
+        .panel h4 { margin: 16px 0 6px; font-size: 15px; color: var(--ink); }
+
+        .result {
+            background: var(--green-50);
+            border-left: 4px solid var(--green-500);
+            padding: 16px;
+            border-radius: 10px;
+            white-space: pre-wrap;
+            line-height: 1.7;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
+        /* ---- 表单 ---- */
+        input, select, textarea {
+            width: 100%;
+            border: 1.5px solid var(--line);
+            border-radius: 11px;
+            padding: 11px 14px;
+            margin: 6px 0 12px;
+            font: inherit;
+            font-size: 14px;
+            color: var(--ink);
+            background: #fbfdfc;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--green-500);
+            background: #fff;
+            box-shadow: 0 0 0 4px rgba(47, 158, 99, 0.12);
+        }
+
+        textarea { resize: vertical; }
+
+        /* ---- 按钮 ---- */
+        .primary, .minor, .danger {
+            border: 0;
+            border-radius: 11px;
+            padding: 11px 18px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            transition: 0.2s;
+        }
+
+        .primary { background: var(--grad); color: #fff; box-shadow: 0 8px 18px rgba(30, 138, 80, 0.26); }
+        .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(30, 138, 80, 0.34); }
+        .minor { background: var(--green-50); color: var(--green-700); border: 1px solid var(--green-100); }
+        .minor:hover { background: var(--green-100); }
+        .danger { background: #fff0f0; color: #b44848; }
+        .danger:hover { background: #fde3e3; }
+
+        /* ---- 档案卡片 ---- */
+        .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 18px;
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+            transition: 0.25s;
+        }
+        .card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: rgba(47, 158, 99, 0.35); }
+        .card h4 { margin: 0 0 8px; font-size: 16px; color: var(--ink); }
+
+        .muted { color: var(--ink-2); font-size: 13px; }
+        .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+        .records { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+        .record { padding: 9px 0; border-bottom: 1px dashed #dde8e0; font-size: 14px; }
+
+        .qa-row { display: flex; gap: 10px; align-items: flex-end; }
+        .qa-row textarea { margin: 0; }
+        .qa-row button { min-width: 90px; }
+
+        .loading { opacity: 0.55; pointer-events: none; }
+
+        /* ---- 响应式 ---- */
+        @media (max-width: 860px) {
+            .hero, .grid { grid-template-columns: 1fr; }
+            header { padding: 0 14px; }
+            .nav span { display: none; }
+            .tabs { overflow-x: auto; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * { transition: none !important; }
+        }
+    </style>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<header>
+    <h2>🌿🐾 AI 护理助手</h2>
+    <div class="tabs">
+        <button id="plantTab" class="active" onclick="switchType('PLANT')">植物护理</button>
+        <button id="petTab" onclick="switchType('PET')">宠物护理</button>
+        <button id="shopTab" onclick="location.href='/shop'">电商平台</button>
+    </div>
+    <div class="nav"><span id="userName"></span><button onclick="location.href='/home'">切换系统</button><button onclick="logout()">退出</button></div>
+</header>
+<main>
+    <section class="hero">
+        <div><h1 id="heroTitle">让每一株植物都被科学照顾</h1><p id="heroDesc">上传照片进行 AI 识别和状态诊断，建立专属档案，持续记录浇水、施肥与生长情况。助手会结合真实护理历史回答问题。</p></div>
+        <label class="upload" id="uploadBox"><input id="imageFile" type="file" accept="image/*" onchange="recognize(this.files[0])"><div><div style="font-size:38px">📷</div><strong id="uploadText">上传植物照片</strong><span class="muted">支持 JPG、PNG，识别后可保存档案</span></div></label>
+    </section>
+    <div class="grid">
+        <section class="panel">
+            <h3>AI 识别与诊断</h3>
+            <div id="emptyResult" class="muted">请先上传照片，识别结果会显示在这里。</div>
+            <div id="aiResult" style="display:none">
+                <div class="result" id="resultText"></div>
+                <h4>保存为档案</h4>
+                <input id="targetName" placeholder="给它取个名字">
+                <input id="species" placeholder="物种/品种">
+                <input id="breed" placeholder="细分品种（仅宠物）" style="display:none">
+                <button class="primary" onclick="saveTarget()">保存档案</button>
+            </div>
+        </section>
+        <section class="panel">
+            <h3>专属护理问答</h3>
+            <p class="muted">每次提问都会调用 AI 专业助手，结合你的档案和最近护理记录回答。</p>
+            <select id="targetSelect" style="width:100%;margin-bottom:10px;" onchange="onTargetChange()">
+                <option value="">选择一个档案（可选）</option>
+            </select>
+            <div class="qa-row"><textarea id="question" rows="3" placeholder="例如：我的绿萝叶子发黄，结合最近浇水记录该怎么办？"></textarea><button class="primary" onclick="askAI()">提问</button></div>
+            <div id="qaResult" class="result" style="display:none;margin-top:14px"></div>
+            <div id="qaSummary" class="result" style="display:none;margin-top:14px;border-left-color:#f90;">
+                <div style="font-weight:bold;margin-bottom:8px;color:#8b6914;">📋 护理摘要</div>
+                <div id="summaryText"></div>
+            </div>
+            <div id="summaryBtnContainer" style="display:none;margin-top:10px;text-align:right;">
+                <button class="minor" onclick="generateSummary()">生成护理摘要</button>
+            </div>
+        </section>
+    </div>
+    <section class="panel" style="margin-top:22px">
+        <h3 id="archiveTitle">我的植物档案</h3>
+        <div id="targets" class="cards"></div>
+    </section>
+</main>
+<script>
+let type='PLANT', imageData='', diagnosis='', lastReply='', lastTargetName='';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+fetch('/api/auth/me').then(r=>r.json()).then(x=>{if(x.code!==200)location.href='/login';else userName.textContent=x.data.userName});
+function toast(s){const e=document.getElementById('toast');e.textContent=s;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+function switchType(t){type=t;plantTab.classList.toggle('active',t==='PLANT');petTab.classList.toggle('active',t==='PET');heroTitle.textContent=t==='PLANT'?'让每一株植物都被科学照顾':'让每一只宠物都获得贴心守护';heroDesc.textContent=t==='PLANT'?'上传照片进行 AI 识别和状态诊断，建立专属档案，持续记录浇水、施肥与生长情况。':'上传宠物照片识别种类和外观健康状态，建立档案，持续记录喂养、驱虫、疫苗与就医情况。';uploadText.textContent='上传'+(t==='PLANT'?'植物':'宠物')+'照片';archiveTitle.textContent='我的'+(t==='PLANT'?'植物':'宠物')+'档案';breed.style.display=t==='PET'?'block':'none';aiResult.style.display='none';emptyResult.style.display='block';loadTargets()}
+function recognize(file){if(!file)return;uploadBox.classList.add('loading');compressImage(file).then(function(b64){imageData='data:image/webp;base64,'+b64;return fetch('/api/care/identify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,image:b64})})}).then(function(r){if(!r.ok)throw Error('识别失败');return r.json()}).then(function(x){diagnosis=x.data.result;resultText.textContent=diagnosis;emptyResult.style.display='none';aiResult.style.display='block';species.value=extractSpecies(diagnosis)}).catch(function(e){toast(e.message)}).finally(function(){uploadBox.classList.remove('loading')})}
+function extractSpecies(s){const m=s.match(/(?:品种|物种|名称)[：:]\s*([^\n，。]+)/);return m?m[1].replace(/\*\*/g,'').trim():''}
+async function saveTarget(){if(!targetName.value.trim())return toast('请填写档案名称');const body={name:targetName.value.trim(),species:species.value.trim(),breed:breed.value.trim(),imageUrl:imageData?'data:image/uploaded':''};const r=await fetch('/api/care/targets/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)return toast('保存失败');targetName.value='';toast('档案已保存');loadTargets()}
+async function loadTargets(){const r=await fetch('/api/care/targets/'+type);if(r.status===401)return location.href='/login';const x=await r.json();const rows=x.data;targets.innerHTML=rows.length?rows.map(cardHtml).join(''):'<div class="muted">还没有档案，上传照片识别或直接创建一个吧。</div>';updateTargetSelect(rows)}
+function cardHtml(x){return `<article class="card"><h4>${type==='PLANT'?'🌱':'🐾'} ${esc(x.name)}</h4><div class="muted">${esc(x.species||'未填写品种')}${x.breed?' · '+esc(x.breed):''}</div><div class="actions"><button class="minor" onclick="showRecords(${x.id},this)">护理记录</button><button class="minor" onclick="addRecord(${x.id})">新增记录</button><button class="danger" onclick="removeTarget(${x.id})">删除</button></div><div class="records" id="records-${x.id}" style="display:none"></div></article>`}
+async function showRecords(id,btn){const box=document.getElementById('records-'+id);if(box.style.display!=='none'){box.style.display='none';return}const r=await fetch(`/api/care/records/${type}/${id}`);const x=await r.json();const rows=x.data;box.innerHTML=rows.length?rows.map(x=>`<div class="record"><b>${esc(x.recordType||'护理')}</b> · ${esc(x.content||'')}<div class="muted">${esc(x.createdAt||'')}</div></div>`).join(''):'<div class="muted">暂无护理记录</div>';box.style.display='block'}
+async function addRecord(id){const recordType=prompt(type==='PLANT'?'记录类型：浇水/施肥/修剪/换盆':'记录类型：喂养/洗护/驱虫/疫苗/就医');if(!recordType)return;const content=prompt('记录详情');if(content===null)return;await fetch('/api/care/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetType:type,targetId:id,recordType,content})});toast('护理记录已保存');const box=document.getElementById('records-'+id);box.style.display='none';showRecords(id)}
+async function removeTarget(id){if(!confirm('确定删除档案及其护理记录？'))return;await fetch(`/api/care/targets/${type}/${id}`,{method:'DELETE'});loadTargets()}
+function updateTargetSelect(rows){const sel=document.getElementById('targetSelect');sel.innerHTML='<option value="">选择一个档案（可选）</option>';rows.forEach(x=>{const opt=document.createElement('option');opt.value=x.id;opt.textContent=x.name+(x.species?' - '+x.species:'');sel.appendChild(opt)});qaSummary.style.display='none';summaryBtnContainer.style.display='none'}
+function onTargetChange(){qaSummary.style.display='none';summaryBtnContainer.style.display='none'}
+async function askAI(){const q=question.value.trim();if(!q)return toast('请输入护理问题');qaResult.style.display='block';qaResult.textContent='AI正在分析中…';qaSummary.style.display='none';summaryBtnContainer.style.display='none';const targetSelect=document.getElementById('targetSelect');const targetId=targetSelect.value?parseInt(targetSelect.value):null;const r=await fetch('/api/care/qa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,targetType:type,targetId:targetId})});const x=await r.json();qaResult.textContent=x.data.reply||'暂时无法回答';lastReply=x.data.reply||'';lastTargetName=x.data.targetName||'';if(lastReply){summaryBtnContainer.style.display='block';qaSummary.style.display='none'}}
+async function generateSummary(){if(!lastReply)return toast('请先提问获取护理建议');qaSummary.style.display='block';summaryText.textContent='AI正在生成摘要…';const r=await fetch('/api/care/qa/summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reply:lastReply,targetType:type,targetName:lastTargetName})});const x=await r.json();summaryText.textContent=x.data.summary||'无法生成摘要'}
+async function logout(){await fetch('/api/auth/logout',{method:'POST'});location.href='/login'}
+loadTargets();
+</script>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
+</body>
+</html>

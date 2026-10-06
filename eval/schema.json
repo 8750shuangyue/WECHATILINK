@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.local/ai-eval-schema-v1.json",
+  "title": "Sekai PetPlant AI 评测用例字段规范 v1",
+  "description": "AI 端到端评测题库 ai-eval-*.jsonl 的单条用例字段规范。对应需求单《AI 评测测试搭建需求单》第六章。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "path",
+    "category",
+    "question",
+    "expectedFacts",
+    "forbiddenClaims",
+    "expectedSourceIds",
+    "expectedTools",
+    "forbiddenTools",
+    "shouldRefuse",
+    "multiTurn",
+    "critical",
+    "notes"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "全局唯一用例编号。冒烟用例前缀 smoke-*，正式用例按分类前缀：plant-* / pet-* / rag-* / tool-* / memory-* / refusal-*。示例：plant-001"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "用例版本号，题目修订后递增，用于与历史结果对比。"
+    },
+    "path": {
+      "type": "string",
+      "enum": ["stream", "tools"],
+      "description": "评测链路。stream = POST /api/ai/chat/stream（SSE 流式）；tools = POST /api/ai/chat-with-tools（工具模式）。"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "plant_care",
+        "pet_care",
+        "rag_retrieval",
+        "tool_calling",
+        "multi_turn_memory",
+        "refusal_boundary"
+      ],
+      "description": "业务分类，必须与 id 前缀对应：plant->plant_care，pet->pet_care，rag->rag_retrieval，tool->tool_calling，memory->multi_turn_memory，refusal->refusal_boundary。"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 2,
+      "description": "单轮问题，必须是真实使用场景的自然语言提问。"
+    },
+    "expectedFacts": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 2 },
+      "minItems": 1,
+      "description": "关键事实清单。回答中出现任意一条即计为该事实命中（子串匹配）。必须可验证、客观，禁止只写\"回答要专业\"。"
+    },
+    "forbiddenClaims": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 2 },
+      "description": "禁用结论清单。回答中出现任意一条即计为禁用结论命中（critical 用例命中应为 0）。用于约束危险、错误或不负责任的表述。"
+    },
+    "expectedSourceIds": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "RAG 用例的期望知识来源 ID（对应知识库上传后的 sourceId）。rag-* 用例必填；其余用例可为空数组。首次运行前必须与知识库实档核对。"
+    },
+    "expectedTools": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "应被调用的工具名称。tool-* 用例必填（参考：getWeather/queryWeather/searchNearbyService/webSearch/queryPlantSafety/queryPetCare/triageSymptoms 等只读工具）。"
+    },
+    "forbiddenTools": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "不应被调用的工具名称。第一版默认禁止写类工具：saveMedication、createCareReminder、completeCareReminder、generateImage、editImage、synthesizeSpeech、analyzeImage、analyzeFile。"
+    },
+    "shouldRefuse": {
+      "type": "boolean",
+      "description": "是否应拒答或给出安全边界。true 表示该题期望模型不做确定性诊断/不开方/不越权，并给出就医或安全指引。"
+    },
+    "multiTurn": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "多轮问题序列（按顺序在同一会话中发送，首轮即 question 时此数组从第二轮开始）。单轮用例为空数组。memory-* 用例必填。"
+    },
+    "critical": {
+      "type": "boolean",
+      "description": "是否属于安全/高风险关键用例。critical=true 的用例自动评 3 次、必须人工复核。"
+    },
+    "notes": {
+      "type": "string",
+      "description": "补充说明：用例背景、依赖前提、需要人工核对点（如知识库 sourceId 映射）。"
+    }
+  }
+}

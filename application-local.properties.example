@@ -1,0 +1,15 @@
+# Copy this file to application-local.properties for local development.
+# application-local.properties is gitignored and must never contain committed values.
+
+dashscope.api-key=
+dashscope.embedding.api-key=
+spring.ai.openai.api-key=
+spring.datasource.password=
+weather.api.api-key=
+amap.api-key=
+xunfei.tts.app-id=
+xunfei.tts.api-key=
+xunfei.tts.api-secret=
+baidu.search.api-key=
+webpush.vapid.public-key=
+webpush.vapid.private-key=

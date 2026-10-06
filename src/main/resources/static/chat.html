@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sekai PetPlant - AI 对话</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
+</head>
+<body style="background: #f0f4f2;">
+<header class="topbar">
+    <div class="topbar-brand">
+        <a href="/home" style="color:#fff;text-decoration:none;">← 返回首页</a>
+        &nbsp;|&nbsp; <span id="headerSys">AI 对话助手</span>
+    </div>
+    <div class="topbar-right">
+        <span id="greeting"></span>
+        <span class="badge" id="botStatus" style="background:#4a9;">在线</span>
+        <button onclick="logout()" class="text-btn">退出</button>
+    </div>
+</header>
+
+<div class="chat-container">
+    <aside class="chat-sidebar">
+        <div class="sidebar-header"><h3>🐾🌿 PetPlant</h3><p>AI 护理助手</p></div>
+        <div class="sidebar-system"><div class="sys-label">当前系统</div><div class="sys-name" id="sidebarSys">Web AI 助手</div></div>
+        <div class="sidebar-tools"><div class="tool-label">能力清单</div>
+            <div class="tool-list" id="toolList"></div>
+        </div>
+        <button class="secondary-btn" onclick="clearChat()">清空会话</button>
+        <button class="secondary-btn" onclick="location.href='/home'" style="margin-top:auto;">返回首页</button>
+    </aside>
+
+    <div class="chat-main">
+        <div class="chat-messages" id="chatMessages">
+            <div class="msg system-msg">
+                <div class="msg-bubble system-bubble" id="welcomeMsg">
+                    欢迎使用 AI 护理助手！<br>可以询问宠物/植物护理、天气、生成图片、护理提醒等。
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <div class="quick-row">
+                <button class="quick-chip" onclick="quickPrompt('帮我查一下北京的天气', true)">🌤 查天气</button>
+                <button class="quick-chip" onclick="quickPrompt('帮我生成一张可爱的橘猫图片', true)">🖼 生成图片</button>
+                <button class="quick-chip" onclick="quickPrompt('绿萝叶子发黄该怎么办？')">🌱 护理问答</button>
+                <button class="quick-chip" onclick="location.href='/reminders.html'">⏰ 护理提醒</button>
+            </div>
+            <div id="imagePreview" style="display:none;margin-bottom:8px;position:relative;">
+                <img id="previewImg" src="" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid #ddd;">
+                <span onclick="removeImage()" style="position:absolute;top:-8px;left:116px;cursor:pointer;font-size:18px;">&times;</span>
+            </div>
+            <div class="input-row">
+                <label class="icon-btn" title="发送图片" style="cursor:pointer;">
+                    🖼
+                    <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
+                </label>
+                <button class="icon-btn mic-btn" id="micBtn" title="语音输入" onclick="toggleMic()">🎤</button>
+                <button class="icon-btn tool-mode-btn" id="toolModeBtn" title="工具对话：生成图片/语音等" onclick="toggleToolMode()">⚙️</button>
+                <textarea id="msgInput" placeholder="输入消息…（Enter 发送）" rows="1"></textarea>
+                <button class="send-btn" id="sendBtn">发送</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('headerSys').textContent = 'AI 对话助手';
+document.getElementById('sidebarSys').textContent = 'Web AI 助手';
+
+var capabilities = ['🐾 宠物护理', '🌿 植物安全', '🌤 天气查询', '🔍 联网搜索', '🖼 图片分析', '📎 文件解析'];
+var tl = document.getElementById('toolList');
+capabilities.forEach(function(c) {
+    var s = document.createElement('span');
+    s.className = 'tool-chip';
+    s.textContent = c;
+    tl.appendChild(s);
+});
+
+var imageBase64 = null;
+
+fetch('/api/auth/me').then(r => r.json()).then(data => {
+    if (data.code === 200) document.getElementById('greeting').textContent = data.data.userName;
+    else location.href = '/login';
+});
+
+function addMessage(text, dir, from, time) {
+    var div = document.createElement('div');
+    var isIn = dir === 'in';
+    div.className = 'msg ' + (isIn ? 'bot-msg' : 'user-msg');
+    var timeStr = time ? ' ' + time : '';
+    div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#4a9' : 'rgba(255,255,255,0.7)') + ';margin-bottom:3px;">' + from + timeStr + '</div>' + text.replace(/\n/g, '<br>') + '</div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function addImageMessage(url, from, time) {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    var bubble = document.createElement('div');
+    bubble.className = 'msg-bubble bot-bubble';
+    var meta = document.createElement('div');
+    meta.style.cssText = 'font-size:11px;color:#4a9;margin-bottom:6px;';
+    meta.textContent = from + (time ? ' ' + time : '');
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = 'AI generated image';
+    img.style.cssText = 'display:block;max-width:min(100%,512px);max-height:512px;border-radius:10px;cursor:pointer;';
+    img.onclick = function() { window.open(url, '_blank'); };
+    bubble.appendChild(meta);
+    bubble.appendChild(img);
+    div.appendChild(bubble);
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function quickPrompt(text, autoTool) {
+    if (autoTool) enableToolMode();
+    document.getElementById('msgInput').value = text;
+    document.getElementById('msgInput').focus();
+}
+
+var toolMode = false;
+
+function enableToolMode() {
+    toolMode = true;
+    var b = document.getElementById('toolModeBtn');
+    if (b) b.classList.add('active');
+}
+
+function toggleToolMode() {
+    toolMode = !toolMode;
+    var b = document.getElementById('toolModeBtn');
+    if (b) b.classList.toggle('active', toolMode);
+    showToast(toolMode ? '已开启工具对话（可生成图片/语音/查天气等）' : '已切换回普通流式对话');
+}
+
+function clearChat() {
+    var box = document.getElementById('chatMessages');
+    box.innerHTML = '<div class="msg system-msg"><div class="msg-bubble system-bubble">已清空会话，可以开始新的提问。</div></div>';
+    document.getElementById('welcomeMsg') && null;
+}
+
+function handleImage(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        imageBase64 = ev.target.result.split(',')[1];
+        document.getElementById('previewImg').src = ev.target.result;
+        document.getElementById('imagePreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeImage() {
+    imageBase64 = null;
+    document.getElementById('imagePreview').style.display = 'none';
+    document.getElementById('imageInput').value = '';
+}
+
+function showThinking() {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    div.id = 'thinkingMsg';
+    div.innerHTML = '<div class="msg-bubble bot-bubble">AI 正在思考…</div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function hideThinking() {
+    var t = document.getElementById('thinkingMsg');
+    if (t) t.remove();
+}
+
+function addStreamingBubble() {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    div.innerHTML = '<div class="msg-bubble bot-bubble"></div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+    return div.querySelector('.msg-bubble');
+}
+
+function addBotText(text, small) {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    div.innerHTML = '<div class="msg-bubble bot-bubble"' + (small ? ' style="font-size:12px;opacity:.85;"' : '') + '>' +
+        text.replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function renderGeneratedAsset(path) {
+    var name = String(path).split('/').pop();
+    var url = '/uploads/' + encodeURIComponent(name);
+    var lower = name.toLowerCase();
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    if (lower.indexOf('.mp3') > -1 || lower.indexOf('.wav') > -1 || lower.indexOf('.m4a') > -1) {
+        div.innerHTML = '<div class="msg-bubble bot-bubble"><audio controls src="' + url + '" style="max-width:320px;"></audio></div>';
+    } else {
+        div.innerHTML = '<div class="msg-bubble bot-bubble"><img src="' + url + '" style="max-width:280px;border-radius:10px;cursor:pointer;" onclick="window.open(\'' + url + '\',\'_blank\')"></div>';
+    }
+    document.getElementById('chatMessages').appendChild(div);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+async function sendTextWithTools(text) {
+    showThinking();
+    try {
+        var res = await fetch('/api/ai/chat-with-tools', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+        });
+        var data = await res.json();
+        hideThinking();
+        if (!data.success) {
+            addBotText(data.error || '工具对话失败，请重试');
+            return;
+        }
+        var content = (data.content || '').replace(/\[(IMAGE|AUDIO):[^\]]*\]/g, '').trim();
+        addBotText(content || '处理完成');
+
+        if (data.toolCallHistory && data.toolCallHistory.length) {
+            var summary = '🔧 工具调用：' + data.toolCallHistory.map(function (t) {
+                return t.toolName + (t.success ? ' ✅' : ' ❌');
+            }).join('、');
+            addBotText(summary, true);
+        }
+
+        (data.generatedFiles || []).forEach(function (p) { renderGeneratedAsset(p); });
+    } catch (e) {
+        hideThinking();
+        addBotText('请求失败：' + e.message);
+    }
+}
+
+async function sendText() {
+    var text = document.getElementById('msgInput').value.trim();
+    if (!text && !imageBase64) { showToast('请输入消息或选择图片'); return; }
+
+    var displayText = text || '[图片]';
+    var now = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    addMessage(displayText, 'out', '我', now);
+
+    if (imageBase64) {
+        var imgDiv = document.createElement('div');
+        imgDiv.className = 'msg user-msg';
+        imgDiv.innerHTML = '<div class="msg-bubble user-bubble"><img src="data:image/png;base64,' + imageBase64 + '" style="max-width:200px;border-radius:8px;"></div>';
+        document.getElementById('chatMessages').appendChild(imgDiv);
+    }
+
+    document.getElementById('msgInput').value = '';
+    if (toolMode && text) {
+        await sendTextWithTools(text);
+        return;
+    }
+    try {
+        if (text) {
+            var liveBubble = addStreamingBubble();
+            var res = await fetch('/api/ai/chat/stream', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: text })
+            });
+            if (!res.ok || !res.body) {
+                liveBubble.textContent = '连接失败，请稍后再试';
+                showToast('发送失败');
+                return;
+            }
+            var reader = res.body.getReader();
+            var decoder = new TextDecoder();
+            var buf = '';
+            var acc = '';
+            while (true) {
+                var r = await reader.read();
+                if (r.done) break;
+                buf += decoder.decode(r.value, { stream: true });
+                var parts = buf.split('\n\n');
+                buf = parts.pop();
+                for (var part of parts) {
+                    var line = part.split('\n').find(function (l) { return l.indexOf('data:') === 0; });
+                    if (!line) continue;
+                    var data = line.slice(5).trim();
+                    if (!data || data === '[DONE]') continue;
+                    try {
+                        acc += JSON.parse(data);
+                    } catch (e2) {
+                        acc += data;
+                    }
+                    liveBubble.textContent = acc;
+                    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+                }
+            }
+            if (!acc) liveBubble.textContent = 'AI 没有回复，请稍后再试';
+        } else {
+            var res = await fetch('/api/care/qa', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ question: '请分析这张图片' })
+            });
+            var x = await res.json();
+            var reply = (x.data && x.data.reply) ? x.data.reply : null;
+            if (reply) {
+                addMessage(reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+            } else {
+                showToast(x.error || 'AI 没有回复，请稍后再试');
+            }
+        }
+    } catch(e) {
+        hideThinking();
+        showToast('发送失败: ' + e.message);
+    }
+
+    removeImage();
+}
+
+document.getElementById('sendBtn').onclick = sendText;
+document.getElementById('msgInput').onkeydown = function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+};
+
+// ===== 语音输入 =====
+var mediaRecorder = null;
+var recordedChunks = [];
+var isRecording = false;
+
+async function toggleMic() {
+    if (isRecording) { stopMic(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('当前浏览器不支持录音');
+        return;
+    }
+    try {
+        var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        var mime = 'audio/webm;codecs=opus';
+        mediaRecorder = MediaRecorder.isTypeSupported(mime)
+            ? new MediaRecorder(stream, { mimeType: mime })
+            : new MediaRecorder(stream);
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onstop = uploadVoice;
+        mediaRecorder.start();
+        isRecording = true;
+        document.getElementById('micBtn').classList.add('recording');
+        showToast('正在录音，再次点击结束');
+    } catch (e) {
+        showToast('无法访问麦克风：' + (e.message || '请检查权限'));
+    }
+}
+
+function stopMic() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    if (mediaRecorder && mediaRecorder.stream) {
+        mediaRecorder.stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+}
+
+async function uploadVoice() {
+    if (!recordedChunks.length) {
+        showToast('没有录到声音，请重试');
+        return;
+    }
+    var blob = new Blob(recordedChunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm' });
+    var fd = new FormData();
+    fd.append('file', blob, 'voice_' + Date.now() + '.webm');
+    showToast('正在识别语音…');
+    try {
+        var res = await fetch('/api/asr/transcribe', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (data.success && data.text) {
+            document.getElementById('msgInput').value = data.text;
+            document.getElementById('msgInput').focus();
+            showToast('识别完成，按 Enter 发送');
+        } else {
+            showToast('识别失败：' + (data.error || '没有识别到内容，请重试'));
+        }
+    } catch (e) {
+        showToast('识别请求失败，请稍后再试');
+    }
+}
+
+// 不支持录音的浏览器直接隐藏麦克风按钮
+(function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        var btn = document.getElementById('micBtn');
+        if (btn) btn.style.display = 'none';
+    }
+})();
+
+async function logout() {
+    await fetch('/api/auth/logout', {method:'POST'});
+    location.href = '/login';
+}
+</script>
+<style>
+    .quick-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .quick-chip {
+        border: 1px solid rgba(47,158,99,.3);
+        background: #f2f9f4;
+        color: #1e8a50;
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: .2s;
+    }
+    .quick-chip:hover { background: #dff0e6; transform: translateY(-1px); }
+
+    .mic-btn {
+        border: none;
+        background: transparent;
+        font-size: 17px;
+        cursor: pointer;
+        border-radius: 10px;
+        width: 38px;
+        height: 38px;
+        transition: .2s;
+    }
+    .mic-btn:hover { background: #dff0e6; transform: scale(1.05); }
+    .mic-btn.recording {
+        background: #f43f5e;
+        animation: micPulse 1.2s ease-in-out infinite;
+    }
+    .tool-mode-btn.active {
+        background: #1e8a50;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(30,138,80,.35);
+    }
+    @keyframes micPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,.35); }
+        50% { box-shadow: 0 0 0 8px rgba(244,63,94,0); }
+    }
+</style>
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
+</body>
+</html>

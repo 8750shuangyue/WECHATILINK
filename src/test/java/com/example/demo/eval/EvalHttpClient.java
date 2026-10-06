@@ -57,6 +57,29 @@ public class EvalHttpClient {
         return false;
     }
 
+    public boolean register() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "userName", username,
+                "password", password,
+                "email", "",
+                "phone", ""
+        ));
+        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/auth/register"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Origin", origin)
+                .timeout(REQUEST_TIMEOUT)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            return false;
+        }
+        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode code = root.get("code");
+        return code != null && code.asInt() == 200;
+    }
+
     private boolean tryLogin() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "userName", username,
