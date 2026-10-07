@@ -1,6 +1,6 @@
 # Sekai PetPlant · AI 宠物 / 绿植护理平台
 
-> 最近更新：2026-10-07（阶段 0.1 至 0.4 记忆隔离、向量去重、清空会话和摘要提示词统一完成代码与自动化验证，待部署）
+> 最近更新：2026-10-07（阶段 0.1 至 0.5 记忆隔离、向量去重、清空会话、摘要提示词统一和入口契约固定完成代码与自动化验证，待部署）
 
 一个以 **AI Agent 为核心**的一站式宠物与绿植智能护理 Web 平台：覆盖养护问答、AI 识图诊断、护理档案与提醒、知识库 RAG、商城库存、社区分享、每日简报、数据观测等全链路场景。
 
@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | 第一批：安全与运行基线 | 主体完成，剩余项暂缓 | 密钥外置、401 统一响应、Session Cookie、CORS、CSRF 来源校验、上传校验、安全响应头、Nginx HTTPS、域名备案和端口收敛已完成；密钥轮换与全局限流暂缓 |
 | 第二批：AI 评测基线 | 已完成第一版与 P0 复测 | 已建立独立 `TEST/` 评测包、12 条冒烟题和 40 条正式题；当前复测质量通过率 98.08% |
-| 第三批：记忆与 RAG | P0 完成，P1 与阶段 0.1 至 0.4 代码及单测完成，真实复测待执行 | 已完成 RAG 用户 / 会话隔离、检索审计日志、召回指标数据基础、MySQL 对话归属隔离、对话向量去重、完整清空会话和摘要 / system 提示词统一；下一步固定入口记忆真值表，再执行真实题库复测并接入受控只读召回明细 |
+| 第三批：记忆与 RAG | P0 完成，P1 与阶段 0.1 至 0.5 代码及单测完成，真实复测待执行 | 已完成 RAG 用户 / 会话隔离、检索审计日志、召回指标数据基础、MySQL 对话归属隔离、对话向量去重、完整清空会话、摘要 / system 提示词统一和入口记忆契约固定；下一步执行阶段 1 的部署前验证、真实题库复测，并接入受控只读召回明细 |
 | 第四批：UI 与范围收敛 | 未开始 | 后续处理旧入口、公共前端模块和核心路径简化 |
 | 第五批：工程清理与可观测 | 未开始 | 后续处理死代码、统一异常、健康检查和监控 |
 
@@ -28,7 +28,16 @@
 
 对照第一版基线（质量通过率 `90.38%`、多轮记忆 `0/4`、工具选择 `87.50%`），P0 的多轮记忆和工具路由目标已经通过正式题库复测。唯一未通过项为 `plant-002`：回答包含“停水、通风、晾干”等核心处理，自动评分因其同义词表只配置“停止浇水 / 暂停浇水 / 控水”而得 `0.5`。该项为非关键题，本轮没有通过修改题库或评分口径来消除。公开 HTTP 接口仍未暴露内部 RAG 召回明细，因此当前不计算 `Recall@K`，也不伪造引用命中率。
 
-P1 与阶段 0.1 至 0.4 已完成代码和自动化验证：向量记忆增加 `userId` 归属，MySQL 对话记忆增加可空 `user_id` 并统一按 `userId + conversationId` 隔离。新会话写入当前用户归属；跨用户读取返回空；跨用户消息写入、清空和摘要变更被拒绝；历史 `user_id = NULL` 的旧会话保持不可读写，不自动猜测或认领归属。同一消息对的对话向量现仅通过 `saveMessagePair -> VectorSaveEvent -> MemoryEventListener` 写入一次，使用基于 `userId + conversationId + userMessage + assistantReply` 的稳定 SHA-256 文档 ID，并由 SQLite 唯一索引兜底并发重复写入；公共知识库仅通过 `sourceId` 对用户可见。清空会话会通过 `POST /api/ai/chat/clear` 同步清理当前会话的 MySQL 消息、当前用户的 SQLite 对话向量和用户 Session；成功后才更换会话 ID，失败时保留旧会话 ID 以便重试，公共知识库不受影响。并发摘要若发现会话已在生成期间被清空或改变，会放弃过期摘要回写。每次检索写入审计记录，包含查询哈希、检索范围、`topK`、相似度阈值、命中数、耗时以及命中文档标识 / 来源 / 相似度，不保存查询原文和命中文档正文。审计写入失败不会中断检索主链路。阶段 0.4 将业务 `systemPrompt`、RAG 上下文和滚动摘要合并为唯一 system 消息，固定顺序为业务规则、RAG、`【对话摘要】`；历史遗留的非摘要 system 消息不再透传，已有持久化摘要不会被竞争性的动态摘要覆盖，窗口截断后仍保留 system 上下文和最后一条当前问题。当前生产项目全量测试 `60/60` 通过，其中包含 4 项真实 MySQL 集成测试、SQLite 唯一索引迁移验证、清空会话并发 / 失败回滚测试和摘要提示词合并回归测试；由于本地未配置独立评测账号且 `AI_EVAL_ENABLED` 未开启，本轮尚未执行 P1 后的 12 条冒烟题和 40 条正式题库复测。受控只读召回明细接口尚未接入，`Recall@K` 仍不计算、不伪造。阶段 0.1 至 0.4 改动已纳入本次交付，尚未部署。
+P1 与阶段 0.1 至 0.5 已完成代码和自动化验证：向量记忆增加 `userId` 归属，MySQL 对话记忆增加可空 `user_id` 并统一按 `userId + conversationId` 隔离。新会话写入当前用户归属；跨用户读取返回空；跨用户消息写入、清空和摘要变更被拒绝；历史 `user_id = NULL` 的旧会话保持不可读写，不自动猜测或认领归属。同一消息对的对话向量现仅通过 `saveMessagePair -> VectorSaveEvent -> MemoryEventListener` 写入一次，使用基于 `userId + conversationId + userMessage + assistantReply` 的稳定 SHA-256 文档 ID，并由 SQLite 唯一索引兜底并发重复写入；公共知识库仅通过 `sourceId` 对用户可见。清空会话会通过 `POST /api/ai/chat/clear` 同步清理当前会话的 MySQL 消息、当前用户的 SQLite 对话向量和用户 Session；成功后才更换会话 ID，失败时保留旧会话 ID 以便重试，公共知识库不受影响。并发摘要若发现会话已在生成期间被清空或改变，会放弃过期摘要回写。每次检索写入审计记录，包含查询哈希、检索范围、`topK`、相似度阈值、命中数、耗时以及命中文档标识 / 来源 / 相似度，不保存查询原文和命中文档正文。审计写入失败不会中断检索主链路。阶段 0.4 将业务 `systemPrompt`、RAG 上下文和滚动摘要合并为唯一 system 消息，固定顺序为业务规则、RAG、`【对话摘要】`；历史遗留的非摘要 system 消息不再透传，已有持久化摘要不会被竞争性的动态摘要覆盖，窗口截断后仍保留 system 上下文和最后一条当前问题。阶段 0.5 固定了每个 Web 入口的记忆契约：`/api/ai/chat/stream` 与 `/api/care/qa` 是正式持久化记忆入口，`/api/ai/chat` 与 `/api/ai/chat-with-tools` 是明确不读写持久化对话记忆的单轮兼容入口；旧 `AgentService` 和 `MessageRouter` 未接入 Web HTTP 主链路，保留、隔离并列为废弃候选。当前生产项目全量测试 `64/64` 通过，其中包含 4 项真实 MySQL 集成测试、SQLite 唯一索引迁移验证、清空会话并发 / 失败回滚测试、摘要提示词合并回归测试和入口记忆契约测试；由于本地未配置独立评测账号且 `AI_EVAL_ENABLED` 未开启，本轮尚未执行阶段 0.1 至 0.5 后的 12 条冒烟题和 40 条正式题库复测。受控只读召回明细接口尚未接入，`Recall@K` 仍不计算、不伪造。阶段 0.1 至 0.5 改动已纳入本次交付，尚未部署。
+
+入口记忆真值表：
+
+| Web 入口 | 当前定位 | 记忆行为 |
+| --- | --- | --- |
+| `/api/ai/chat/stream` | 正式流式对话 | 读取 MySQL 历史与摘要；完整流结束后保存消息，并通过消息保存事件异步写入对话向量 |
+| `/api/care/qa` | 正式护理问答 | 读取 MySQL 历史与摘要，执行 RAG；保存消息并异步写入对话向量 |
+| `/api/ai/chat` | 单轮兼容入口 | 不读取历史 / 摘要，不执行 RAG，不保存消息或对话向量 |
+| `/api/ai/chat-with-tools` | 单轮工具兼容入口 | 不读取历史 / 摘要，不执行 RAG，不保存消息或对话向量 |
 
 正式环境已通过阿里云服务器上的 Nginx 提供 HTTPS 入口，应用仅监听 `127.0.0.1:8080`，公网 `8080` 已关闭。ICP 备案号为 `苏ICP备2026075056号-1`，公安联网备案号为 `苏公网安备32062102001471号`。后续仍需完成外部服务密钥轮换、全局限流、监控和备份恢复演练。
 
@@ -50,11 +59,12 @@ P1 与阶段 0.1 至 0.4 已完成代码和自动化验证：向量记忆增加 
 
 ### 1. AI Agent 智能助手（核心亮点）
 
-系统内置两套对话链路，均围绕“意图识别 → 记忆检索 → 工具调用 → 结果生成”的 Agent 循环工作：
+当前 Web 端以 Spring AI 工具调用和流式对话为核心，并将旧自研链路隔离为废弃候选：
 
-- **自研 Agent 引擎（`AgentService`）**：多轮对话编排、意图路由（`MessageRouter`）、对话历史 + RAG 上下文注入、`BaseTool` 工具循环执行，120 秒超时保护、单轮最多 5 次工具迭代；
-- **Spring AI 工具对话（`ToolCallingService`）**：24 个 `@Tool` 注册为模型可用函数，支持多工具顺序调用（如“查杭州天气 → 生成西湖风景图”），工具执行结果自动回填对话上下文；
-- **流式输出**：`/api/ai/chat/stream` 以 SSE 打字机效果返回，对话体验更流畅；
+- **正式流式对话**：`/api/ai/chat/stream` 以 SSE 打字机效果返回，读取持久化会话历史与摘要，完整流结束后保存消息并异步写入对话向量；
+- **护理问答**：`/api/care/qa` 使用同一套持久化记忆契约，并额外执行 RAG 检索；
+- **Spring AI 工具对话（`ToolCallingService`）**：24 个 `@Tool` 注册为模型可用函数，支持多工具顺序调用（如“查杭州天气 → 生成西湖风景图”），工具执行结果自动回填当前请求上下文；对应 HTTP 入口是单轮兼容模式，不自动进入持久化多轮记忆；
+- **旧自研 Agent 引擎（`AgentService`）与路由（`MessageRouter`）**：保留现有代码用于历史追溯和隔离审计，当前未接入 Web HTTP 主链路，不再作为核心对话入口；
 - **语音输入**：聊天页麦克风录音 → ffmpeg 转 WAV → DashScope ASR 语音识别成文字；
 - **多模态工具**：图片分析、图片生成 / 编辑、文档解析、语音合成，工具结果（图片 / 音频）直接渲染在聊天流中。
 
@@ -88,7 +98,7 @@ P1 与阶段 0.1 至 0.4 已完成代码和自动化验证：向量记忆增加 
 - **文档知识库（RAG）**：知识库后台（`/kb`）上传 `txt`、`md`、`json`、`csv`、`log`、`pdf`、`docx` → 自动分块 → Embedding 向量化 → 存入 SQLite 向量库 → 对话时按相似度检索 Top-K 片段注入提示词，让 AI 基于私有资料回答；
 - **用户 / 会话隔离**：MySQL 对话记忆同时校验 `userId` 和 `conversationId`；无法确认归属的历史 NULL 会话默认不可读写，公共知识库按 `sourceId` 对所有用户可见，未携带用户身份时只能读取公共知识库；
 - **检索审计**：每次向量检索记录查询哈希、范围、阈值、命中数、耗时和命中文档标识 / 相似度，不落明文查询和正文，审计失败不影响回答；
-- **多级召回**：工具模式支持“对话历史 → 向量检索 → 工具实时结果”的多级信息融合。
+- **多级召回**：正式护理问答支持“对话历史 → 向量检索 → 工具实时结果”的多级信息融合；单轮工具兼容入口不自动读写持久化历史和对话向量。
 
 ### 4. 智能护理中心
 
@@ -151,10 +161,10 @@ flowchart TB
     end
 
     subgraph AI["AI 核心能力层"]
-        Engine["Agent 引擎（AgentService）"]
+        Engine["Web 对话 / 护理问答<br/>Spring AI Tool Calling / SSE"]
         Tools["Spring AI @Tool ×24<br/>BaseTool ×8"]
         Memory["记忆与 RAG"]
-        Router["意图路由 MessageRouter"]
+        Legacy["旧 AgentService / MessageRouter<br/>未接入 Web 主链路"]
     end
 
     subgraph Ext["外部服务"]
@@ -175,9 +185,10 @@ flowchart TB
     Web --> Page
     REST --> Biz
     Biz --> AI
-    Engine --> Router
     Engine --> Memory
     Engine --> Tools
+    Legacy -.-> Memory
+    Legacy -.-> Tools
     AI --> Ext
     Biz --> Infra
     AI --> Infra
@@ -197,8 +208,8 @@ flowchart TB
 
 ```text
 src/main/java/com/example/demo/
-├── agent/              # 自研 Agent 引擎：AgentService、工具基类与 8 个 BaseTool
-├── ai/                 # AI 对话层：Controller、流式 SSE、工具调用服务与 23 个 @Tool
+├── agent/              # 旧自研 Agent 引擎：未接入 Web 主链路，保留 / 废弃候选
+├── ai/                 # Web AI 对话层：Controller、流式 SSE、工具调用服务与 23 个 @Tool
 ├── chat/               # 对话记忆持久化、语义摘要、RAG 向量库
 ├── kb/                 # 知识库后台：上传、分块、向量化、检索
 ├── aicare/             # 宠物 / 植物档案（/api/pet、/api/plant）
@@ -217,7 +228,7 @@ src/main/java/com/example/demo/
 ├── push/               # WebPush 浏览器推送
 ├── stats/              # 数据观测：工具调用日志与统计接口
 ├── auth/               # 注册 / 登录 / 会话
-├── router/             # 意图路由（MessageRouter）
+├── router/             # 旧意图路由：未接入 Web 主链路，保留 / 废弃候选
 ├── weather/            # 心知天气接入
 ├── service/            # 高德地图、搜索等外部服务封装
 ├── config/ core/       # 拦截器、Web 配置、文件服务等基础设施
@@ -269,8 +280,8 @@ src/main/resources/static/
 | 模块 | 端点 | 说明 |
 | --- | --- | --- |
 | 账号 | `/api/auth/register` `/login` `/logout` `/me` | 注册、登录、登出、当前用户 |
-| AI 对话 | `/api/ai/chat` `/api/ai/chat/stream` | 普通对话 / SSE 流式对话 |
-| AI 工具模式 | `/api/ai/chat-with-tools` | 工具对话（可选 systemPrompt / allowedTools） |
+| AI 对话 | `/api/ai/chat` `/api/ai/chat/stream` | `/api/ai/chat` 为单轮兼容入口；`/api/ai/chat/stream` 为正式 SSE 流式多轮对话 |
+| AI 工具模式 | `/api/ai/chat-with-tools` | 单轮工具兼容入口（可选 systemPrompt / allowedTools），不写持久化对话记忆 |
 | 工具清单 | `/api/ai/tools/registered` | 查看已注册工具 |
 | AI 护理流程 | `/api/ai/care/workflow` `/triage` `/reminder…` `/records…` `/plan/generate` | Agent 驱动的护理工作流 / 分诊 / 提醒 / 用药记录 / 护理计划 |
 | 语音识别 | `POST /api/asr/transcribe` | 上传录音转文字 |

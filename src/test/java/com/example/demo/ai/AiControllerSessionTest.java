@@ -9,6 +9,7 @@ import com.example.demo.chat.LlmService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 
 import java.util.List;
@@ -27,6 +28,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class AiControllerSessionTest {
 
@@ -68,6 +71,59 @@ class AiControllerSessionTest {
         assertEquals("user-a", userByMessage.get("first"));
         assertEquals("user-a", userByMessage.get("second"));
         assertEquals("user-b", userByMessage.get("third"));
+    }
+
+    @Test
+    void compatibilityChatDoesNotUsePersistentMemory() {
+        SpringAiChatService springAiChatService = mock(SpringAiChatService.class);
+        ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
+        when(springAiChatService.chat("user-a", "single turn", "single turn system", null))
+                .thenReturn("single reply");
+        AiController controller = createController(
+                springAiChatService,
+                mock(ToolCallingService.class),
+                mock(LlmService.class),
+                chatMemoryService
+        );
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("user", "user-a");
+
+        var response = controller.chat(
+                Map.of("message", "single turn", "systemPrompt", "single turn system"),
+                session
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(Boolean.TRUE, response.getBody().get("success"));
+        assertEquals("single reply", response.getBody().get("content"));
+        verify(springAiChatService).chat("user-a", "single turn", "single turn system", null);
+        verifyNoInteractions(chatMemoryService);
+    }
+
+    @Test
+    void compatibilityToolChatDoesNotUsePersistentMemory() {
+        SpringAiChatService springAiChatService = mock(SpringAiChatService.class);
+        ToolCallingService toolCallingService = mock(ToolCallingService.class);
+        ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
+        when(toolCallingService.validateToolNames(any())).thenReturn(List.of());
+        when(springAiChatService.chatWithTools("user-a", "use a tool", null, null))
+                .thenReturn(ToolCallResponse.builder().text("tool reply").build());
+        AiController controller = createController(
+                springAiChatService,
+                toolCallingService,
+                mock(LlmService.class),
+                chatMemoryService
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("userName", "user-a");
+
+        var response = controller.chatWithTools(Map.of("message", "use a tool"), request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(Boolean.TRUE, response.getBody().get("success"));
+        assertEquals("tool reply", response.getBody().get("content"));
+        verify(springAiChatService).chatWithTools("user-a", "use a tool", null, null);
+        verifyNoInteractions(chatMemoryService);
     }
 
     @Test
@@ -132,9 +188,21 @@ class AiControllerSessionTest {
     }
 
     private AiController createController(LlmService llmService, ChatMemoryService chatMemoryService) {
-        return new AiController(
+        return createController(
                 mock(SpringAiChatService.class),
                 mock(ToolCallingService.class),
+                llmService,
+                chatMemoryService
+        );
+    }
+
+    private AiController createController(SpringAiChatService springAiChatService,
+                                          ToolCallingService toolCallingService,
+                                          LlmService llmService,
+                                          ChatMemoryService chatMemoryService) {
+        return new AiController(
+                springAiChatService,
+                toolCallingService,
                 mock(SpringAiCareWorkflowService.class),
                 mock(CareRecordService.class),
                 mock(CareReminderService.class),
