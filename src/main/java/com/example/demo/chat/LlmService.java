@@ -249,29 +249,32 @@ public class LlmService {
 
     public String chatWithMemory(String userId, String conversationId, String userMessage, String systemPrompt) throws IOException {
         logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}", userId, conversationId, userMessage);
-        
-        List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
-                userId, conversationId, systemPrompt, userMessage);
-        
+
+        String effectivePrompt = systemPrompt;
+        if (weatherTool != null && WeatherTool.matchesIntent(userMessage)) {
+            String city = WeatherTool.extractCity(userMessage);
+            if (city != null) {
+                JSONObject weatherParams = new JSONObject();
+                weatherParams.put("city", city);
+                String weatherData = weatherTool.execute(weatherParams).getData();
+                String weatherSystem = "你可以使用以下工具获取实时数据：\n" +
+                        "工具名称: getWeather\n" +
+                        "功能描述: 查询指定城市的天气信息\n" +
+                        "已获取到天气数据：\n" + weatherData;
+                effectivePrompt = (effectivePrompt == null || effectivePrompt.isEmpty())
+                        ? weatherSystem
+                        : effectivePrompt + "\n\n" + weatherSystem;
+                logger.info("Weather tool injected into prompt, city: {}", city);
+            }
+        }
+
         String ragContext = retrieveRagContext(userId, userMessage, conversationId);
         if (ragContext != null && !ragContext.isEmpty()) {
-            String ragSystemMessage = "参考以下历史对话信息，帮助回答用户当前问题：\n\n" + ragContext;
-            if (systemPrompt == null) {
-                systemPrompt = ragSystemMessage;
-            } else {
-                systemPrompt = systemPrompt + "\n\n" + ragSystemMessage;
-            }
             logger.info("RAG context retrieved, length: {} chars", ragContext.length());
         }
-        
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            ChatMessage systemMsg = new ChatMessage("system", systemPrompt);
-            if (promptMessages.isEmpty() || !"system".equals(promptMessages.get(0).getRole())) {
-                promptMessages.add(0, systemMsg);
-            } else {
-                promptMessages.set(0, systemMsg);
-            }
-        }
+
+        List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
+                userId, conversationId, effectivePrompt, ragContext, userMessage);
         
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", config.getModel());
@@ -284,26 +287,6 @@ public class LlmService {
             messages.add(messageObj);
         }
         requestBody.put("messages", messages);
-        
-        if (weatherTool != null && WeatherTool.matchesIntent(userMessage)) {
-            String city = WeatherTool.extractCity(userMessage);
-            if (city != null) {
-                JSONObject weatherParams = new JSONObject();
-                weatherParams.put("city", city);
-                String weatherData = weatherTool.execute(weatherParams).getData();
-                String toolInfo = "你可以使用以下工具获取实时数据：\n" +
-                    "工具名称: getWeather\n" +
-                    "功能描述: 查询指定城市的天气信息\n" +
-                    "已获取到天气数据：\n" + weatherData;
-                
-                JSONObject toolMessage = new JSONObject();
-                toolMessage.put("role", "system");
-                toolMessage.put("content", toolInfo);
-                messages.add(toolMessage);
-                
-                logger.info("Weather tool injected into prompt, city: {}", city);
-            }
-        }
         
         logger.debug("Full request with history: {}", JSON.toJSONString(requestBody));
         

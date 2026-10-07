@@ -98,6 +98,94 @@ class ChatMemoryServiceTest {
     }
 
     @Test
+    void mergesBusinessRulesRagAndSummaryIntoOneSystemMessage() {
+        service.saveMessagePair(
+                "user-a",
+                "conversation-a",
+                "My dog's name is Doudou.",
+                "I will remember that."
+        );
+        repository.addMessage(
+                "user-a",
+                "conversation-a",
+                new ChatMessage("system", "【对话摘要】用户有一只叫 Doudou 的狗。")
+        );
+
+        List<ChatMessage> prompt = service.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                "Be concise.",
+                "Doudou is a five-year-old dog.",
+                "What is my dog's name?"
+        );
+
+        assertEquals(4, prompt.size());
+        assertEquals("system", prompt.get(0).getRole());
+        String systemContent = prompt.get(0).getContent();
+        int businessIndex = systemContent.indexOf("Be concise.");
+        int ragIndex = systemContent.indexOf("Doudou is a five-year-old dog.");
+        int summaryIndex = systemContent.indexOf("【对话摘要】");
+        assertTrue(businessIndex >= 0);
+        assertTrue(ragIndex > businessIndex);
+        assertTrue(summaryIndex > ragIndex);
+        assertEquals(1, countOccurrences(systemContent, "【对话摘要】"));
+        assertEquals("My dog's name is Doudou.", prompt.get(1).getContent());
+        assertEquals("I will remember that.", prompt.get(2).getContent());
+        assertEquals("What is my dog's name?", prompt.get(3).getContent());
+    }
+
+    @Test
+    void ignoresHistoricalSystemMessagesThatAreNotSummaries() {
+        repository.addMessage(
+                "user-a",
+                "conversation-a",
+                new ChatMessage("system", "Legacy system instruction.")
+        );
+
+        List<ChatMessage> prompt = service.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                "Current question."
+        );
+
+        assertEquals(1, prompt.size());
+        assertEquals("user", prompt.get(0).getRole());
+        assertEquals("Current question.", prompt.get(0).getContent());
+    }
+
+    @Test
+    void keepsGeneratedSummarySystemContextAndCurrentQuestionAfterTruncation() throws Exception {
+        ReflectionTestUtils.setField(service, "summaryThreshold", 0L);
+        ReflectionTestUtils.setField(service, "summaryKeepRecent", 1);
+        ReflectionTestUtils.setField(service, "maxMessages", 3);
+        ReflectionTestUtils.setField(service, "maxTokens", 10_000L);
+
+        LlmService llmService = mock(LlmService.class);
+        when(llmService.chat(anyString(), anyString())).thenReturn("用户正在为宠物调整饮水方案。");
+        ReflectionTestUtils.setField(service, "llmService", llmService);
+
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "old-1"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "old-2"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "recent-1"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "recent-2"));
+
+        List<ChatMessage> prompt = service.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                "Business rules.",
+                "What should I do next?"
+        );
+
+        assertEquals(4, prompt.size());
+        assertEquals("system", prompt.get(0).getRole());
+        assertTrue(prompt.get(0).getContent().startsWith("Business rules."));
+        assertTrue(prompt.get(0).getContent().contains("【对话摘要】用户正在为宠物调整饮水方案。"));
+        assertEquals(1, countOccurrences(prompt.get(0).getContent(), "【对话摘要】"));
+        assertEquals("What should I do next?", prompt.get(prompt.size() - 1).getContent());
+    }
+
+    @Test
     void publishesUserIdWithVectorSaveEvent() {
         service.saveMessagePair("user-a", "conversation-a", "hello", "hi");
 
@@ -149,6 +237,16 @@ class ChatMemoryServiceTest {
         service.checkAndUpdateSummary("user-a", "conversation-a");
 
         assertTrue(service.getConversationHistory("user-a", "conversation-a").isEmpty());
+    }
+
+    private int countOccurrences(String value, String target) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf(target, index)) >= 0) {
+            count++;
+            index += target.length();
+        }
+        return count;
     }
 
     private static final class InMemoryChatMemoryRepository implements ChatMemoryRepository {

@@ -71,7 +71,7 @@ class LlmServiceStreamingMemoryTest {
                 "Be concise.",
                 "What is my dog's name and age?"
         )).thenReturn(List.of(
-                new ChatMessage("system", "Be concise."),
+                new ChatMessage("system", "Be concise.\n\n【对话摘要】The dog is named Doudou."),
                 new ChatMessage("user", "My dog is named Doudou and is 5 years old."),
                 new ChatMessage("assistant", "I will remember that."),
                 new ChatMessage("user", "What is my dog's name and age?")
@@ -94,6 +94,10 @@ class LlmServiceStreamingMemoryTest {
         assertEquals(
                 "My dog is named Doudou and is 5 years old.",
                 sent.getJSONArray("messages").getJSONObject(1).getString("content")
+        );
+        assertTrue(
+                sent.getJSONArray("messages").getJSONObject(0).getString("content")
+                        .contains("【对话摘要】The dog is named Doudou.")
         );
         assertEquals(List.of("Doudou", " is 5."), tokens);
         verify(memoryService).saveMessagePair(
@@ -145,23 +149,29 @@ class LlmServiceStreamingMemoryTest {
     }
 
     @Test
-    void chatWithMemoryPersistsOnlyThroughMemoryService() throws Exception {
+    void chatWithMemoryPassesRagIntoPromptBuilderWithoutReplacingSummary() throws Exception {
         response.set(new StreamResponse(200,
                 "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Doudou is 5.\"}}]}"
         ));
         ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        String ragContext = "相关对话 1:\nDoudou is 5.";
         when(memoryService.buildPromptMessages(
                 "user-a",
                 "conversation-a",
                 null,
+                ragContext,
                 "How old is Doudou?"
         )).thenReturn(List.of(
+                new ChatMessage("system",
+                        "参考以下历史对话信息，帮助回答用户当前问题：\n"
+                                + ragContext
+                                + "\n\n【对话摘要】Doudou is 5 years old."),
                 new ChatMessage("user", "My dog Doudou is 5 years old."),
                 new ChatMessage("user", "How old is Doudou?")
         ));
         VectorStoreService vectorStoreService = mock(VectorStoreService.class);
         when(vectorStoreService.searchSimilar("How old is Doudou?", "user-a", "conversation-a"))
-                .thenReturn(List.of());
+                .thenReturn(List.of("Doudou is 5."));
         LlmService service = new LlmService(config(), memoryService);
         ReflectionTestUtils.setField(service, "vectorStoreService", vectorStoreService);
 
@@ -173,6 +183,22 @@ class LlmServiceStreamingMemoryTest {
         );
 
         assertEquals("Doudou is 5.", reply);
+        JSONObject sent = JSONObject.parseObject(requestBody.get());
+        assertEquals(3, sent.getJSONArray("messages").size());
+        String sentSystem = sent.getJSONArray("messages").getJSONObject(0).getString("content");
+        assertTrue(sentSystem.contains(ragContext));
+        assertTrue(sentSystem.contains("【对话摘要】Doudou is 5 years old."));
+        assertEquals(
+                "How old is Doudou?",
+                sent.getJSONArray("messages").getJSONObject(2).getString("content")
+        );
+        verify(memoryService).buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                ragContext,
+                "How old is Doudou?"
+        );
         verify(memoryService).saveMessagePair(
                 "user-a",
                 "conversation-a",
