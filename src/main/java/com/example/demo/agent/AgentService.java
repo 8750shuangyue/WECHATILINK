@@ -779,7 +779,7 @@ public class AgentService {
         
         List<ChatMessage> history;
         try {
-            history = chatMemoryService.getConversationHistory(conversationId);
+            history = chatMemoryService.getConversationHistory(userId, conversationId);
         } catch (Exception e) {
             logger.warn("Failed to get conversation history", e);
             history = List.of();

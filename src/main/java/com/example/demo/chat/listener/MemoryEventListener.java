@@ -42,7 +42,7 @@ public class MemoryEventListener {
     public void handleSummaryUpdateEvent(SummaryUpdateEvent event) {
         try {
             logger.debug("Processing SummaryUpdateEvent for conversation: {}", event.getConversationId());
-            chatMemoryService.checkAndUpdateSummary(event.getConversationId());
+            chatMemoryService.checkAndUpdateSummary(event.getUserId(), event.getConversationId());
             logger.debug("Summary updated successfully for conversation: {}", event.getConversationId());
         } catch (Exception e) {
             logger.error("Failed to update summary asynchronously for conversation: {}", 

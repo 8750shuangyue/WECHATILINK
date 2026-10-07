@@ -8,6 +8,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -116,5 +119,35 @@ class VectorStoreServiceTest {
         List<String> results = service.searchSimilar("query", "user-a", "conversation-a");
 
         assertEquals(List.of("resilient memory"), results);
+    }
+
+    @Test
+    void storesSameMessagePairOnceAndUsesStableDocumentId() throws Exception {
+        AtomicReference<String> savedDocumentId = new AtomicReference<>();
+        VectorStore existing = new VectorStore();
+        existing.setId(1L);
+        when(repository.findByDocumentId(anyString())).thenAnswer(invocation -> {
+            String requestedId = invocation.getArgument(0);
+            return requestedId.equals(savedDocumentId.get())
+                    ? Optional.of(existing)
+                    : Optional.empty();
+        });
+        when(repository.save(any(VectorStore.class))).thenAnswer(invocation -> {
+            VectorStore vectorStore = invocation.getArgument(0);
+            vectorStore.setId(1L);
+            savedDocumentId.set(vectorStore.getDocumentId());
+            return vectorStore;
+        });
+
+        service.saveMessage("user-a", "conversation-a", "How old is Doudou?", "Doudou is 5.");
+        service.saveMessage("user-a", "conversation-a", "How old is Doudou?", "Doudou is 5.");
+
+        ArgumentCaptor<String> documentIds = ArgumentCaptor.forClass(String.class);
+        verify(repository, times(2)).findByDocumentId(documentIds.capture());
+        assertEquals(documentIds.getAllValues().get(0), documentIds.getAllValues().get(1));
+        assertEquals(64, documentIds.getAllValues().get(0).length());
+        verify(embeddingService, times(1)).embed(anyString());
+        verify(repository, times(1)).save(any(VectorStore.class));
+        assertEquals(1, service.countVectors());
     }
 }

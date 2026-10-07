@@ -9,6 +9,8 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.nio.ByteBuffer;
@@ -27,6 +29,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 @Service
+@DependsOn("vectorStoreSchemaMigration")
 public class VectorStoreService {
 
     private static final Logger logger = LoggerFactory.getLogger(VectorStoreService.class);
@@ -115,6 +118,13 @@ public class VectorStoreService {
         try {
             logger.info("[VectorStore] saveMessage start, userId: {}, conversationId: {}, content length: {}",
                     userId, conversationId, (userMessage + assistantReply).length());
+            String docId = buildMessageDocumentId(userId, conversationId, userMessage, assistantReply);
+            if (vectorStoreRepository.findByDocumentId(docId).isPresent()) {
+                logger.debug("[VectorStore] Duplicate message vector skipped, userId: {}, conversationId: {}, docId: {}",
+                        userId, conversationId, docId);
+                return;
+            }
+
             String combinedContent = "用户: " + userMessage + "\n助手: " + assistantReply;
             float[] embedding = embeddingService.embed(combinedContent);
 
@@ -123,13 +133,19 @@ public class VectorStoreService {
                 return;
             }
 
-            String docId = UUID.randomUUID().toString();
             byte[] vectorBytes = serializeVector(embedding);
 
             VectorStore vs = new VectorStore(docId, combinedContent, vectorBytes);
             vs.setUserId(userId);
             vs.setConversationId(conversationId);
-            VectorStore saved = vectorStoreRepository.save(vs);
+            VectorStore saved;
+            try {
+                saved = vectorStoreRepository.save(vs);
+            } catch (DataIntegrityViolationException e) {
+                logger.info("[VectorStore] Concurrent duplicate message vector skipped, userId: {}, conversationId: {}, docId: {}",
+                        userId, conversationId, docId);
+                return;
+            }
 
             if (saved.getId() != null) {
                 addToIndex(saved.getId().intValue(), combinedContent, embedding,
@@ -140,6 +156,21 @@ public class VectorStoreService {
         } catch (Exception e) {
             logger.error("[VectorStore] Failed to save vector, cause: {}", e.getMessage(), e);
         }
+    }
+
+    private String buildMessageDocumentId(String userId, String conversationId,
+                                          String userMessage, String assistantReply) {
+        StringBuilder identity = new StringBuilder();
+        appendLengthPrefixed(identity, userId);
+        appendLengthPrefixed(identity, conversationId);
+        appendLengthPrefixed(identity, userMessage);
+        appendLengthPrefixed(identity, assistantReply);
+        return sha256(identity.toString());
+    }
+
+    private void appendLengthPrefixed(StringBuilder builder, String value) {
+        String normalized = value == null ? "" : value;
+        builder.append(normalized.length()).append(':').append(normalized);
     }
 
     public void saveDocument(String sourceId, String content, Map<String, Object> metadata) {
@@ -383,7 +414,7 @@ public class VectorStoreService {
             }
             return builder.toString();
         } catch (Exception e) {
-            logger.warn("[RAG] Failed to hash query: {}", e.getMessage());
+            logger.warn("[RAG] Failed to calculate SHA-256 hash: {}", e.getMessage());
             return null;
         }
     }

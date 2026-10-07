@@ -57,12 +57,13 @@ public class ChatMemoryService {
         this.eventPublisher = eventPublisher;
     }
 
-    public List<ChatMessage> getConversationHistory(String conversationId) {
-        return repository.getMessages(conversationId);
+    public List<ChatMessage> getConversationHistory(String userId, String conversationId) {
+        return repository.getMessages(userId, conversationId);
     }
 
-    public List<ChatMessage> buildPromptMessages(String conversationId, String systemPrompt, String userMessage) {
-        List<ChatMessage> history = repository.getMessages(conversationId);
+    public List<ChatMessage> buildPromptMessages(String userId, String conversationId,
+                                                 String systemPrompt, String userMessage) {
+        List<ChatMessage> history = repository.getMessages(userId, conversationId);
         List<ChatMessage> promptMessages = new ArrayList<>();
 
         boolean hasSystemPrompt = false;
@@ -188,30 +189,26 @@ public class ChatMemoryService {
         }
     }
 
-    public void saveMessagePair(String conversationId, String userMessage, String assistantReply) {
-        saveMessagePair(null, conversationId, userMessage, assistantReply);
-    }
-
     public void saveMessagePair(String userId, String conversationId, String userMessage, String assistantReply) {
-        repository.addMessage(conversationId, new ChatMessage(USER_ROLE, userMessage));
-        repository.addMessage(conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
+        repository.addMessage(userId, conversationId, new ChatMessage(USER_ROLE, userMessage));
+        repository.addMessage(userId, conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
         logger.debug("Saved message pair for user: {}, conversation: {}", userId, conversationId);
         
         eventPublisher.publishEvent(new VectorSaveEvent(userId, conversationId, userMessage, assistantReply));
-        eventPublisher.publishEvent(new SummaryUpdateEvent(conversationId));
+        eventPublisher.publishEvent(new SummaryUpdateEvent(userId, conversationId));
     }
 
-    public void checkAndUpdateSummary(String conversationId) {
-        List<ChatMessage> history = repository.getMessages(conversationId);
+    public void checkAndUpdateSummary(String userId, String conversationId) {
+        List<ChatMessage> history = repository.getMessages(userId, conversationId);
         long totalTokens = history.stream().mapToLong(ChatMessage::getTokenCount).sum();
         
         if (totalTokens > summaryThreshold && history.size() > summaryKeepRecent * 2) {
             String summary = generateRollingSummaryContent(history);
             if (summary != null && !summary.isEmpty()) {
-                repository.removeSystemMessages(conversationId, SUMMARY_PREFIX);
+                repository.removeSystemMessages(userId, conversationId, SUMMARY_PREFIX);
                 String timestamp = LocalDateTime.now().format(FORMATTER);
                 String summaryContent = SUMMARY_PREFIX + "[更新时间: " + timestamp.substring(0, 16) + "]\n" + summary;
-                repository.addMessage(conversationId, new ChatMessage(SYSTEM_ROLE, summaryContent));
+                repository.addMessage(userId, conversationId, new ChatMessage(SYSTEM_ROLE, summaryContent));
                 logger.info("Summary saved for conversation: {}, length: {} chars", conversationId, summary.length());
             }
         }
@@ -234,13 +231,13 @@ public class ChatMemoryService {
         return generateSummary(oldMessages);
     }
 
-    public void clearConversation(String conversationId) {
-        repository.clear(conversationId);
+    public void clearConversation(String userId, String conversationId) {
+        repository.clear(userId, conversationId);
         logger.info("Cleared conversation history for: {}", conversationId);
     }
 
-    public boolean hasConversation(String conversationId) {
-        return repository.exists(conversationId);
+    public boolean hasConversation(String userId, String conversationId) {
+        return repository.exists(userId, conversationId);
     }
 
     public void setMaxMessages(int maxMessages) {

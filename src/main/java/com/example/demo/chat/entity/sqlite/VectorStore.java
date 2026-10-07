@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
     @Index(name = "idx_conversation_id", columnList = "conversation_id"),
     @Index(name = "idx_user_id", columnList = "user_id"),
     @Index(name = "idx_timestamp", columnList = "timestamp")
+}, uniqueConstraints = {
+    @UniqueConstraint(name = "uk_vector_store_document_id", columnNames = "document_id")
 })
 public class VectorStore {
 
@@ -16,7 +18,7 @@ public class VectorStore {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "document_id", length = 36, nullable = false)
+    @Column(name = "document_id", length = 64, nullable = false)
     private String documentId;
 
     @Column(name = "source_id", length = 255)

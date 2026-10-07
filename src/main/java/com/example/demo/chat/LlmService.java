@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -130,15 +129,7 @@ public class LlmService {
      */
     public void chatStream(String userMessage, String systemPrompt,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
-        chatStream(null, userMessage, systemPrompt, onToken, onDone);
-    }
-
-    /**
-     * 带会话记忆的流式对话。只有正常收到上游 [DONE] 且完整结束后才保存本轮消息。
-     */
-    public void chatStream(String conversationId, String userMessage, String systemPrompt,
-                           Consumer<String> onToken, Runnable onDone) throws Exception {
-        chatStream(null, conversationId, userMessage, systemPrompt, onToken, onDone);
+        chatStream(null, null, userMessage, systemPrompt, onToken, onDone);
     }
 
     public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
@@ -165,6 +156,7 @@ public class LlmService {
         JSONArray messages = new JSONArray();
         if (conversationId != null && !conversationId.isBlank()) {
             List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
+                    userId,
                     conversationId,
                     effectivePrompt,
                     userMessage
@@ -255,18 +247,11 @@ public class LlmService {
         onDone.run();
     }
 
-    public String chatWithMemory(String conversationId, String userMessage) throws IOException {
-        return chatWithMemory(conversationId, userMessage, null);
-    }
-
-    public String chatWithMemory(String conversationId, String userMessage, String systemPrompt) throws IOException {
-        return chatWithMemory(null, conversationId, userMessage, systemPrompt);
-    }
-
     public String chatWithMemory(String userId, String conversationId, String userMessage, String systemPrompt) throws IOException {
         logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}", userId, conversationId, userMessage);
         
-        List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(conversationId, systemPrompt, userMessage);
+        List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
+                userId, conversationId, systemPrompt, userMessage);
         
         String ragContext = retrieveRagContext(userId, userMessage, conversationId);
         if (ragContext != null && !ragContext.isEmpty()) {
@@ -325,8 +310,6 @@ public class LlmService {
         String reply = executeChatRequest(requestBody);
         chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
         
-        asyncSaveVector(userId, conversationId, userMessage, reply);
-        
         return reply;
     }
     
@@ -351,22 +334,6 @@ public class LlmService {
         }
     }
     
-    @Async
-    public void asyncSaveVector(String conversationId, String userMessage, String assistantReply) {
-        asyncSaveVector(null, conversationId, userMessage, assistantReply);
-    }
-
-    @Async
-    public void asyncSaveVector(String userId, String conversationId, String userMessage, String assistantReply) {
-        try {
-            if (vectorStoreService != null) {
-                vectorStoreService.saveMessage(userId, conversationId, userMessage, assistantReply);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to async save vector", e);
-        }
-    }
-
     private String parseResponse(String responseBody) {
         logger.debug("Parsing LLM response: {}", responseBody);
         

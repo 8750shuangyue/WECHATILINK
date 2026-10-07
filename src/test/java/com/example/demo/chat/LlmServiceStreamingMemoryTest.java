@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -65,6 +66,7 @@ class LlmServiceStreamingMemoryTest {
         ));
         ChatMemoryService memoryService = mock(ChatMemoryService.class);
         when(memoryService.buildPromptMessages(
+                "user-a",
                 "conversation-a",
                 "Be concise.",
                 "What is my dog's name and age?"
@@ -110,6 +112,7 @@ class LlmServiceStreamingMemoryTest {
         ));
         ChatMemoryService memoryService = mock(ChatMemoryService.class);
         when(memoryService.buildPromptMessages(
+                "user-a",
                 "conversation-a",
                 null,
                 "What is my dog's name?"
@@ -138,6 +141,49 @@ class LlmServiceStreamingMemoryTest {
                 "conversation-a",
                 "What is my dog's name?",
                 "Doudou"
+        );
+    }
+
+    @Test
+    void chatWithMemoryPersistsOnlyThroughMemoryService() throws Exception {
+        response.set(new StreamResponse(200,
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Doudou is 5.\"}}]}"
+        ));
+        ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        when(memoryService.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                "How old is Doudou?"
+        )).thenReturn(List.of(
+                new ChatMessage("user", "My dog Doudou is 5 years old."),
+                new ChatMessage("user", "How old is Doudou?")
+        ));
+        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
+        when(vectorStoreService.searchSimilar("How old is Doudou?", "user-a", "conversation-a"))
+                .thenReturn(List.of());
+        LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "vectorStoreService", vectorStoreService);
+
+        String reply = service.chatWithMemory(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                null
+        );
+
+        assertEquals("Doudou is 5.", reply);
+        verify(memoryService).saveMessagePair(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                "Doudou is 5."
+        );
+        verify(vectorStoreService, never()).saveMessage(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                "Doudou is 5."
         );
     }
 
