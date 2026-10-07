@@ -6,9 +6,12 @@ import com.example.demo.care.service.CareRecordService;
 import com.example.demo.care.service.CareReminderService;
 import com.example.demo.care.service.MedicalTriageService;
 import com.example.demo.care.service.SpringAiCareWorkflowService;
+import com.example.demo.chat.ChatMemoryService;
 import com.example.demo.chat.LlmService;
+import com.example.demo.chat.exception.ConversationAccessDeniedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.bind.annotation.*;
@@ -32,6 +35,7 @@ public class AiController {
     private final CareReminderService careReminderService;
     private final MedicalTriageService medicalTriageService;
     private final LlmService llmService;
+    private final ChatMemoryService chatMemoryService;
 
     @PostMapping("/chat")
     public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, String> request, HttpSession session) {
@@ -87,6 +91,47 @@ public class AiController {
             session.setAttribute("conversationId", conversationId);
         }
         return conversationId;
+    }
+
+    @PostMapping("/chat/clear")
+    public ResponseEntity<Map<String, Object>> clearConversation(HttpSession session) {
+        String userId = (String) session.getAttribute("user");
+        Map<String, Object> response = new HashMap<>();
+        if (userId == null || userId.isBlank()) {
+            response.put("success", false);
+            response.put("error", "请先登录");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
+
+        String conversationId = (String) session.getAttribute("conversationId");
+        try {
+            if (conversationId == null || conversationId.isBlank()) {
+                chatMemoryService.clearUserSession(userId);
+                response.put("cleared", false);
+            } else {
+                chatMemoryService.clearConversation(userId, conversationId);
+                response.put("cleared", true);
+            }
+            session.removeAttribute("conversationId");
+            response.put("success", true);
+            return ResponseEntity.ok(response);
+        } catch (ConversationAccessDeniedException e) {
+            log.warn("Rejected clear request for unauthorized conversation, userId: {}, conversationId: {}",
+                    userId, conversationId);
+            response.put("success", false);
+            response.put("error", "无权清空该会话");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (IllegalArgumentException e) {
+            response.put("success", false);
+            response.put("error", "清空会话参数无效");
+            return ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            log.error("Failed to clear conversation, userId: {}, conversationId: {}",
+                    userId, conversationId, e);
+            response.put("success", false);
+            response.put("error", "清空会话失败，请重试");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 
     @PostMapping("/chat-with-tools")

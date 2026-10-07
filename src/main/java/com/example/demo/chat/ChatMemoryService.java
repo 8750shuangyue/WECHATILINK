@@ -31,6 +31,7 @@ public class ChatMemoryService {
 
     private final ChatMemoryRepository repository;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserSessionService userSessionService;
     
     @Autowired
     @Lazy
@@ -52,9 +53,12 @@ public class ChatMemoryService {
     @Value("${chat.memory.summary-keep-recent:5}")
     private int summaryKeepRecent;
 
-    public ChatMemoryService(ChatMemoryRepository repository, ApplicationEventPublisher eventPublisher) {
+    public ChatMemoryService(ChatMemoryRepository repository,
+                             ApplicationEventPublisher eventPublisher,
+                             UserSessionService userSessionService) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
+        this.userSessionService = userSessionService;
     }
 
     public List<ChatMessage> getConversationHistory(String userId, String conversationId) {
@@ -205,6 +209,15 @@ public class ChatMemoryService {
         if (totalTokens > summaryThreshold && history.size() > summaryKeepRecent * 2) {
             String summary = generateRollingSummaryContent(history);
             if (summary != null && !summary.isEmpty()) {
+                // 生成摘要可能耗时较久，期间会话可能已被清空或新增消息。
+                // 写入前重新校验历史，避免把过期摘要回写到已清空的会话。
+                long snapshotCount = countConversationMessages(history);
+                long currentCount = countConversationMessages(repository.getMessages(userId, conversationId));
+                if (currentCount != snapshotCount) {
+                    logger.info("Conversation changed or was cleared during summary generation, "
+                            + "skipping stale summary write for conversation: {}", conversationId);
+                    return;
+                }
                 repository.removeSystemMessages(userId, conversationId, SUMMARY_PREFIX);
                 String timestamp = LocalDateTime.now().format(FORMATTER);
                 String summaryContent = SUMMARY_PREFIX + "[更新时间: " + timestamp.substring(0, 16) + "]\n" + summary;
@@ -212,6 +225,12 @@ public class ChatMemoryService {
                 logger.info("Summary saved for conversation: {}, length: {} chars", conversationId, summary.length());
             }
         }
+    }
+
+    private long countConversationMessages(List<ChatMessage> history) {
+        return history.stream()
+                .filter(message -> !SYSTEM_ROLE.equals(message.getRole()))
+                .count();
     }
 
     private String generateRollingSummaryContent(List<ChatMessage> history) {
@@ -232,8 +251,19 @@ public class ChatMemoryService {
     }
 
     public void clearConversation(String userId, String conversationId) {
+        requireIdentifier(userId, "userId");
+        requireIdentifier(conversationId, "conversationId");
         repository.clear(userId, conversationId);
-        logger.info("Cleared conversation history for: {}", conversationId);
+        vectorStoreService.clearConversationVectors(userId, conversationId);
+        userSessionService.clearSession(userId);
+        logger.info("Cleared conversation history, vectors and session state for user: {}, conversation: {}",
+                userId, conversationId);
+    }
+
+    public void clearUserSession(String userId) {
+        requireIdentifier(userId, "userId");
+        userSessionService.clearSession(userId);
+        logger.info("Cleared session state for user: {}", userId);
     }
 
     public boolean hasConversation(String userId, String conversationId) {
@@ -246,5 +276,11 @@ public class ChatMemoryService {
 
     public void setMaxTokens(long maxTokens) {
         this.maxTokens = maxTokens;
+    }
+
+    private void requireIdentifier(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
     }
 }

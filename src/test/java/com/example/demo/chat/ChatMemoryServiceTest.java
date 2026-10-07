@@ -13,19 +13,33 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ChatMemoryServiceTest {
 
     private ChatMemoryService service;
     private List<Object> events;
+    private InMemoryChatMemoryRepository repository;
+    private VectorStoreService vectorStoreService;
+    private UserSessionService userSessionService;
 
     @BeforeEach
     void setUp() {
         events = new ArrayList<>();
+        repository = new InMemoryChatMemoryRepository();
+        vectorStoreService = mock(VectorStoreService.class);
+        userSessionService = mock(UserSessionService.class);
         service = new ChatMemoryService(
-                new InMemoryChatMemoryRepository(),
-                events::add
+                repository,
+                events::add,
+                userSessionService
         );
+        ReflectionTestUtils.setField(service, "vectorStoreService", vectorStoreService);
         ReflectionTestUtils.setField(service, "maxMessages", 10);
         ReflectionTestUtils.setField(service, "maxTokens", 10_000L);
         ReflectionTestUtils.setField(service, "summaryThreshold", 100_000L);
@@ -102,6 +116,39 @@ class ChatMemoryServiceTest {
                 .orElseThrow();
         assertEquals("user-a", summaryEvent.getUserId());
         assertEquals("conversation-a", summaryEvent.getConversationId());
+    }
+
+    @Test
+    void clearConversationClearsMessagesVectorsAndUserSessionState() {
+        service.saveMessagePair("user-a", "conversation-a", "hello", "hi");
+
+        assertTrue(service.hasConversation("user-a", "conversation-a"));
+
+        service.clearConversation("user-a", "conversation-a");
+
+        assertFalse(service.hasConversation("user-a", "conversation-a"));
+        verify(vectorStoreService).clearConversationVectors("user-a", "conversation-a");
+        verify(userSessionService).clearSession("user-a");
+    }
+
+    @Test
+    void skipsSummaryWriteWhenConversationClearedDuringGeneration() throws Exception {
+        ReflectionTestUtils.setField(service, "summaryThreshold", 0L);
+        ReflectionTestUtils.setField(service, "summaryKeepRecent", 1);
+
+        LlmService llmService = mock(LlmService.class);
+        when(llmService.chat(anyString(), anyString())).thenAnswer(invocation -> {
+            repository.clear("user-a", "conversation-a");
+            return "摘要内容";
+        });
+        ReflectionTestUtils.setField(service, "llmService", llmService);
+
+        service.saveMessagePair("user-a", "conversation-a", "hello", "hi");
+        service.saveMessagePair("user-a", "conversation-a", "how are you", "fine");
+
+        service.checkAndUpdateSummary("user-a", "conversation-a");
+
+        assertTrue(service.getConversationHistory("user-a", "conversation-a").isEmpty());
     }
 
     private static final class InMemoryChatMemoryRepository implements ChatMemoryRepository {

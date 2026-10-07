@@ -7,7 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.ByteBuffer;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -19,8 +22,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -149,5 +154,54 @@ class VectorStoreServiceTest {
         verify(embeddingService, times(1)).embed(anyString());
         verify(repository, times(1)).save(any(VectorStore.class));
         assertEquals(1, service.countVectors());
+    }
+
+    @Test
+    void clearsOnlyOwnersConversationVectorsAndKeepsOtherUsersMemory() {
+        Map<Long, VectorStore> database = new LinkedHashMap<>();
+        database.put(1L, vector(1L, "doc-a", "user-a conversation-a memory",
+                "user-a", "conversation-a", null));
+        database.put(2L, vector(2L, "doc-b", "user-b conversation-a memory",
+                "user-b", "conversation-a", null));
+        database.put(3L, vector(3L, "doc-public", "public plant care knowledge",
+                null, null, "kb_plant"));
+        when(repository.findAll()).thenAnswer(invocation -> List.copyOf(database.values()));
+        doAnswer(invocation -> {
+            database.entrySet().removeIf(entry -> {
+                VectorStore vector = entry.getValue();
+                return "user-a".equals(vector.getUserId())
+                        && "conversation-a".equals(vector.getConversationId());
+            });
+            return null;
+        }).when(repository).deleteByUserIdAndConversationId("user-a", "conversation-a");
+
+        service.clearConversationVectors("user-a", "conversation-a");
+
+        verify(repository).deleteByUserIdAndConversationId("user-a", "conversation-a");
+        verify(repository, never()).deleteByConversationId(anyString());
+        assertFalse(service.searchSimilar("query", "user-a", "conversation-a")
+                .contains("user-a conversation-a memory"));
+        assertTrue(service.searchSimilar("query", "user-b", "conversation-a")
+                .contains("user-b conversation-a memory"));
+        assertTrue(service.searchSimilar("query", "user-c", "conversation-c")
+                .contains("public plant care knowledge"));
+    }
+
+    private VectorStore vector(Long id, String documentId, String content,
+                               String userId, String conversationId, String sourceId) {
+        VectorStore vector = new VectorStore(documentId, content, serializeVector(new float[]{1.0f, 0.0f}));
+        vector.setId(id);
+        vector.setUserId(userId);
+        vector.setConversationId(conversationId);
+        vector.setSourceId(sourceId);
+        return vector;
+    }
+
+    private byte[] serializeVector(float[] vector) {
+        ByteBuffer buffer = ByteBuffer.allocate(vector.length * 4);
+        for (float value : vector) {
+            buffer.putFloat(value);
+        }
+        return buffer.array();
     }
 }

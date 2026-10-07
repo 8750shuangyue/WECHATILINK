@@ -113,4 +113,14 @@ class DatabaseChatMemoryRepositoryTest {
                 "conversation-a", "system", "summary");
         verify(messageRepository, never()).save(any(Message.class));
     }
+
+    @Test
+    void clearingMissingConversationIsIdempotentAndDoesNotCreateIt() {
+        when(conversationRepository.findById("conversation-a")).thenReturn(Optional.empty());
+
+        repository.clear("user-a", "conversation-a");
+
+        verify(conversationRepository, never()).save(any(Conversation.class));
+        verifyNoInteractions(messageRepository);
+    }
 }

@@ -85,7 +85,15 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
     @Transactional
     public void clear(String userId, String conversationId) {
         logger.info("Database clear - conversationId: {}", conversationId);
-        ensureConversationOwnedBy(userId, conversationId);
+        requireIdentifiers(userId, conversationId);
+        Optional<Conversation> existing = conversationRepository.findById(conversationId);
+        if (existing.isEmpty()) {
+            logger.info("Database clear - conversation does not exist, nothing to clear: {}", conversationId);
+            return;
+        }
+        if (!userId.equals(existing.get().getUserId())) {
+            throw new ConversationAccessDeniedException(conversationId);
+        }
         messageRepository.deleteByConversationId(conversationId);
         logger.info("Database clear - completed");
     }

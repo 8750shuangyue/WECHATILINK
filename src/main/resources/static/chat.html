@@ -27,7 +27,7 @@
         <div class="sidebar-tools"><div class="tool-label">能力清单</div>
             <div class="tool-list" id="toolList"></div>
         </div>
-        <button class="secondary-btn" onclick="clearChat()">清空会话</button>
+        <button class="secondary-btn" id="clearChatBtn" onclick="clearChat()">清空会话</button>
         <button class="secondary-btn" onclick="location.href='/home'" style="margin-top:auto;">返回首页</button>
     </aside>
 
@@ -136,10 +136,28 @@ function toggleToolMode() {
     showToast(toolMode ? '已开启工具对话（可生成图片/语音/查天气等）' : '已切换回普通流式对话');
 }
 
-function clearChat() {
+async function clearChat() {
+    var clearBtn = document.getElementById('clearChatBtn');
+    if (clearBtn && clearBtn.disabled) return;
+    if (clearBtn) clearBtn.disabled = true;
     var box = document.getElementById('chatMessages');
-    box.innerHTML = '<div class="msg system-msg"><div class="msg-bubble system-bubble">已清空会话，可以开始新的提问。</div></div>';
-    document.getElementById('welcomeMsg') && null;
+    try {
+        var res = await fetch('/api/ai/chat/clear', { method: 'POST' });
+        var data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || !data.success) {
+            showToast(data.error || '清空会话失败，请重试');
+            return;
+        }
+        box.innerHTML = '<div class="msg system-msg"><div class="msg-bubble system-bubble">已清空会话，可以开始新的提问。</div></div>';
+        document.getElementById('msgInput').value = '';
+        removeImage();
+        showToast('会话已清空');
+    } catch (e) {
+        showToast('清空会话失败，请重试');
+    } finally {
+        if (clearBtn) clearBtn.disabled = false;
+    }
 }
 
 function handleImage(e) {

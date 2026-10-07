@@ -65,7 +65,12 @@ public class UserSessionService {
     }
 
     public void clearSession(String userId) {
-        sessionRepository.deleteById(userId);
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId must not be blank");
+        }
+        if (sessionRepository.existsById(userId)) {
+            sessionRepository.deleteById(userId);
+        }
         logger.debug("Cleared session for user {}", userId);
     }
 

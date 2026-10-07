@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,6 +37,7 @@ public class VectorStoreService {
 
     private static final String ORIGIN_PUBLIC_KB = "public_kb";
     private static final String ORIGIN_CONVERSATION = "conversation_memory";
+    private static final int MAX_CLEARED_CONVERSATION_KEYS = 10_000;
 
     private final VectorStoreRepository vectorStoreRepository;
     private final EmbeddingService embeddingService;
@@ -49,6 +51,8 @@ public class VectorStoreService {
 
     private final List<float[]> vectorIndex = new ArrayList<>();
     private final Map<Integer, IndexEntry> indexEntries = new ConcurrentHashMap<>();
+    private final Set<String> clearedConversationKeys = ConcurrentHashMap.newKeySet();
+    private final Object conversationMutationLock = new Object();
     private final AtomicBoolean indexReady = new AtomicBoolean(false);
     private final ReadWriteLock indexLock = new ReentrantReadWriteLock();
 
@@ -116,6 +120,12 @@ public class VectorStoreService {
      */
     public void saveMessage(String userId, String conversationId, String userMessage, String assistantReply) {
         try {
+            String conversationKey = buildConversationKey(userId, conversationId);
+            if (clearedConversationKeys.contains(conversationKey)) {
+                logger.debug("[VectorStore] Conversation was cleared, skipping stale vector write, userId: {}, conversationId: {}",
+                        userId, conversationId);
+                return;
+            }
             logger.info("[VectorStore] saveMessage start, userId: {}, conversationId: {}, content length: {}",
                     userId, conversationId, (userMessage + assistantReply).length());
             String docId = buildMessageDocumentId(userId, conversationId, userMessage, assistantReply);
@@ -138,20 +148,28 @@ public class VectorStoreService {
             VectorStore vs = new VectorStore(docId, combinedContent, vectorBytes);
             vs.setUserId(userId);
             vs.setConversationId(conversationId);
-            VectorStore saved;
-            try {
-                saved = vectorStoreRepository.save(vs);
-            } catch (DataIntegrityViolationException e) {
-                logger.info("[VectorStore] Concurrent duplicate message vector skipped, userId: {}, conversationId: {}, docId: {}",
-                        userId, conversationId, docId);
-                return;
-            }
+            synchronized (conversationMutationLock) {
+                if (clearedConversationKeys.contains(conversationKey)) {
+                    logger.debug("[VectorStore] Conversation was cleared during embedding, skipping stale vector write, userId: {}, conversationId: {}",
+                            userId, conversationId);
+                    return;
+                }
 
-            if (saved.getId() != null) {
-                addToIndex(saved.getId().intValue(), combinedContent, embedding,
-                        saved.getDocumentId(), userId, conversationId, null, null);
-                logger.info("[VectorStore] Saved message vector, rowId: {}, userId: {}, conversationId: {}",
-                        saved.getId(), userId, conversationId);
+                VectorStore saved;
+                try {
+                    saved = vectorStoreRepository.save(vs);
+                } catch (DataIntegrityViolationException e) {
+                    logger.info("[VectorStore] Concurrent duplicate message vector skipped, userId: {}, conversationId: {}, docId: {}",
+                            userId, conversationId, docId);
+                    return;
+                }
+
+                if (saved.getId() != null) {
+                    addToIndex(saved.getId().intValue(), combinedContent, embedding,
+                            saved.getDocumentId(), userId, conversationId, null, null);
+                    logger.info("[VectorStore] Saved message vector, rowId: {}, userId: {}, conversationId: {}",
+                            saved.getId(), userId, conversationId);
+                }
             }
         } catch (Exception e) {
             logger.error("[VectorStore] Failed to save vector, cause: {}", e.getMessage(), e);
@@ -461,14 +479,40 @@ public class VectorStoreService {
         return vector;
     }
 
-    public void clearConversationVectors(String conversationId) {
-        try {
-            vectorStoreRepository.deleteByConversationId(conversationId);
-            loadFromSQLite();
-            logger.info("Cleared vectors for conversation: {}", conversationId);
-        } catch (Exception e) {
-            logger.error("Failed to clear conversation vectors", e);
+    public void clearConversationVectors(String userId, String conversationId) {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId must not be blank");
         }
+        if (conversationId == null || conversationId.isBlank()) {
+            throw new IllegalArgumentException("conversationId must not be blank");
+        }
+
+        String conversationKey = buildConversationKey(userId, conversationId);
+        synchronized (conversationMutationLock) {
+            boolean newlyMarked = clearedConversationKeys.add(conversationKey);
+            if (clearedConversationKeys.size() > MAX_CLEARED_CONVERSATION_KEYS) {
+                clearedConversationKeys.clear();
+                clearedConversationKeys.add(conversationKey);
+                newlyMarked = true;
+            }
+            try {
+                vectorStoreRepository.deleteByUserIdAndConversationId(userId, conversationId);
+                loadFromSQLite();
+                logger.info("Cleared vectors for user: {}, conversation: {}", userId, conversationId);
+            } catch (Exception e) {
+                if (newlyMarked) {
+                    clearedConversationKeys.remove(conversationKey);
+                }
+                throw e;
+            }
+        }
+    }
+
+    private String buildConversationKey(String userId, String conversationId) {
+        StringBuilder key = new StringBuilder();
+        appendLengthPrefixed(key, userId);
+        appendLengthPrefixed(key, conversationId);
+        return key.toString();
     }
 
     public void clearDocumentVectors(String sourceId) {
