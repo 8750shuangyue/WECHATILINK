@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -479,6 +480,7 @@ public class VectorStoreService {
         return vector;
     }
 
+    @Transactional(transactionManager = "sqliteTransactionManager")
     public void clearConversationVectors(String userId, String conversationId) {
         if (userId == null || userId.isBlank()) {
             throw new IllegalArgumentException("userId must not be blank");
@@ -515,6 +517,7 @@ public class VectorStoreService {
         return key.toString();
     }
 
+    @Transactional(transactionManager = "sqliteTransactionManager")
     public void clearDocumentVectors(String sourceId) {
         try {
             vectorStoreRepository.deleteBySourceId(sourceId);

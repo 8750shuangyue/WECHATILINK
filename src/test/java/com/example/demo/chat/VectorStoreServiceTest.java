@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -185,6 +187,21 @@ class VectorStoreServiceTest {
                 .contains("user-b conversation-a memory"));
         assertTrue(service.searchSimilar("query", "user-c", "conversation-c")
                 .contains("public plant care knowledge"));
+    }
+
+    @Test
+    void clearOperationsUseSqliteTransactionManager() throws Exception {
+        assertSqliteTransaction("clearConversationVectors", String.class, String.class);
+        assertSqliteTransaction("clearDocumentVectors", String.class);
+    }
+
+    private void assertSqliteTransaction(String methodName, Class<?>... parameterTypes) throws Exception {
+        Transactional transactional = VectorStoreService.class
+                .getMethod(methodName, parameterTypes)
+                .getAnnotation(Transactional.class);
+
+        assertNotNull(transactional, methodName + " must run in a SQLite transaction");
+        assertEquals("sqliteTransactionManager", transactional.transactionManager());
     }
 
     private VectorStore vector(Long id, String documentId, String content,
