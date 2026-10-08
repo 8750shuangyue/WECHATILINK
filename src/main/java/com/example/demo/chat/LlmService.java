@@ -38,7 +38,7 @@ public class LlmService {
     
     @Autowired
     @Lazy
-    private VectorStoreService vectorStoreService;
+    private RagContextService ragContextService;
 
     @Autowired
     @Lazy
@@ -155,10 +155,12 @@ public class LlmService {
 
         JSONArray messages = new JSONArray();
         if (conversationId != null && !conversationId.isBlank()) {
+            String ragContext = retrieveRagContext(userId, userMessage, conversationId);
             List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
                     userId,
                     conversationId,
                     effectivePrompt,
+                    ragContext,
                     userMessage
             );
             for (ChatMessage message : promptMessages) {
@@ -269,9 +271,6 @@ public class LlmService {
         }
 
         String ragContext = retrieveRagContext(userId, userMessage, conversationId);
-        if (ragContext != null && !ragContext.isEmpty()) {
-            logger.info("RAG context retrieved, length: {} chars", ragContext.length());
-        }
 
         List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
                 userId, conversationId, effectivePrompt, ragContext, userMessage);
@@ -297,24 +296,14 @@ public class LlmService {
     }
     
     private String retrieveRagContext(String userId, String query, String conversationId) {
-        try {
-            if (vectorStoreService == null) {
-                return null;
-            }
-            List<String> similarMessages = vectorStoreService.searchSimilar(query, userId, conversationId);
-            if (similarMessages.isEmpty()) {
-                return null;
-            }
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < similarMessages.size(); i++) {
-                sb.append("相关对话 ").append(i + 1).append(":\n");
-                sb.append(similarMessages.get(i)).append("\n\n");
-            }
-            return sb.toString().trim();
-        } catch (Exception e) {
-            logger.warn("Failed to retrieve RAG context: {}", e.getMessage());
-            return null;
+        if (ragContextService == null) {
+            return "";
         }
+        String ragContext = ragContextService.buildContext(userId, conversationId, query);
+        if (ragContext != null && !ragContext.isEmpty()) {
+            logger.info("RAG context retrieved, length: {} chars", ragContext.length());
+        }
+        return ragContext;
     }
     
     private String parseResponse(String responseBody) {

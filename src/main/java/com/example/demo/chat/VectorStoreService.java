@@ -36,8 +36,8 @@ public class VectorStoreService {
 
     private static final Logger logger = LoggerFactory.getLogger(VectorStoreService.class);
 
-    private static final String ORIGIN_PUBLIC_KB = "public_kb";
-    private static final String ORIGIN_CONVERSATION = "conversation_memory";
+    public static final String ORIGIN_PUBLIC_KB = "public_kb";
+    public static final String ORIGIN_CONVERSATION = "conversation_memory";
     private static final int MAX_CLEARED_CONVERSATION_KEYS = 10_000;
 
     private final VectorStoreRepository vectorStoreRepository;

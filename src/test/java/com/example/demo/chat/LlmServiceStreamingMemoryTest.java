@@ -69,6 +69,7 @@ class LlmServiceStreamingMemoryTest {
                 "user-a",
                 "conversation-a",
                 "Be concise.",
+                "",
                 "What is my dog's name and age?"
         )).thenReturn(List.of(
                 new ChatMessage("system", "Be concise.\n\n【对话摘要】The dog is named Doudou."),
@@ -77,6 +78,7 @@ class LlmServiceStreamingMemoryTest {
                 new ChatMessage("user", "What is my dog's name and age?")
         ));
         LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", emptyRagContextService());
         List<String> tokens = new ArrayList<>();
         AtomicBoolean done = new AtomicBoolean(false);
 
@@ -119,12 +121,14 @@ class LlmServiceStreamingMemoryTest {
                 "user-a",
                 "conversation-a",
                 null,
+                "",
                 "What is my dog's name?"
         )).thenReturn(List.of(
                 new ChatMessage("user", "My dog is named Doudou."),
                 new ChatMessage("user", "What is my dog's name?")
         ));
         LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", emptyRagContextService());
 
         assertThrows(
                 IOException.class,
@@ -169,11 +173,11 @@ class LlmServiceStreamingMemoryTest {
                 new ChatMessage("user", "My dog Doudou is 5 years old."),
                 new ChatMessage("user", "How old is Doudou?")
         ));
-        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
-        when(vectorStoreService.searchSimilar("How old is Doudou?", "user-a", "conversation-a"))
-                .thenReturn(List.of("Doudou is 5."));
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.buildContext("user-a", "conversation-a", "How old is Doudou?"))
+                .thenReturn(ragContext);
         LlmService service = new LlmService(config(), memoryService);
-        ReflectionTestUtils.setField(service, "vectorStoreService", vectorStoreService);
+        ReflectionTestUtils.setField(service, "ragContextService", ragContextService);
 
         String reply = service.chatWithMemory(
                 "user-a",
@@ -205,12 +209,67 @@ class LlmServiceStreamingMemoryTest {
                 "How old is Doudou?",
                 "Doudou is 5."
         );
-        verify(vectorStoreService, never()).saveMessage(
+    }
+
+    @Test
+    void chatStreamPassesRagIntoPromptBuilderAndKeepsSummary() throws Exception {
+        response.set(new StreamResponse(200,
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Doudou\"}}]}\n\n"
+                        + "data: {\"choices\":[{\"delta\":{\"content\":\" is 5.\"}}]}\n\n"
+                        + "data: [DONE]\n\n"
+        ));
+        String ragContext = "公共知识库信息 1:\n狗的正常年龄判断需要结合体型。";
+        ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        when(memoryService.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                ragContext,
+                "How old is Doudou?"
+        )).thenReturn(List.of(
+                new ChatMessage("system",
+                        "参考以下检索结果，帮助回答用户当前问题：\n"
+                                + ragContext
+                                + "\n\n【对话摘要】Doudou is 5 years old."),
+                new ChatMessage("user", "How old is Doudou?")
+        ));
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.buildContext("user-a", "conversation-a", "How old is Doudou?"))
+                .thenReturn(ragContext);
+        LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", ragContextService);
+
+        service.chatStream(
                 "user-a",
                 "conversation-a",
                 "How old is Doudou?",
-                "Doudou is 5."
+                null,
+                ignored -> {
+                },
+                () -> {
+                }
         );
+
+        JSONObject sent = JSONObject.parseObject(requestBody.get());
+        String sentSystem = sent.getJSONArray("messages").getJSONObject(0).getString("content");
+        assertTrue(sentSystem.contains(ragContext));
+        assertTrue(sentSystem.contains("【对话摘要】Doudou is 5 years old."));
+        verify(memoryService).buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                ragContext,
+                "How old is Doudou?"
+        );
+    }
+
+    private RagContextService emptyRagContextService() {
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.buildContext(org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("");
+        return ragContextService;
     }
 
     private DashScopeConfig config() {

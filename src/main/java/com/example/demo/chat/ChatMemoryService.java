@@ -27,7 +27,7 @@ public class ChatMemoryService {
     private static final String ASSISTANT_ROLE = "assistant";
     private static final String SUMMARY_ROLE = "system";
     private static final String SUMMARY_PREFIX = "【对话摘要】";
-    private static final String RAG_CONTEXT_PREFIX = "参考以下历史对话信息，帮助回答用户当前问题：";
+    private static final String RAG_CONTEXT_PREFIX = "参考以下检索结果，帮助回答用户当前问题：";
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final ChatMemoryRepository repository;
