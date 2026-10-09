@@ -1,6 +1,6 @@
 # Sekai PetPlant · AI 宠物 / 绿植护理平台
 
-> 最近更新：2026-10-08（阶段 0.1 至 1 已完成并部署生产；阶段 2.1 流式与护理入口 RAG 接线、阶段 2.2 受控只读召回观测已合入 `main`，本地全量测试 `78/78` 通过，生产仍以 `f6172a8` 为运行基线）
+> 最近更新：2026-10-09（阶段 0.1 至 1 已完成并部署生产；阶段 2.1 流式与护理入口 RAG 接线、阶段 2.2 受控只读召回观测已随提交 `fd38c5d` 部署生产，生产运行提交为 `fd38c5d`，本地全量测试 `78/78` 通过；真实知识导入与 `Recall@K` 待执行）
 
 一个以 **AI Agent 为核心**的一站式宠物与绿植智能护理 Web 平台：覆盖养护问答、AI 识图诊断、护理档案与提醒、知识库 RAG、商城库存、社区分享、每日简报、数据观测等全链路场景。
 
@@ -32,9 +32,9 @@ P1 与阶段 0.1 至 0.5 已完成代码和自动化验证：向量记忆增加 
 
 阶段 1 已在生产环境（提交 `f6172a8`，2026-10-07 部署，`ilink.service` 运行中）完成真实 HTTP 黑盒评测：12 条冒烟题用于确认链路，40 条正式题用于验收。正式运行共记录 `56` 次请求、`52` 个质量评分样本，质量通过 `52`，通过率 `100.00%`；关键事实覆盖率、工具选择准确率、工具执行成功率、拒答边界均为 `100.00%`，多轮记忆 `4/4`，基础设施失败 `0`，各分类通过率均为 `100.00%`；总延迟均值约 `19.13 秒`，P95 约 `57.57 秒`。冒烟运行记录 `16` 个质量样本、通过 `14`，两处失败 `plant-001`、`plant-002` 均为评分短语误判，不是回答内容错误。清空会话已在生产用临时账号完成端到端验证：先记住唯一标记，清空后再提问回答“不知道”，旧标记不再出现，旧对话与旧向量均已从 MySQL / SQLite 删除，公共知识库不受影响。评测报告见 `TEST/eval/results/baseline-20261007-182544.md` 和 `TEST/eval/results/baseline-20261007-183033.md`。
 
-阶段 2.1 已在 `main` 完成 RAG 接线：`/api/ai/chat/stream` 现在按真实 `userId + conversationId` 检索公共知识库与当前会话历史，并复用业务提示词、RAG、摘要合并后的唯一 system 消息；`/api/care/qa` 的 `chatWithMemory` 也复用同一 `RagContextService` 构建器。检索结果按“公共知识库信息”优先、“相关历史对话”其次格式化，检索失败或空查询会降级为空上下文，不阻断回答；`/api/ai/chat` 与 `/api/ai/chat-with-tools` 继续保持不读写持久化记忆、不执行 RAG 的兼容契约。
+阶段 2.1 已完成 RAG 接线并随提交 `fd38c5d` 部署生产：`/api/ai/chat/stream` 现在按真实 `userId + conversationId` 检索公共知识库与当前会话历史，并复用业务提示词、RAG、摘要合并后的唯一 system 消息；`/api/care/qa` 的 `chatWithMemory` 也复用同一 `RagContextService` 构建器。检索结果按“公共知识库信息”优先、“相关历史对话”其次格式化，检索失败或空查询会降级为空上下文，不阻断回答；`/api/ai/chat` 与 `/api/ai/chat-with-tools` 继续保持不读写持久化记忆、不执行 RAG 的兼容契约。
 
-阶段 2.2 已在 `main` 完成受控只读召回观测：新增 `GET /api/internal/rag/retrievals/{traceId}` 和 `GET /api/internal/rag/retrievals?conversationId=...&limit=20` 两个只读接口，返回检索范围、`topK`、相似度阈值、命中数、耗时、时间和命中文档的 `documentId` / `sourceId` / 相似度 / 来源；不返回查询明文、查询哈希、文档正文或用户、会话标识。接口默认关闭（`APP_RAG_OBSERVABILITY_ENABLED=false`），必须已登录且命中 `APP_RAG_OBSERVABILITY_ALLOWED_USERS` 白名单才可访问；关闭、未登录、越权、未找到和成功访问都会写入访问审计，审计写入失败不阻断主链路。会话查询默认 20 条、上限 100 条。
+阶段 2.2 已完成受控只读召回观测并随提交 `fd38c5d` 部署生产：新增 `GET /api/internal/rag/retrievals/{traceId}` 和 `GET /api/internal/rag/retrievals?conversationId=...&limit=20` 两个只读接口，返回检索范围、`topK`、相似度阈值、命中数、耗时、时间和命中文档的 `documentId` / `sourceId` / 相似度 / 来源；不返回查询明文、查询哈希、文档正文或用户、会话标识。接口默认关闭（`APP_RAG_OBSERVABILITY_ENABLED=false`），必须已登录且命中 `APP_RAG_OBSERVABILITY_ALLOWED_USERS` 白名单才可访问；关闭、未登录、越权、未找到和成功访问都会写入访问审计，审计写入失败不阻断主链路。会话查询默认 20 条、上限 100 条。
 
 阶段 2 仍需继续完成：向线上公共知识库导入真实业务知识并替换测试种子（`post_1`、`post_2`），把正式题库 `expectedSourceIds` 映射到真实来源后计算 `Recall@K` 与引用命中率。上述内容完成前，不宣称线上知识库已具备真实业务资料，也不计算或伪造 `Recall@K`。当前 `main` 全量测试 `78/78` 通过，其中包含 4 项真实 MySQL 集成测试。
 
@@ -47,7 +47,7 @@ P1 与阶段 0.1 至 0.5 已完成代码和自动化验证：向量记忆增加 
 | `/api/ai/chat` | 单轮兼容入口 | 不读取历史 / 摘要，不执行 RAG，不保存消息或对话向量 |
 | `/api/ai/chat-with-tools` | 单轮工具兼容入口 | 不读取历史 / 摘要，不执行 RAG，不保存消息或对话向量 |
 
-正式环境已通过阿里云服务器上的 Nginx 提供 HTTPS 入口，应用仅监听 `127.0.0.1:8080`，公网 `8080` 已关闭。ICP 备案号为 `苏ICP备2026075056号-1`，公安联网备案号为 `苏公网安备32062102001471号`。阶段 0.1 至 0.5 与阶段 1 已随提交 `f6172a8` 部署到生产，部署前保留 `/opt/ilink/backups/20261007-165214/` 和 `/opt/ilink/backups/20261007-173151-clear-fix/` 备份，阶段 1 收尾另建 `/opt/ilink/backups/20261007-190953-stage1-cleanup/`（MySQL dump + 一致性 SQLite 副本）。评测用临时账号（`codexsmoke%`、`codexeval%`、`codexclear%`、`codexrag%`）及其对话、消息、工具日志和对话向量已在 2026-10-07 清理，公共知识向量 `post_1`、`post_2` 保留。历史 `user_id = NULL` 的旧会话仍保持不可读写，归属处置留待数据治理阶段。后续仍需完成外部服务密钥轮换、全局限流、监控和备份恢复演练。
+正式环境已通过阿里云服务器上的 Nginx 提供 HTTPS 入口，应用仅监听 `127.0.0.1:8080`，公网 `8080` 已关闭。ICP 备案号为 `苏ICP备2026075056号-1`，公安联网备案号为 `苏公网安备32062102001471号`。阶段 0.1 至 0.5 与阶段 1 已随提交 `f6172a8` 部署到生产，部署前保留 `/opt/ilink/backups/20261007-165214/` 和 `/opt/ilink/backups/20261007-173151-clear-fix/` 备份，阶段 1 收尾另建 `/opt/ilink/backups/20261007-190953-stage1-cleanup/`（MySQL dump + 一致性 SQLite 副本）。阶段 2.1 与 2.2 已于 2026-10-09 随提交 `fd38c5d` 部署生产，部署前备份位于 `/opt/ilink/backups/20261009-202225-stage2-rag-deploy/`。评测用临时账号（`codexsmoke%`、`codexeval%`、`codexclear%`、`codexrag%`）及其对话、消息、工具日志和对话向量已在 2026-10-07 清理，公共知识向量 `post_1`、`post_2` 保留。历史 `user_id = NULL` 的旧会话仍保持不可读写，归属处置留待数据治理阶段。后续仍需完成外部服务密钥轮换、全局限流、监控和备份恢复演练。
 
 ---
 
