@@ -62,9 +62,11 @@ public class EvalResult {
     }
 
     public record RetrievalRecord(
+            String documentId,
             String sourceId,
             Double similarity,
-            String content
+            String content,
+            String origin
     ) {
     }
 }

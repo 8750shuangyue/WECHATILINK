@@ -10,9 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -23,39 +22,56 @@ import java.util.Map;
 public class KnowledgeBaseController {
 
     private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseController.class);
-    private static final int CHUNK_LENGTH = 500;
-
     private final FileParserService fileParserService;
     private final FileUploadValidator fileUploadValidator;
+    private final KnowledgeImportService knowledgeImportService;
     private final VectorStoreService vectorStoreService;
 
     public KnowledgeBaseController(FileParserService fileParserService,
                                    FileUploadValidator fileUploadValidator,
+                                   KnowledgeImportService knowledgeImportService,
                                    VectorStoreService vectorStoreService) {
         this.fileParserService = fileParserService;
         this.fileUploadValidator = fileUploadValidator;
+        this.knowledgeImportService = knowledgeImportService;
         this.vectorStoreService = vectorStoreService;
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Map<String, Object>> upload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "sourceId", required = false) String sourceId,
+            @RequestParam(value = "dryRun", defaultValue = "false") boolean dryRun) {
         Map<String, Object> r = new HashMap<>();
         try {
             fileUploadValidator.validateDocument(file);
             String text = fileParserService.parseFile(file);
-            String fileName = file.getOriginalFilename();
-            String sourceId = "kb_" + System.currentTimeMillis() + "_" + fileName;
-            List<String> chunks = chunk(text);
-            for (String c : chunks) {
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("fileName", fileName);
-                vectorStoreService.saveDocument(sourceId, c, meta);
-            }
-            log.info("[KB] Uploaded {} -> {} chunks ({} chars)", fileName, chunks.size(), text.length());
+            KnowledgeImportService.ImportPlan plan =
+                    knowledgeImportService.plan(sourceId, file.getOriginalFilename(), text);
+
             r.put("success", true);
-            r.put("count", chunks.size());
-            r.put("chars", text.length());
-        } catch (FileValidationException e) {
+            r.put("dryRun", dryRun);
+            r.put("sourceId", plan.sourceId());
+            r.put("fileName", plan.fileName());
+            r.put("count", plan.chunks().size());
+            r.put("chars", plan.charCount());
+
+            if (dryRun) {
+                return ResponseEntity.ok(r);
+            }
+
+            long previousCount = vectorStoreService.countVectorsBySource(plan.sourceId());
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("type", "document");
+            metadata.put("fileName", plan.fileName());
+            metadata.put("importMode", "replace");
+            int count = vectorStoreService.replaceDocument(
+                    plan.sourceId(), plan.chunks(), metadata);
+
+            log.info("[KB] Imported {} -> sourceId={}, chunks={}, chars={}, replacedPrevious={}",
+                    plan.fileName(), plan.sourceId(), count, plan.charCount(), previousCount);
+            r.put("replacedPreviousCount", previousCount);
+        } catch (FileValidationException | KnowledgeImportException e) {
             log.warn("[KB] Upload rejected: {}", e.getMessage());
             r.put("success", false);
             r.put("error", e.getMessage());
@@ -64,6 +80,7 @@ public class KnowledgeBaseController {
             log.error("[KB] Upload failed", e);
             r.put("success", false);
             r.put("error", e.getMessage());
+            return ResponseEntity.internalServerError().body(r);
         }
         return ResponseEntity.ok(r);
     }
@@ -84,27 +101,4 @@ public class KnowledgeBaseController {
         return ResponseEntity.ok(r);
     }
 
-    private List<String> chunk(String text) {
-        List<String> out = new ArrayList<>();
-        if (text == null || text.trim().isEmpty()) {
-            return out;
-        }
-        String[] paragraphs = text.split("\\n+");
-        StringBuilder buf = new StringBuilder();
-        for (String p : paragraphs) {
-            String t = p.trim();
-            if (t.isEmpty()) {
-                continue;
-            }
-            if (buf.length() + t.length() > CHUNK_LENGTH && buf.length() > 0) {
-                out.add(buf.toString().trim());
-                buf.setLength(0);
-            }
-            buf.append(t).append("\n");
-        }
-        if (buf.length() > 0) {
-            out.add(buf.toString().trim());
-        }
-        return out;
-    }
 }

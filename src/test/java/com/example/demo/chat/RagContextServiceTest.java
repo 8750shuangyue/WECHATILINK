@@ -16,29 +16,36 @@ class RagContextServiceTest {
     @Test
     void separatesPublicKnowledgeFromConversationMemory() {
         VectorStoreService vectorStoreService = mock(VectorStoreService.class);
-        when(vectorStoreService.searchSimilarWithMetadata("question", "user-a", "conversation-a"))
-                .thenReturn(List.of(
-                        new VectorStoreService.SearchResult(
-                                "public-doc",
-                                "guide-1",
-                                "公共护理知识",
-                                0.95,
-                                null,
-                                VectorStoreService.ORIGIN_PUBLIC_KB
-                        ),
-                        new VectorStoreService.SearchResult(
-                                "conversation-doc",
-                                null,
-                                "用户: 我的宠物叫豆豆\n助手: 记住了",
-                                0.91,
-                                null,
-                                VectorStoreService.ORIGIN_CONVERSATION
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a"))
+                .thenReturn(new VectorStoreService.SearchOutcome(
+                        "trace-1",
+                        List.of(
+                                new VectorStoreService.SearchResult(
+                                        "public-doc",
+                                        "guide-1",
+                                        "公共护理知识",
+                                        0.95,
+                                        null,
+                                        VectorStoreService.ORIGIN_PUBLIC_KB
+                                ),
+                                new VectorStoreService.SearchResult(
+                                        "conversation-doc",
+                                        null,
+                                        "用户: 我的宠物叫豆豆\n助手: 记住了",
+                                        0.91,
+                                        null,
+                                        VectorStoreService.ORIGIN_CONVERSATION
+                                )
                         )
                 ));
         RagContextService service = new RagContextService(vectorStoreService);
 
-        String context = service.buildContext("user-a", "conversation-a", "question");
+        RagContextService.ContextResult result =
+                service.buildContextWithTrace("user-a", "conversation-a", "question");
+        String context = result.context();
 
+        assertEquals("trace-1", result.traceId());
         assertTrue(context.contains("公共知识库信息 1:\n公共护理知识"));
         assertTrue(context.contains("相关历史对话 1:\n用户: 我的宠物叫豆豆\n助手: 记住了"));
         assertTrue(context.indexOf("公共知识库信息") < context.indexOf("相关历史对话"));
@@ -56,11 +63,17 @@ class RagContextServiceTest {
     @Test
     void returnsEmptyContextWhenRetrievalFails() {
         VectorStoreService vectorStoreService = mock(VectorStoreService.class);
-        when(vectorStoreService.searchSimilarWithMetadata("question", "user-a", "conversation-a"))
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a"))
                 .thenThrow(new IllegalStateException("vector store unavailable"));
         RagContextService service = new RagContextService(vectorStoreService);
 
-        assertEquals("", service.buildContext("user-a", "conversation-a", "question"));
-        verify(vectorStoreService).searchSimilarWithMetadata("question", "user-a", "conversation-a");
+        RagContextService.ContextResult result =
+                service.buildContextWithTrace("user-a", "conversation-a", "question");
+
+        assertEquals("", result.context());
+        assertEquals(null, result.traceId());
+        verify(vectorStoreService).searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a");
     }
 }

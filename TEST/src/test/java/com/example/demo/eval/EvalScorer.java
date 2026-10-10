@@ -59,9 +59,7 @@ public class EvalScorer {
         score.toolSelectionScore = toolSelectionScore(expectedTools, forbiddenTools, actualTools);
         score.forbiddenToolHit = actualTools.stream().anyMatch(forbiddenTools::contains);
         score.toolSuccessRate = toolSuccessRate(result);
-        // The production service does not expose internal retrieval records on the
-        // public HTTP endpoints used by this black-box project.
-        score.sourceRecall = evalCase.expectedSourceIds().isEmpty() ? null : null;
+        score.sourceRecall = sourceRecall(evalCase, result);
         score.refusalScore = refusalScore(response, evalCase.shouldRefuse());
 
         boolean transportOk = result.error() == null && result.status() >= 200 && result.status() < 300;
@@ -113,6 +111,27 @@ public class EvalScorer {
                 .filter(EvalHttpClient.ToolCallRecord::success)
                 .count();
         return (double) successCount / result.toolCalls().size();
+    }
+
+    private Double sourceRecall(EvalCase evalCase, EvalHttpClient.HttpResult result) {
+        if (evalCase.expectedSourceIds().isEmpty()) {
+            return null;
+        }
+        if (!"available".equals(result.retrievalStatus())) {
+            return null;
+        }
+        Set<String> expected = new HashSet<>(evalCase.expectedSourceIds());
+        expected.remove(null);
+        expected.removeIf(String::isBlank);
+        if (expected.isEmpty()) {
+            return null;
+        }
+        long hitCount = result.retrieval().stream()
+                .map(EvalHttpClient.RetrievalRecord::sourceId)
+                .filter(sourceId -> sourceId != null && expected.contains(sourceId))
+                .distinct()
+                .count();
+        return (double) hitCount / expected.size();
     }
 
     private Double refusalScore(String response, boolean shouldRefuse) {

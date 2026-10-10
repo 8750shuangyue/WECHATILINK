@@ -129,10 +129,18 @@ public class LlmService {
      */
     public void chatStream(String userMessage, String systemPrompt,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
-        chatStream(null, null, userMessage, systemPrompt, onToken, onDone);
+        chatStream(null, null, userMessage, systemPrompt, ignored -> {
+        }, onToken, onDone);
     }
 
     public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onToken, Runnable onDone) throws Exception {
+        chatStream(userId, conversationId, userMessage, systemPrompt, ignored -> {
+        }, onToken, onDone);
+    }
+
+    public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onRetrievalTrace,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
         String effectivePrompt = systemPrompt;
 
@@ -155,7 +163,8 @@ public class LlmService {
 
         JSONArray messages = new JSONArray();
         if (conversationId != null && !conversationId.isBlank()) {
-            String ragContext = retrieveRagContext(userId, userMessage, conversationId);
+            String ragContext = retrieveRagContext(
+                    userId, userMessage, conversationId, onRetrievalTrace);
             List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
                     userId,
                     conversationId,
@@ -296,10 +305,32 @@ public class LlmService {
     }
     
     private String retrieveRagContext(String userId, String query, String conversationId) {
+        return retrieveRagContext(userId, query, conversationId, ignored -> {
+        });
+    }
+
+    private String retrieveRagContext(String userId, String query, String conversationId,
+                                      Consumer<String> onRetrievalTrace) {
         if (ragContextService == null) {
             return "";
         }
-        String ragContext = ragContextService.buildContext(userId, conversationId, query);
+        RagContextService.ContextResult contextResult =
+                ragContextService.buildContextWithTrace(userId, conversationId, query);
+        String ragContext;
+        if (contextResult == null) {
+            // Keep compatibility with older service implementations and test doubles.
+            ragContext = ragContextService.buildContext(userId, conversationId, query);
+        } else {
+            ragContext = contextResult.context();
+            if (onRetrievalTrace != null
+                    && contextResult.traceId() != null
+                    && !contextResult.traceId().isBlank()) {
+                onRetrievalTrace.accept(contextResult.traceId());
+            }
+        }
+        if (ragContext == null) {
+            ragContext = "";
+        }
         if (ragContext != null && !ragContext.isEmpty()) {
             logger.info("RAG context retrieved, length: {} chars", ragContext.length());
         }

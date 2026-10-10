@@ -151,6 +151,15 @@ class EvalReportRegeneratorTest {
                 result.totalIterations,
                 result.totalTokens,
                 result.toolCalls,
+                result.retrieval == null ? List.of() : result.retrieval.stream()
+                        .map(item -> new EvalHttpClient.RetrievalRecord(
+                                item.documentId(),
+                                item.sourceId(),
+                                item.similarity(),
+                                item.origin()
+                        ))
+                        .toList(),
+                result.retrievalStatus,
                 result.error,
                 result.retryCount
         );

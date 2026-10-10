@@ -263,6 +263,43 @@ class LlmServiceStreamingMemoryTest {
         );
     }
 
+    @Test
+    void emitsRetrievalTraceBeforeTheFirstToken() throws Exception {
+        response.set(new StreamResponse(200,
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Doudou\"}}]}\n\n"
+                        + "data: {\"choices\":[{\"delta\":{\"content\":\" is 5.\"}}]}\n\n"
+                        + "data: [DONE]\n\n"
+        ));
+        String ragContext = "公共知识库信息 1:\n狗的正常年龄判断需要结合体型。";
+        ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        when(memoryService.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                ragContext,
+                "How old is Doudou?"
+        )).thenReturn(List.of(new ChatMessage("user", "How old is Doudou?")));
+        RagContextService ragContextService = mock(RagContextService.class);
+        when(ragContextService.buildContextWithTrace(
+                "user-a", "conversation-a", "How old is Doudou?"))
+                .thenReturn(new RagContextService.ContextResult(ragContext, "trace-1"));
+        LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", ragContextService);
+        List<String> events = new ArrayList<>();
+
+        service.chatStream(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                null,
+                traceId -> events.add("trace:" + traceId),
+                events::add,
+                () -> events.add("done")
+        );
+
+        assertEquals(List.of("trace:trace-1", "Doudou", " is 5.", "done"), events);
+    }
+
     private RagContextService emptyRagContextService() {
         RagContextService ragContextService = mock(RagContextService.class);
         when(ragContextService.buildContext(org.mockito.ArgumentMatchers.anyString(),

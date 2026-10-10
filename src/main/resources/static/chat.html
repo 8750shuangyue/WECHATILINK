@@ -300,9 +300,17 @@ async function sendText() {
                 var parts = buf.split('\n\n');
                 buf = parts.pop();
                 for (var part of parts) {
-                    var line = part.split('\n').find(function (l) { return l.indexOf('data:') === 0; });
-                    if (!line) continue;
-                    var data = line.slice(5).trim();
+                    var eventName = 'message';
+                    var dataLines = [];
+                    part.split(/\r?\n/).forEach(function (line) {
+                        if (line.indexOf('event:') === 0) {
+                            eventName = line.slice(6).trim();
+                        } else if (line.indexOf('data:') === 0) {
+                            dataLines.push(line.slice(5).replace(/^ /, ''));
+                        }
+                    });
+                    if (eventName === 'rag-trace') continue;
+                    var data = dataLines.join('\n').trim();
                     if (!data || data === '[DONE]') continue;
                     try {
                         acc += JSON.parse(data);

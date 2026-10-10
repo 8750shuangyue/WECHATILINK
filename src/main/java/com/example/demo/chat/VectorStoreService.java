@@ -14,11 +14,13 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +40,8 @@ public class VectorStoreService {
 
     public static final String ORIGIN_PUBLIC_KB = "public_kb";
     public static final String ORIGIN_CONVERSATION = "conversation_memory";
+    private static final String LEGACY_CONVERSATION_PREFIX = "用户: ";
+    private static final String LEGACY_CONVERSATION_SEPARATOR = "\n助手: ";
     private static final int MAX_CLEARED_CONVERSATION_KEYS = 10_000;
 
     private final VectorStoreRepository vectorStoreRepository;
@@ -187,6 +191,123 @@ public class VectorStoreService {
         return sha256(identity.toString());
     }
 
+    /**
+     * 将阶段 0.2 之前的 UUID 对话向量迁移为稳定 documentId，并删除同一轮对话的重复副本。
+     * 只处理带 conversationId、且没有 sourceId 的对话向量，不触碰公共知识库。
+     */
+    @Transactional(transactionManager = "sqliteTransactionManager")
+    public int cleanupDuplicateConversationVectors() {
+        List<VectorStore> conversationVectors = vectorStoreRepository.findConversationVectors();
+        if (conversationVectors.isEmpty()) {
+            return 0;
+        }
+
+        Map<String, List<VectorStore>> groups = new LinkedHashMap<>();
+        int skipped = 0;
+        for (VectorStore vector : conversationVectors) {
+            String stableDocumentId = stableDocumentIdForLegacyConversationVector(vector);
+            if (stableDocumentId == null) {
+                skipped++;
+                continue;
+            }
+            groups.computeIfAbsent(stableDocumentId, ignored -> new ArrayList<>()).add(vector);
+        }
+
+        List<Long> duplicateIds = new ArrayList<>();
+        List<VectorStore> migratedKeepers = new ArrayList<>();
+        for (Map.Entry<String, List<VectorStore>> group : groups.entrySet()) {
+            List<VectorStore> vectors = group.getValue();
+            VectorStore keeper = selectConversationVectorKeeper(vectors, group.getKey());
+            if (!group.getKey().equals(keeper.getDocumentId())) {
+                keeper.setDocumentId(group.getKey());
+                migratedKeepers.add(keeper);
+            }
+            for (VectorStore vector : vectors) {
+                if (vector != keeper && vector.getId() != null) {
+                    duplicateIds.add(vector.getId());
+                }
+            }
+        }
+
+        if (!duplicateIds.isEmpty()) {
+            vectorStoreRepository.deleteAllByIdInBatch(duplicateIds);
+            vectorStoreRepository.flush();
+        }
+        if (!migratedKeepers.isEmpty()) {
+            vectorStoreRepository.saveAll(migratedKeepers);
+            vectorStoreRepository.flush();
+        }
+        if (!duplicateIds.isEmpty() || !migratedKeepers.isEmpty()) {
+            reloadIndexAfterMutation();
+        }
+
+        if (skipped > 0) {
+            logger.warn("Skipped {} malformed legacy conversation vectors during duplicate cleanup", skipped);
+        }
+        if (!duplicateIds.isEmpty() || !migratedKeepers.isEmpty()) {
+            logger.info("Cleaned duplicate conversation vectors, deleted: {}, migrated: {}",
+                    duplicateIds.size(), migratedKeepers.size());
+        }
+        return duplicateIds.size();
+    }
+
+    private String stableDocumentIdForLegacyConversationVector(VectorStore vector) {
+        String content = vector.getContent();
+        String conversationId = vector.getConversationId();
+        if (content == null || conversationId == null || conversationId.isBlank()
+                || !content.startsWith(LEGACY_CONVERSATION_PREFIX)) {
+            return null;
+        }
+
+        int separatorIndex = content.indexOf(
+                LEGACY_CONVERSATION_SEPARATOR, LEGACY_CONVERSATION_PREFIX.length());
+        if (separatorIndex < 0) {
+            return null;
+        }
+
+        String userMessage = content.substring(LEGACY_CONVERSATION_PREFIX.length(), separatorIndex);
+        String assistantReply = content.substring(
+                separatorIndex + LEGACY_CONVERSATION_SEPARATOR.length());
+        if (assistantReply.isEmpty()) {
+            return null;
+        }
+        return buildMessageDocumentId(vector.getUserId(), conversationId, userMessage, assistantReply);
+    }
+
+    private VectorStore selectConversationVectorKeeper(List<VectorStore> vectors, String stableDocumentId) {
+        for (VectorStore vector : vectors) {
+            if (stableDocumentId.equals(vector.getDocumentId())) {
+                return vector;
+            }
+        }
+
+        Comparator<VectorStore> order = Comparator
+                .comparing(VectorStore::getTimestamp, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(VectorStore::getId, Comparator.nullsLast(Comparator.naturalOrder()));
+        return vectors.stream().min(order).orElseThrow();
+    }
+
+    @Transactional(transactionManager = "sqliteTransactionManager")
+    public int deleteExpiredConversationVectors(LocalDateTime cutoff) {
+        if (cutoff == null) {
+            throw new IllegalArgumentException("cutoff must not be null");
+        }
+
+        int deleted = vectorStoreRepository.deleteExpiredConversationVectors(cutoff);
+        if (deleted > 0) {
+            reloadIndexAfterMutation();
+            logger.info("Deleted {} expired conversation vectors before {}", deleted, cutoff);
+        }
+        return deleted;
+    }
+
+    private void reloadIndexAfterMutation() {
+        loadFromSQLite();
+        if (!indexReady.get()) {
+            throw new IllegalStateException("vector index reload failed after data mutation");
+        }
+    }
+
     private void appendLengthPrefixed(StringBuilder builder, String value) {
         String normalized = value == null ? "" : value;
         builder.append(normalized.length()).append(':').append(normalized);
@@ -194,14 +315,25 @@ public class VectorStoreService {
 
     public void saveDocument(String sourceId, String content, Map<String, Object> metadata) {
         try {
-            float[] embedding = embeddingService.embed(content);
+            String docId = buildChunkDocumentId(sourceId, 0, content);
+            if (vectorStoreRepository.findByDocumentId(docId).isPresent()) {
+                logger.debug("Duplicate public knowledge vector skipped, sourceId: {}, docId: {}",
+                        sourceId, docId);
+                return;
+            }
+
+            float[] embedding;
+            try {
+                embedding = embeddingService.embed(content);
+            } catch (IOException e) {
+                throw new IllegalStateException("embedding failed for sourceId " + sourceId, e);
+            }
 
             if (embedding.length == 0) {
                 logger.warn("Embedding is empty for sourceId: {}, skipping save", sourceId);
                 return;
             }
 
-            String docId = UUID.randomUUID().toString();
             byte[] vectorBytes = serializeVector(embedding);
 
             VectorStore vectorStore = new VectorStore(docId, content, vectorBytes);
@@ -222,6 +354,71 @@ public class VectorStoreService {
         } catch (Exception e) {
             logger.error("Failed to save document vector to SQLite", e);
         }
+    }
+
+    /**
+     * 以 sourceId 为单位整体替换公共知识向量，避免同一文档重复上传后追加旧片段。
+     */
+    @Transactional(transactionManager = "sqliteTransactionManager")
+    public int replaceDocument(String sourceId, List<String> chunks, Map<String, Object> metadata) {
+        if (sourceId == null || sourceId.isBlank()) {
+            throw new IllegalArgumentException("sourceId must not be blank");
+        }
+        if (chunks == null || chunks.isEmpty()) {
+            throw new IllegalArgumentException("chunks must not be empty");
+        }
+
+        List<VectorStore> vectors = new ArrayList<>(chunks.size());
+        for (int i = 0; i < chunks.size(); i++) {
+            String content = chunks.get(i);
+            if (content == null || content.isBlank()) {
+                throw new IllegalArgumentException("chunk content must not be blank");
+            }
+
+            float[] embedding;
+            try {
+                embedding = embeddingService.embed(content);
+            } catch (IOException e) {
+                throw new IllegalStateException("embedding failed for chunk " + (i + 1), e);
+            }
+            if (embedding.length == 0) {
+                throw new IllegalStateException("embedding is empty for chunk " + (i + 1));
+            }
+
+            Map<String, Object> mergedMetadata = metadata == null
+                    ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(metadata);
+            mergedMetadata.putIfAbsent("sourceId", sourceId);
+            mergedMetadata.put("chunkIndex", i);
+            mergedMetadata.put("chunkCount", chunks.size());
+
+            VectorStore vectorStore = new VectorStore(
+                    buildChunkDocumentId(sourceId, i, content),
+                    content,
+                    serializeVector(embedding)
+            );
+            vectorStore.setSourceId(sourceId);
+            vectorStore.setMetadataJson(JSON.toJSONString(mergedMetadata));
+            vectorStore.setTimestamp(LocalDateTime.now());
+            vectors.add(vectorStore);
+        }
+
+        vectorStoreRepository.deleteBySourceId(sourceId);
+        List<VectorStore> saved = vectorStoreRepository.saveAll(vectors);
+        vectorStoreRepository.flush();
+        loadFromSQLite();
+
+        logger.info("Replaced public knowledge sourceId: {}, chunks: {}", sourceId, saved.size());
+        return saved.size();
+    }
+
+    private String buildChunkDocumentId(String sourceId, int chunkIndex, String content) {
+        StringBuilder identity = new StringBuilder();
+        identity.append("public_kb:");
+        appendLengthPrefixed(identity, sourceId);
+        appendLengthPrefixed(identity, String.valueOf(chunkIndex));
+        appendLengthPrefixed(identity, content);
+        return sha256(identity.toString());
     }
 
     public synchronized void addToIndex(int rowId, String content, float[] vector) {
@@ -253,7 +450,7 @@ public class VectorStoreService {
     }
 
     public List<String> searchSimilar(String query, String userId, String conversationId) {
-        List<SearchResult> results = searchInternal(query, userId, conversationId);
+        List<SearchResult> results = searchInternal(query, userId, conversationId).results();
         List<String> contents = new ArrayList<>(results.size());
         for (SearchResult result : results) {
             contents.add(result.getContent());
@@ -270,10 +467,15 @@ public class VectorStoreService {
     }
 
     public List<SearchResult> searchSimilarWithMetadata(String query, String userId, String conversationId) {
+        return searchInternal(query, userId, conversationId).results();
+    }
+
+    public SearchOutcome searchSimilarWithMetadataAndTrace(
+            String query, String userId, String conversationId) {
         return searchInternal(query, userId, conversationId);
     }
 
-    private List<SearchResult> searchInternal(String query, String userId, String conversationId) {
+    private SearchOutcome searchInternal(String query, String userId, String conversationId) {
         long startNanos = System.nanoTime();
         String traceId = UUID.randomUUID().toString().replace("-", "");
         List<SearchResult> results = new ArrayList<>();
@@ -309,7 +511,7 @@ public class VectorStoreService {
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
             recordRetrievalLog(traceId, userId, conversationId, query, results, durationMs);
         }
-        return results;
+        return new SearchOutcome(traceId, List.copyOf(results));
     }
 
     private void collectSimilar(float[] queryEmbedding, String userId, String conversationId,
@@ -520,11 +722,48 @@ public class VectorStoreService {
     @Transactional(transactionManager = "sqliteTransactionManager")
     public void clearDocumentVectors(String sourceId) {
         try {
-            vectorStoreRepository.deleteBySourceId(sourceId);
-            loadFromSQLite();
+            clearDocumentVectorsStrict(sourceId);
             logger.info("Cleared vectors for sourceId: {}", sourceId);
         } catch (Exception e) {
             logger.error("Failed to clear document vectors", e);
+        }
+    }
+
+    /**
+     * 严格清理公共知识向量，供业务删除链路使用；清理失败会直接抛出并触发上游事务回滚。
+     */
+    @Transactional(transactionManager = "sqliteTransactionManager")
+    public void clearDocumentVectorsStrict(String sourceId) {
+        if (sourceId == null || sourceId.isBlank()) {
+            throw new IllegalArgumentException("sourceId must not be blank");
+        }
+
+        vectorStoreRepository.deleteBySourceId(sourceId);
+        vectorStoreRepository.flush();
+        removeSourceFromIndex(sourceId);
+        logger.info("Strictly cleared vectors for sourceId: {}", sourceId);
+    }
+
+    public List<String> listPublicSourceIds() {
+        return vectorStoreRepository.findDistinctPublicSourceIds();
+    }
+
+    private void removeSourceFromIndex(String sourceId) {
+        indexLock.writeLock().lock();
+        try {
+            indexEntries.entrySet().removeIf(entry -> {
+                IndexEntry indexEntry = entry.getValue();
+                if (!sourceId.equals(indexEntry.sourceId)) {
+                    return false;
+                }
+                int rowId = entry.getKey();
+                if (rowId >= 0 && rowId < vectorIndex.size()) {
+                    vectorIndex.set(rowId, null);
+                }
+                return true;
+            });
+        } finally {
+            indexLock.writeLock().unlock();
         }
     }
 
@@ -542,6 +781,7 @@ public class VectorStoreService {
             Map<String, Object> g = grouped.computeIfAbsent(vs.getSourceId(), k -> {
                 Map<String, Object> m = new HashMap<>();
                 m.put("sourceId", k);
+                m.put("fileName", resolveDocumentFileName(vs, k));
                 m.put("count", 0);
                 m.put("sample", "");
                 m.put("timestamp", vs.getTimestamp());
@@ -556,6 +796,27 @@ public class VectorStoreService {
             }
         }
         return new ArrayList<>(grouped.values());
+    }
+
+    private String resolveDocumentFileName(VectorStore vectorStore, String sourceId) {
+        if (vectorStore.getMetadataJson() == null || vectorStore.getMetadataJson().isBlank()) {
+            return sourceId;
+        }
+        try {
+            JSONObject metadata = JSON.parseObject(vectorStore.getMetadataJson());
+            String fileName = metadata.getString("fileName");
+            if (fileName != null && !fileName.isBlank()) {
+                return fileName;
+            }
+            String title = metadata.getString("title");
+            if (title != null && !title.isBlank()) {
+                return title;
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to parse vector metadata for sourceId: {}, cause: {}",
+                    sourceId, e.getMessage());
+        }
+        return sourceId;
     }
 
     public long countVectors() {
@@ -629,6 +890,12 @@ public class VectorStoreService {
 
         public String getOrigin() {
             return origin;
+        }
+    }
+
+    public record SearchOutcome(String traceId, List<SearchResult> results) {
+        public SearchOutcome {
+            results = results == null ? List.of() : List.copyOf(results);
         }
     }
 }

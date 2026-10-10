@@ -137,7 +137,7 @@ async function loadDocs() {
         }
         box.innerHTML = docs.map(function (d) {
             var ts = String(d.timestamp || '').replace('T', ' ').replace('.0', '');
-            var name = (d.sourceId || '').replace(/^kb_\d+_/, '');
+            var name = d.fileName || (d.sourceId || '').replace(/^kb_\d+_/, '');
             var sample = String(d.sample || '').slice(0, 120);
             return '<div class="doc-card">' +
                 '<div><div class="doc-name">📄 ' + esc(name) + '</div>' +

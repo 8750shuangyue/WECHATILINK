@@ -23,6 +23,7 @@ public final class EvalHttpClient implements AutoCloseable {
     private static final String CURRENT_USER_PATH = "/api/auth/me";
     private static final String CHAT_STREAM_PATH = "/api/ai/chat/stream";
     private static final String CHAT_TOOLS_PATH = "/api/ai/chat-with-tools";
+    private static final String RAG_RETRIEVALS_PATH = "/api/internal/rag/retrievals/";
 
     private final EvalConfig config;
     private final ObjectMapper objectMapper;
@@ -143,6 +144,8 @@ public final class EvalHttpClient implements AutoCloseable {
                     null,
                     null,
                     List.of(),
+                    List.of(),
+                    "unavailable",
                     "Stream request failed with HTTP " + response.statusCode(),
                     0
             );
@@ -150,44 +153,72 @@ public final class EvalHttpClient implements AutoCloseable {
 
         StringBuilder responseText = new StringBuilder();
         StringBuilder eventData = new StringBuilder();
+        String currentEvent = "message";
+        String traceId = null;
         long firstTokenMs = -1;
 
         try (Stream<String> lines = response.body()) {
             for (String line : (Iterable<String>) lines::iterator) {
-                if (line.startsWith("data:")) {
+                if (line.isEmpty()) {
+                    String eventName = currentEvent;
+                    String payload = eventData.toString();
+                    if (!payload.isEmpty()) {
+                        if ("rag-trace".equals(eventName)) {
+                            traceId = parseTraceId(payload);
+                        } else if (!"[DONE]".equals(payload.trim())) {
+                            String text = decodeSsePayload(payload);
+                            if (!text.isEmpty()) {
+                                if (firstTokenMs < 0) {
+                                    firstTokenMs = elapsedMillis(startedAt);
+                                }
+                                responseText.append(text);
+                            }
+                        }
+                    }
+                    currentEvent = "message";
+                    eventData.setLength(0);
+                } else if (line.startsWith("event:")) {
+                    currentEvent = line.substring("event:".length()).trim();
+                } else if (line.startsWith("data:")) {
                     String payload = line.substring("data:".length());
                     if (payload.startsWith(" ")) {
                         payload = payload.substring(1);
                     }
-                    if ("[DONE]".equals(payload.trim())) {
-                        break;
+                    if (eventData.length() > 0) {
+                        eventData.append('\n');
                     }
-                    String text = decodeSsePayload(payload);
-                    if (!text.isEmpty()) {
-                        if (firstTokenMs < 0) {
-                            firstTokenMs = elapsedMillis(startedAt);
-                        }
-                        eventData.append(text);
-                    }
-                } else if (line.isEmpty() && eventData.length() > 0) {
-                    responseText.append(eventData);
-                    eventData.setLength(0);
+                    eventData.append(payload);
                 }
             }
         }
         if (eventData.length() > 0) {
-            responseText.append(eventData);
+            String payload = eventData.toString();
+            if ("rag-trace".equals(currentEvent)) {
+                traceId = parseTraceId(payload);
+            } else if (!"[DONE]".equals(payload.trim())) {
+                String text = decodeSsePayload(payload);
+                if (!text.isEmpty()) {
+                    if (firstTokenMs < 0) {
+                        firstTokenMs = elapsedMillis(startedAt);
+                    }
+                    responseText.append(text);
+                }
+            }
         }
+
+        RetrievalLookup retrieval = fetchRetrieval(traceId);
 
         return new HttpResult(
                 response.statusCode(),
                 responseText.toString(),
                 firstTokenMs,
                 elapsedMillis(startedAt),
-                null,
+                traceId,
                 null,
                 null,
                 List.of(),
+                retrieval.records(),
+                retrieval.status(),
                 null,
                 0
         );
@@ -212,6 +243,8 @@ public final class EvalHttpClient implements AutoCloseable {
                     null,
                     null,
                     List.of(),
+                    List.of(),
+                    "not_applicable",
                     "Tool request failed with HTTP " + response.statusCode(),
                     0
             );
@@ -237,9 +270,65 @@ public final class EvalHttpClient implements AutoCloseable {
                 totalIterations,
                 totalTokens,
                 parseToolCalls(json.path("toolCallHistory")),
+                List.of(),
+                "not_applicable",
                 error,
                 0
         );
+    }
+
+    private String parseTraceId(String payload) {
+        try {
+            JsonNode json = objectMapper.readTree(payload);
+            return textOrNull(json, "traceId");
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private RetrievalLookup fetchRetrieval(String traceId) {
+        if (traceId == null || traceId.isBlank()) {
+            return RetrievalLookup.unavailable();
+        }
+        try {
+            HttpResponse<String> response = httpClient.send(
+                    request(RAG_RETRIEVALS_PATH + traceId)
+                            .header("Accept", "application/json")
+                            .GET()
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return RetrievalLookup.unavailable();
+            }
+
+            JsonNode body = objectMapper.readTree(response.body());
+            if (body.path("code").asInt() != 200) {
+                return RetrievalLookup.unavailable();
+            }
+            JsonNode results = body.path("data").path("results");
+            if (!results.isArray()) {
+                return RetrievalLookup.unavailable();
+            }
+
+            List<RetrievalRecord> records = new ArrayList<>();
+            for (JsonNode item : results) {
+                records.add(new RetrievalRecord(
+                        textOrNull(item, "documentId"),
+                        textOrNull(item, "sourceId"),
+                        item.hasNonNull("similarity") && item.path("similarity").isNumber()
+                                ? item.path("similarity").doubleValue()
+                                : null,
+                        textOrNull(item, "origin")
+                ));
+            }
+            return new RetrievalLookup(List.copyOf(records), "available");
+        } catch (IOException | InterruptedException exception) {
+            if (exception instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return RetrievalLookup.unavailable();
+        }
     }
 
     private List<ToolCallRecord> parseToolCalls(JsonNode history) {
@@ -380,6 +469,20 @@ public final class EvalHttpClient implements AutoCloseable {
     ) {
     }
 
+    public record RetrievalRecord(
+            String documentId,
+            String sourceId,
+            Double similarity,
+            String origin
+    ) {
+    }
+
+    private record RetrievalLookup(List<RetrievalRecord> records, String status) {
+        private static RetrievalLookup unavailable() {
+            return new RetrievalLookup(List.of(), "unavailable");
+        }
+    }
+
     public record HttpResult(
             int status,
             String response,
@@ -389,12 +492,16 @@ public final class EvalHttpClient implements AutoCloseable {
             Integer totalIterations,
             Long totalTokens,
             List<ToolCallRecord> toolCalls,
+            List<RetrievalRecord> retrieval,
+            String retrievalStatus,
             String error,
             int retryCount
     ) {
         public HttpResult {
             response = response == null ? "" : response;
             toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+            retrieval = retrieval == null ? List.of() : List.copyOf(retrieval);
+            retrievalStatus = retrievalStatus == null ? "unavailable" : retrievalStatus;
         }
 
         public HttpResult withRetryCount(int value) {
@@ -407,6 +514,8 @@ public final class EvalHttpClient implements AutoCloseable {
                     totalIterations,
                     totalTokens,
                     toolCalls,
+                    retrieval,
+                    retrievalStatus,
                     error,
                     value
             );

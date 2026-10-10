@@ -68,6 +68,15 @@ public class AiController {
         CompletableFuture.runAsync(() -> {
             try {
                 llmService.chatStream(userId, conversationId, message, systemPrompt,
+                        traceId -> {
+                            try {
+                                emitter.send(SseEmitter.event()
+                                        .name("rag-trace")
+                                        .data(Map.of("traceId", traceId)));
+                            } catch (Exception e) {
+                                emitter.completeWithError(e);
+                            }
+                        },
                         token -> {
                             try {
                                 emitter.send(SseEmitter.event().data(token));

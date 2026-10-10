@@ -212,6 +212,8 @@ class EvalScorerTest {
                 null,
                 null,
                 toolCalls,
+                List.of(),
+                "not_applicable",
                 null,
                 0
         );

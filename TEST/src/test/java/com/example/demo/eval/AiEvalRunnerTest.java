@@ -178,10 +178,22 @@ class AiEvalRunnerTest {
                 config.pricePerMillionTokens()
         );
         result.toolCalls = httpResult.toolCalls();
-        result.retrieval = List.of();
-        result.retrievalStatus = evalCase.expectedSourceIds().isEmpty()
-                ? "not_requested_external_black_box"
-                : "unavailable_external_black_box";
+        result.retrieval = httpResult.retrieval().stream()
+                .map(item -> new EvalResult.RetrievalRecord(
+                        item.documentId(),
+                        item.sourceId(),
+                        item.similarity(),
+                        null,
+                        item.origin()
+                ))
+                .toList();
+        if (evalCase.expectedSourceIds().isEmpty()) {
+            result.retrievalStatus = "not_applicable";
+        } else if ("available".equals(httpResult.retrievalStatus())) {
+            result.retrievalStatus = "available";
+        } else {
+            result.retrievalStatus = "unavailable";
+        }
         result.retryCount = httpResult.retryCount();
         result.critical = evalCase.critical();
         result.error = httpResult.error();
@@ -214,6 +226,8 @@ class AiEvalRunnerTest {
                 null,
                 null,
                 List.of(),
+                List.of(),
+                "unavailable",
                 safeMessage,
                 retryCount
         );

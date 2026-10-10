@@ -20,20 +20,32 @@ public class RagContextService {
     }
 
     public String buildContext(String userId, String conversationId, String query) {
+        return buildContextWithTrace(userId, conversationId, query).context();
+    }
+
+    public ContextResult buildContextWithTrace(String userId, String conversationId, String query) {
         if (query == null || query.isBlank()) {
-            return "";
+            return new ContextResult("", null);
         }
 
         try {
-            List<SearchResult> results = vectorStoreService.searchSimilarWithMetadata(
-                    query, userId, conversationId);
+            VectorStoreService.SearchOutcome outcome =
+                    vectorStoreService.searchSimilarWithMetadataAndTrace(
+                            query, userId, conversationId);
+            List<SearchResult> results = outcome == null ? null : outcome.results();
             if (results == null || results.isEmpty()) {
-                return "";
+                return new ContextResult("", outcome == null ? null : outcome.traceId());
             }
-            return formatResults(results);
+            return new ContextResult(formatResults(results), outcome.traceId());
         } catch (Exception e) {
             logger.warn("Failed to build RAG context: {}", e.getMessage());
-            return "";
+            return new ContextResult("", null);
+        }
+    }
+
+    public record ContextResult(String context, String traceId) {
+        public ContextResult {
+            context = context == null ? "" : context;
         }
     }
 

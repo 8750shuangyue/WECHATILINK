@@ -9,16 +9,20 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -159,6 +163,44 @@ class VectorStoreServiceTest {
     }
 
     @Test
+    void replacesSourceWithStableChunkDocumentIds() {
+        Map<String, VectorStore> database = new LinkedHashMap<>();
+        AtomicLong sequence = new AtomicLong(1);
+        when(repository.findAll()).thenAnswer(invocation -> new ArrayList<>(database.values()));
+        doAnswer(invocation -> {
+            database.values().removeIf(vector -> "guide-1".equals(vector.getSourceId()));
+            return null;
+        }).when(repository).deleteBySourceId("guide-1");
+        when(repository.saveAll(any())).thenAnswer(invocation -> {
+            Iterable<VectorStore> vectors = invocation.getArgument(0);
+            List<VectorStore> saved = new ArrayList<>();
+            for (VectorStore vector : vectors) {
+                vector.setId(sequence.getAndIncrement());
+                database.put(vector.getDocumentId(), vector);
+                saved.add(vector);
+            }
+            return saved;
+        });
+
+        int firstCount = service.replaceDocument(
+                "guide-1", List.of("first chunk", "second chunk"),
+                Map.of("fileName", "guide.md"));
+        List<String> firstDocumentIds = new ArrayList<>(database.keySet());
+
+        int secondCount = service.replaceDocument(
+                "guide-1", List.of("first chunk", "second chunk"),
+                Map.of("fileName", "guide.md"));
+        List<String> secondDocumentIds = new ArrayList<>(database.keySet());
+
+        assertEquals(2, firstCount);
+        assertEquals(2, secondCount);
+        assertEquals(firstDocumentIds, secondDocumentIds);
+        assertEquals(2, database.size());
+        verify(repository, times(2)).deleteBySourceId("guide-1");
+        verify(repository, times(2)).saveAll(any());
+    }
+
+    @Test
     void clearsOnlyOwnersConversationVectorsAndKeepsOtherUsersMemory() {
         Map<Long, VectorStore> database = new LinkedHashMap<>();
         database.put(1L, vector(1L, "doc-a", "user-a conversation-a memory",
@@ -193,6 +235,98 @@ class VectorStoreServiceTest {
     void clearOperationsUseSqliteTransactionManager() throws Exception {
         assertSqliteTransaction("clearConversationVectors", String.class, String.class);
         assertSqliteTransaction("clearDocumentVectors", String.class);
+        assertSqliteTransaction("clearDocumentVectorsStrict", String.class);
+        assertSqliteTransaction("cleanupDuplicateConversationVectors");
+        assertSqliteTransaction("deleteExpiredConversationVectors", LocalDateTime.class);
+    }
+
+    @Test
+    void strictClearRemovesSourceFromInMemoryIndexImmediately() {
+        service.addToIndex(0, "stale community post", new float[]{1.0f, 0.0f},
+                "doc-post", null, null, "post_42", null);
+
+        service.clearDocumentVectorsStrict("post_42");
+
+        assertTrue(service.searchSimilar("query").isEmpty());
+        verify(repository).deleteBySourceId("post_42");
+        verify(repository).flush();
+    }
+
+    @Test
+    void strictClearPropagatesRepositoryFailure() {
+        doThrow(new IllegalStateException("sqlite unavailable"))
+                .when(repository)
+                .deleteBySourceId("post_42");
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> service.clearDocumentVectorsStrict("post_42")
+        );
+
+        assertEquals("sqlite unavailable", error.getMessage());
+    }
+
+    @Test
+    void migratesLegacyConversationVectorsAndDeletesOnlySemanticDuplicates() {
+        Map<Long, VectorStore> database = new LinkedHashMap<>();
+        VectorStore oldest = vector(1L, "legacy-1", "用户: hello\n助手: world",
+                "user-a", "conversation-a", null);
+        oldest.setTimestamp(LocalDateTime.of(2026, 1, 1, 8, 0));
+        VectorStore duplicate = vector(2L, "legacy-2", "用户: hello\n助手: world",
+                "user-a", "conversation-a", null);
+        duplicate.setTimestamp(LocalDateTime.of(2026, 1, 2, 8, 0));
+        VectorStore otherUser = vector(3L, "legacy-3", "用户: hello\n助手: world",
+                "user-b", "conversation-a", null);
+        VectorStore otherConversation = vector(4L, "legacy-4", "用户: hello\n助手: world",
+                "user-a", "conversation-b", null);
+        VectorStore publicVector = vector(5L, "public-doc", "public knowledge",
+                null, null, "guide-1");
+        database.put(1L, oldest);
+        database.put(2L, duplicate);
+        database.put(3L, otherUser);
+        database.put(4L, otherConversation);
+        database.put(5L, publicVector);
+
+        when(repository.findConversationVectors()).thenAnswer(invocation -> database.values().stream()
+                .filter(vector -> vector.getConversationId() != null
+                        && !vector.getConversationId().isBlank())
+                .filter(vector -> vector.getSourceId() == null || vector.getSourceId().isBlank())
+                .toList());
+        doAnswer(invocation -> {
+            Iterable<Long> ids = invocation.getArgument(0);
+            for (Long id : ids) {
+                database.remove(id);
+            }
+            return null;
+        }).when(repository).deleteAllByIdInBatch(any());
+        when(repository.saveAll(any())).thenAnswer(invocation -> {
+            Iterable<VectorStore> vectors = invocation.getArgument(0);
+            List<VectorStore> saved = new ArrayList<>();
+            for (VectorStore vector : vectors) {
+                database.put(vector.getId(), vector);
+                saved.add(vector);
+            }
+            return saved;
+        });
+        when(repository.findAll()).thenAnswer(invocation -> List.copyOf(database.values()));
+
+        int deleted = service.cleanupDuplicateConversationVectors();
+
+        assertEquals(1, deleted);
+        assertEquals(4, database.size());
+        verify(repository).deleteAllByIdInBatch(List.of(2L));
+        VectorStore migrated = database.get(1L);
+        assertEquals(64, migrated.getDocumentId().length());
+        assertNotEquals("legacy-1", migrated.getDocumentId());
+
+        VectorStore migratedOtherUser = database.get(3L);
+        assertEquals(64, migratedOtherUser.getDocumentId().length());
+        assertNotEquals(migrated.getDocumentId(), migratedOtherUser.getDocumentId());
+        assertEquals(64, database.get(4L).getDocumentId().length());
+        assertEquals("public-doc", database.get(5L).getDocumentId());
+
+        assertEquals(0, service.cleanupDuplicateConversationVectors());
+        verify(repository, times(1)).deleteAllByIdInBatch(any());
     }
 
     private void assertSqliteTransaction(String methodName, Class<?>... parameterTypes) throws Exception {

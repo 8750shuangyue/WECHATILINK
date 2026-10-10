@@ -55,6 +55,7 @@ class AiControllerSessionTest {
                 messages.capture(),
                 isNull(),
                 any(Consumer.class),
+                any(Consumer.class),
                 any(Runnable.class)
         );
 
@@ -150,6 +151,7 @@ class AiControllerSessionTest {
                 conversationId.capture(),
                 eq("after clear"),
                 isNull(),
+                any(Consumer.class),
                 any(Consumer.class),
                 any(Runnable.class)
         );
