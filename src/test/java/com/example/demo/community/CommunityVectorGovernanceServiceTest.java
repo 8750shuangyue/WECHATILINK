@@ -5,6 +5,7 @@ import com.example.demo.community.entity.Post;
 import com.example.demo.community.repository.PostRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class CommunityVectorGovernanceServiceTest {
@@ -27,6 +29,7 @@ class CommunityVectorGovernanceServiceTest {
         vectorStoreService = mock(VectorStoreService.class);
         postRepository = mock(PostRepository.class);
         service = new CommunityVectorGovernanceService(vectorStoreService, postRepository);
+        ReflectionTestUtils.setField(service, "governanceEnabled", true);
     }
 
     @Test
@@ -64,5 +67,14 @@ class CommunityVectorGovernanceServiceTest {
         );
         verify(vectorStoreService).clearDocumentVectorsStrict("post_2");
         verify(vectorStoreService).clearDocumentVectorsStrict("post_3");
+    }
+
+    @Test
+    void skipsOrphanCleanupWhenGovernanceIsDisabled() {
+        ReflectionTestUtils.setField(service, "governanceEnabled", false);
+
+        assertEquals(0, service.cleanupOrphanPostVectors());
+
+        verifyNoInteractions(vectorStoreService, postRepository);
     }
 }

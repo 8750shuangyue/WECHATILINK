@@ -5,6 +5,7 @@ import com.example.demo.community.entity.Post;
 import com.example.demo.community.repository.PostRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +24,9 @@ public class CommunityVectorGovernanceService {
     private final VectorStoreService vectorStoreService;
     private final PostRepository postRepository;
 
+    @Value("${app.data-governance.enabled:false}")
+    private boolean governanceEnabled;
+
     public CommunityVectorGovernanceService(VectorStoreService vectorStoreService,
                                             PostRepository postRepository) {
         this.vectorStoreService = vectorStoreService;
@@ -31,6 +35,9 @@ public class CommunityVectorGovernanceService {
 
     @Scheduled(cron = "${community.vector-governance.orphan-cleanup-cron:0 30 3 * * *}")
     public int cleanupOrphanPostVectors() {
+        if (!governanceEnabled) {
+            return 0;
+        }
         List<Long> postIds = extractPostIds(vectorStoreService.listPublicSourceIds());
         if (postIds.isEmpty()) {
             return 0;

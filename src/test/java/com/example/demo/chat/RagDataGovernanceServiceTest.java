@@ -36,6 +36,7 @@ class RagDataGovernanceServiceTest {
         ReflectionTestUtils.setField(service, "conversationRetentionDays", 90L);
         ReflectionTestUtils.setField(service, "retrievalLogRetentionDays", 180L);
         ReflectionTestUtils.setField(service, "observabilityAccessLogRetentionDays", 180L);
+        ReflectionTestUtils.setField(service, "governanceEnabled", true);
     }
 
     @Test
@@ -66,5 +67,16 @@ class RagDataGovernanceServiceTest {
         verifyNoInteractions(vectorStoreService);
         verify(retrievalLogRepository, never()).deleteCreatedBefore(any(LocalDateTime.class));
         verify(observabilityAccessLogRepository).deleteCreatedBefore(now.minusDays(180));
+    }
+
+    @Test
+    void scheduledCleanupDoesNothingWhenGovernanceIsDisabled() {
+        ReflectionTestUtils.setField(service, "governanceEnabled", false);
+
+        assertEquals(0, service.cleanupDuplicateConversationVectors());
+        assertEquals(0, service.cleanupExpiredConversationVectors());
+        assertEquals(0, service.cleanupExpiredAuditLogs());
+
+        verifyNoInteractions(vectorStoreService, retrievalLogRepository, observabilityAccessLogRepository);
     }
 }

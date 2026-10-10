@@ -29,6 +29,9 @@ public class RagDataGovernanceService {
     @Value("${rag.retention.observability-access-log-days:180}")
     private long observabilityAccessLogRetentionDays;
 
+    @Value("${app.data-governance.enabled:false}")
+    private boolean governanceEnabled;
+
     public RagDataGovernanceService(
             VectorStoreService vectorStoreService,
             RagRetrievalLogRepository retrievalLogRepository,
@@ -40,6 +43,9 @@ public class RagDataGovernanceService {
 
     @Scheduled(cron = "${chat.vectorstore.duplicate-cleanup-cron:0 0 4 * * *}")
     public int cleanupDuplicateConversationVectors() {
+        if (!governanceEnabled) {
+            return 0;
+        }
         int deleted = vectorStoreService.cleanupDuplicateConversationVectors();
         if (deleted > 0) {
             logger.info("Scheduled duplicate conversation vector cleanup removed {} rows", deleted);
@@ -49,6 +55,9 @@ public class RagDataGovernanceService {
 
     @Scheduled(cron = "${chat.vectorstore.conversation-retention-cleanup-cron:0 15 4 * * *}")
     public int cleanupExpiredConversationVectors() {
+        if (!governanceEnabled) {
+            return 0;
+        }
         return cleanupExpiredConversationVectors(LocalDateTime.now());
     }
 
@@ -71,6 +80,9 @@ public class RagDataGovernanceService {
     @Scheduled(cron = "${rag.retention.cleanup-cron:0 30 4 * * *}")
     @Transactional(transactionManager = "sqliteTransactionManager")
     public int cleanupExpiredAuditLogs() {
+        if (!governanceEnabled) {
+            return 0;
+        }
         return cleanupExpiredAuditLogs(LocalDateTime.now());
     }
 
