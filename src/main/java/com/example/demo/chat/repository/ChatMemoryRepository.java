@@ -6,15 +6,15 @@ import java.util.List;
 
 public interface ChatMemoryRepository {
 
-    List<ChatMessage> getMessages(String conversationId);
+    List<ChatMessage> getMessages(String userId, String conversationId);
 
-    void saveMessages(String conversationId, List<ChatMessage> messages);
+    void saveMessages(String userId, String conversationId, List<ChatMessage> messages);
 
-    void addMessage(String conversationId, ChatMessage message);
+    void addMessage(String userId, String conversationId, ChatMessage message);
 
-    void clear(String conversationId);
+    void clear(String userId, String conversationId);
 
-    boolean exists(String conversationId);
+    boolean exists(String userId, String conversationId);
 
-    void removeSystemMessages(String conversationId, String contentPrefix);
+    void removeSystemMessages(String userId, String conversationId, String contentPrefix);
 }

@@ -28,7 +28,7 @@ public class MemoryEventListener {
     public void handleVectorSaveEvent(VectorSaveEvent event) {
         try {
             logger.debug("Processing VectorSaveEvent for conversation: {}", event.getConversationId());
-            vectorStoreService.saveMessage(event.getConversationId(), 
+            vectorStoreService.saveMessage(event.getUserId(), event.getConversationId(),
                     event.getUserMessage(), event.getAssistantReply());
             logger.debug("Vector saved successfully for conversation: {}", event.getConversationId());
         } catch (Exception e) {
@@ -42,7 +42,7 @@ public class MemoryEventListener {
     public void handleSummaryUpdateEvent(SummaryUpdateEvent event) {
         try {
             logger.debug("Processing SummaryUpdateEvent for conversation: {}", event.getConversationId());
-            chatMemoryService.checkAndUpdateSummary(event.getConversationId());
+            chatMemoryService.checkAndUpdateSummary(event.getUserId(), event.getConversationId());
             logger.debug("Summary updated successfully for conversation: {}", event.getConversationId());
         } catch (Exception e) {
             logger.error("Failed to update summary asynchronously for conversation: {}", 

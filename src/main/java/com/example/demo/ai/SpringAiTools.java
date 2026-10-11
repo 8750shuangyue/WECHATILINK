@@ -307,11 +307,11 @@ public class SpringAiTools {
 
     // ============ 症状分诊工具 ============
 
-    @Tool(name = "triageSymptoms", description = "根据症状、持续时间、年龄判断紧急程度。输出'立即就医、24小时内就医、继续观察'。不替代兽医诊断。")
+    @Tool(name = "triageSymptoms", description = "根据症状、持续时间和年龄判断紧急程度。车祸、呼吸困难、抽搐、中毒、大出血、意识异常等高危情况必须立即调用本工具，不得因持续时间或年龄未知而延迟调用。缺失信息可传“未知”。输出'立即就医、24小时内就医、继续观察'。不替代兽医诊断。")
     public String triageSymptoms(
             @ToolParam(description = "症状描述，如：呼吸困难、抽搐、持续呕吐", required = true) String symptoms,
-            @ToolParam(description = "症状持续时间，如：2小时、1天") String duration,
-            @ToolParam(description = "宠物年龄，如：3个月、2岁") String age) {
+            @ToolParam(description = "症状持续时间，如：2小时、1天；未知时传“未知”", required = false) String duration,
+            @ToolParam(description = "宠物年龄，如：3个月、2岁；未知时传“未知”", required = false) String age) {
         log.info("[Tool] triageSymptoms called, symptoms: {}, duration: {}, age: {}", symptoms, duration, age);
         return careAdvancedService.triage(symptoms, duration, age);
     }

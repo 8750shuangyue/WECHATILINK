@@ -59,7 +59,7 @@ public class ToolCallingService {
                 "createCareReminder", "queryPetCare", "queryPlantSafety", "queryFoodSafety",
                 "saveMedication", "generateCarePlan", "checkMedication", "completeCareReminder",
                 "listCareReminders", "triageSymptoms", "diagnoseDisease"));
-        GROUP_GUIDANCE.put("护理/健康管理", "宠物/植物养护、喂药、疫苗、症状诊断、用药记录、护理提醒等场景使用。");
+        GROUP_GUIDANCE.put("护理/健康管理", "宠物/植物养护、喂药、疫苗、症状诊断、用药记录、护理提醒等场景使用。出现车祸、呼吸困难、抽搐、中毒、大出血等急症时，必须先调用 triageSymptoms，不要先追问缺失参数；持续时间和年龄未知可传“未知”。");
     }
 
     private final LlmService llmService;

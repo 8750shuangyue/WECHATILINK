@@ -257,7 +257,7 @@ public class CareController {
                                context.toString() + "\n\n" + systemPrompt;
             }
 
-            String reply = llmService.chatWithMemory(conversationId, question, systemPrompt);
+            String reply = llmService.chatWithMemory(userName, conversationId, question, systemPrompt);
             
             Map<String, Object> result = new HashMap<>();
             result.put("reply", reply);

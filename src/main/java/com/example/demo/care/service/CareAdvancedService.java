@@ -53,7 +53,7 @@ public class CareAdvancedService {
     public String triage(String symptoms, String duration, String age) {
         String value = symptoms == null ? "" : symptoms;
 
-        if (value.matches(".*(呼吸困难|抽搐|无法排尿|昏迷|大量出血|误食.*毒|持续呕吐).*")) {
+        if (value.matches(".*(车祸|被车撞|撞击|呼吸困难|呼吸急促|呼吸很急|呼吸费力|抽搐|无法排尿|昏迷|大量出血|误食.*毒|持续呕吐).*")) {
             return "紧急级别：立即就医。不要自行喂药或催吐；保持呼吸道通畅，携带误食物包装和既往记录前往宠物急诊。";
         }
 

@@ -11,6 +11,9 @@ public class Conversation {
     @Column(name = "conversation_id", length = 255)
     private String conversationId;
 
+    @Column(name = "user_id", length = 255)
+    private String userId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -20,8 +23,9 @@ public class Conversation {
     public Conversation() {
     }
 
-    public Conversation(String conversationId) {
+    public Conversation(String conversationId, String userId) {
         this.conversationId = conversationId;
+        this.userId = userId;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -32,6 +36,14 @@ public class Conversation {
 
     public void setConversationId(String conversationId) {
         this.conversationId = conversationId;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public LocalDateTime getCreatedAt() {

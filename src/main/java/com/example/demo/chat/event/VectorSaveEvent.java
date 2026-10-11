@@ -2,14 +2,24 @@ package com.example.demo.chat.event;
 
 public class VectorSaveEvent {
     
+    private final String userId;
     private final String conversationId;
     private final String userMessage;
     private final String assistantReply;
     
     public VectorSaveEvent(String conversationId, String userMessage, String assistantReply) {
+        this(null, conversationId, userMessage, assistantReply);
+    }
+
+    public VectorSaveEvent(String userId, String conversationId, String userMessage, String assistantReply) {
+        this.userId = userId;
         this.conversationId = conversationId;
         this.userMessage = userMessage;
         this.assistantReply = assistantReply;
+    }
+
+    public String getUserId() {
+        return userId;
     }
     
     public String getConversationId() {

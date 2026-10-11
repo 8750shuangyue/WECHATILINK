@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -39,7 +38,7 @@ public class LlmService {
     
     @Autowired
     @Lazy
-    private VectorStoreService vectorStoreService;
+    private RagContextService ragContextService;
 
     @Autowired
     @Lazy
@@ -130,6 +129,19 @@ public class LlmService {
      */
     public void chatStream(String userMessage, String systemPrompt,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
+        chatStream(null, null, userMessage, systemPrompt, ignored -> {
+        }, onToken, onDone);
+    }
+
+    public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onToken, Runnable onDone) throws Exception {
+        chatStream(userId, conversationId, userMessage, systemPrompt, ignored -> {
+        }, onToken, onDone);
+    }
+
+    public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onRetrievalTrace,
+                           Consumer<String> onToken, Runnable onDone) throws Exception {
         String effectivePrompt = systemPrompt;
 
         // 普通流式对话没有工具调用能力，天气这类强实时需求需要提前取数注入，
@@ -150,16 +162,34 @@ public class LlmService {
         }
 
         JSONArray messages = new JSONArray();
-        if (effectivePrompt != null && !effectivePrompt.isEmpty()) {
-            JSONObject sys = new JSONObject();
-            sys.put("role", "system");
-            sys.put("content", effectivePrompt);
-            messages.add(sys);
+        if (conversationId != null && !conversationId.isBlank()) {
+            String ragContext = retrieveRagContext(
+                    userId, userMessage, conversationId, onRetrievalTrace);
+            List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
+                    userId,
+                    conversationId,
+                    effectivePrompt,
+                    ragContext,
+                    userMessage
+            );
+            for (ChatMessage message : promptMessages) {
+                JSONObject messageObj = new JSONObject();
+                messageObj.put("role", message.getRole());
+                messageObj.put("content", message.getContent());
+                messages.add(messageObj);
+            }
+        } else {
+            if (effectivePrompt != null && !effectivePrompt.isEmpty()) {
+                JSONObject sys = new JSONObject();
+                sys.put("role", "system");
+                sys.put("content", effectivePrompt);
+                messages.add(sys);
+            }
+            JSONObject user = new JSONObject();
+            user.put("role", "user");
+            user.put("content", userMessage);
+            messages.add(user);
         }
-        JSONObject user = new JSONObject();
-        user.put("role", "user");
-        user.put("content", userMessage);
-        messages.add(user);
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", config.getModel());
@@ -171,7 +201,13 @@ public class LlmService {
         httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
         httpPost.setEntity(new StringEntity(JSON.toJSONString(requestBody), ContentType.APPLICATION_JSON));
 
+        StringBuilder fullReply = new StringBuilder();
         httpClient.execute(httpPost, response -> {
+            if (response.getCode() != 200) {
+                throw new IOException("Streaming LLM request failed with status: " + response.getCode());
+            }
+
+            boolean completed = false;
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(response.getEntity().getContent(), StandardCharsets.UTF_8))) {
                 String line;
@@ -180,8 +216,12 @@ public class LlmService {
                         continue;
                     }
                     String data = line.substring(5).trim();
-                    if (data.isEmpty() || "[DONE]".equals(data)) {
+                    if (data.isEmpty()) {
                         continue;
+                    }
+                    if ("[DONE]".equals(data)) {
+                        completed = true;
+                        break;
                     }
                     try {
                         JSONObject json = JSON.parseObject(data);
@@ -192,6 +232,7 @@ public class LlmService {
                         JSONObject delta = choices.getJSONObject(0).getJSONObject("delta");
                         String content = delta != null ? delta.getString("content") : null;
                         if (content != null && !content.isEmpty()) {
+                            fullReply.append(content);
                             onToken.accept(content);
                         }
                     } catch (Exception ignore) {
@@ -199,39 +240,49 @@ public class LlmService {
                     }
                 }
             }
-            onDone.run();
+
+            if (!completed) {
+                throw new IOException("Streaming LLM response ended before [DONE]");
+            }
+
+            if (conversationId != null && !conversationId.isBlank() && fullReply.length() > 0) {
+                try {
+                    chatMemoryService.saveMessagePair(userId, conversationId, userMessage, fullReply.toString());
+                } catch (Exception e) {
+                    logger.error("Failed to save streaming conversation memory, conversationId: {}",
+                            conversationId, e);
+                }
+            }
             return null;
         });
+        onDone.run();
     }
 
-    public String chatWithMemory(String conversationId, String userMessage) throws IOException {
-        return chatWithMemory(conversationId, userMessage, null);
-    }
+    public String chatWithMemory(String userId, String conversationId, String userMessage, String systemPrompt) throws IOException {
+        logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}", userId, conversationId, userMessage);
 
-    public String chatWithMemory(String conversationId, String userMessage, String systemPrompt) throws IOException {
-        logger.info("Chat with memory, conversationId: {}, userMessage: {}", conversationId, userMessage);
-        
-        List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(conversationId, systemPrompt, userMessage);
-        
-        String ragContext = retrieveRagContext(userMessage, conversationId);
-        if (ragContext != null && !ragContext.isEmpty()) {
-            String ragSystemMessage = "参考以下历史对话信息，帮助回答用户当前问题：\n\n" + ragContext;
-            if (systemPrompt == null) {
-                systemPrompt = ragSystemMessage;
-            } else {
-                systemPrompt = systemPrompt + "\n\n" + ragSystemMessage;
-            }
-            logger.info("RAG context retrieved, length: {} chars", ragContext.length());
-        }
-        
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            ChatMessage systemMsg = new ChatMessage("system", systemPrompt);
-            if (promptMessages.isEmpty() || !"system".equals(promptMessages.get(0).getRole())) {
-                promptMessages.add(0, systemMsg);
-            } else {
-                promptMessages.set(0, systemMsg);
+        String effectivePrompt = systemPrompt;
+        if (weatherTool != null && WeatherTool.matchesIntent(userMessage)) {
+            String city = WeatherTool.extractCity(userMessage);
+            if (city != null) {
+                JSONObject weatherParams = new JSONObject();
+                weatherParams.put("city", city);
+                String weatherData = weatherTool.execute(weatherParams).getData();
+                String weatherSystem = "你可以使用以下工具获取实时数据：\n" +
+                        "工具名称: getWeather\n" +
+                        "功能描述: 查询指定城市的天气信息\n" +
+                        "已获取到天气数据：\n" + weatherData;
+                effectivePrompt = (effectivePrompt == null || effectivePrompt.isEmpty())
+                        ? weatherSystem
+                        : effectivePrompt + "\n\n" + weatherSystem;
+                logger.info("Weather tool injected into prompt, city: {}", city);
             }
         }
+
+        String ragContext = retrieveRagContext(userId, userMessage, conversationId);
+
+        List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
+                userId, conversationId, effectivePrompt, ragContext, userMessage);
         
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", config.getModel());
@@ -245,68 +296,47 @@ public class LlmService {
         }
         requestBody.put("messages", messages);
         
-        if (weatherTool != null && WeatherTool.matchesIntent(userMessage)) {
-            String city = WeatherTool.extractCity(userMessage);
-            if (city != null) {
-                JSONObject weatherParams = new JSONObject();
-                weatherParams.put("city", city);
-                String weatherData = weatherTool.execute(weatherParams).getData();
-                String toolInfo = "你可以使用以下工具获取实时数据：\n" +
-                    "工具名称: getWeather\n" +
-                    "功能描述: 查询指定城市的天气信息\n" +
-                    "已获取到天气数据：\n" + weatherData;
-                
-                JSONObject toolMessage = new JSONObject();
-                toolMessage.put("role", "system");
-                toolMessage.put("content", toolInfo);
-                messages.add(toolMessage);
-                
-                logger.info("Weather tool injected into prompt, city: {}", city);
-            }
-        }
-        
         logger.debug("Full request with history: {}", JSON.toJSONString(requestBody));
         
         String reply = executeChatRequest(requestBody);
-        chatMemoryService.saveMessagePair(conversationId, userMessage, reply);
-        
-        asyncSaveVector(conversationId, userMessage, reply);
+        chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
         
         return reply;
     }
     
-    private String retrieveRagContext(String query, String conversationId) {
-        try {
-            if (vectorStoreService == null) {
-                return null;
-            }
-            List<String> similarMessages = vectorStoreService.searchSimilar(query, conversationId);
-            if (similarMessages.isEmpty()) {
-                return null;
-            }
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < similarMessages.size(); i++) {
-                sb.append("相关对话 ").append(i + 1).append(":\n");
-                sb.append(similarMessages.get(i)).append("\n\n");
-            }
-            return sb.toString().trim();
-        } catch (Exception e) {
-            logger.warn("Failed to retrieve RAG context: {}", e.getMessage());
-            return null;
-        }
-    }
-    
-    @Async
-    public void asyncSaveVector(String conversationId, String userMessage, String assistantReply) {
-        try {
-            if (vectorStoreService != null) {
-                vectorStoreService.saveMessage(conversationId, userMessage, assistantReply);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to async save vector", e);
-        }
+    private String retrieveRagContext(String userId, String query, String conversationId) {
+        return retrieveRagContext(userId, query, conversationId, ignored -> {
+        });
     }
 
+    private String retrieveRagContext(String userId, String query, String conversationId,
+                                      Consumer<String> onRetrievalTrace) {
+        if (ragContextService == null) {
+            return "";
+        }
+        RagContextService.ContextResult contextResult =
+                ragContextService.buildContextWithTrace(userId, conversationId, query);
+        String ragContext;
+        if (contextResult == null) {
+            // Keep compatibility with older service implementations and test doubles.
+            ragContext = ragContextService.buildContext(userId, conversationId, query);
+        } else {
+            ragContext = contextResult.context();
+            if (onRetrievalTrace != null
+                    && contextResult.traceId() != null
+                    && !contextResult.traceId().isBlank()) {
+                onRetrievalTrace.accept(contextResult.traceId());
+            }
+        }
+        if (ragContext == null) {
+            ragContext = "";
+        }
+        if (ragContext != null && !ragContext.isEmpty()) {
+            logger.info("RAG context retrieved, length: {} chars", ragContext.length());
+        }
+        return ragContext;
+    }
+    
     private String parseResponse(String responseBody) {
         logger.debug("Parsing LLM response: {}", responseBody);
         

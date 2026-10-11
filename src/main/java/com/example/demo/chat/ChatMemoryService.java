@@ -27,10 +27,12 @@ public class ChatMemoryService {
     private static final String ASSISTANT_ROLE = "assistant";
     private static final String SUMMARY_ROLE = "system";
     private static final String SUMMARY_PREFIX = "【对话摘要】";
+    private static final String RAG_CONTEXT_PREFIX = "参考以下检索结果，帮助回答用户当前问题：";
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final ChatMemoryRepository repository;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserSessionService userSessionService;
     
     @Autowired
     @Lazy
@@ -52,34 +54,43 @@ public class ChatMemoryService {
     @Value("${chat.memory.summary-keep-recent:5}")
     private int summaryKeepRecent;
 
-    public ChatMemoryService(ChatMemoryRepository repository, ApplicationEventPublisher eventPublisher) {
+    public ChatMemoryService(ChatMemoryRepository repository,
+                             ApplicationEventPublisher eventPublisher,
+                             UserSessionService userSessionService) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
+        this.userSessionService = userSessionService;
     }
 
-    public List<ChatMessage> getConversationHistory(String conversationId) {
-        return repository.getMessages(conversationId);
+    public List<ChatMessage> getConversationHistory(String userId, String conversationId) {
+        return repository.getMessages(userId, conversationId);
     }
 
-    public List<ChatMessage> buildPromptMessages(String conversationId, String systemPrompt, String userMessage) {
-        List<ChatMessage> history = repository.getMessages(conversationId);
+    public List<ChatMessage> buildPromptMessages(String userId, String conversationId,
+                                                 String systemPrompt, String userMessage) {
+        return buildPromptMessages(userId, conversationId, systemPrompt, null, userMessage);
+    }
+
+    public List<ChatMessage> buildPromptMessages(String userId, String conversationId,
+                                                 String systemPrompt, String ragContext,
+                                                 String userMessage) {
+        List<ChatMessage> history = repository.getMessages(userId, conversationId);
         List<ChatMessage> promptMessages = new ArrayList<>();
-
-        boolean hasSystemPrompt = false;
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            promptMessages.add(new ChatMessage(SYSTEM_ROLE, systemPrompt));
-            hasSystemPrompt = true;
-        }
+        String summary = null;
 
         for (ChatMessage msg : history) {
             if (!SYSTEM_ROLE.equals(msg.getRole())) {
                 promptMessages.add(msg);
-            } else if (!hasSystemPrompt) {
-                promptMessages.add(msg);
-                hasSystemPrompt = true;
+            } else if (isSummaryMessage(msg)) {
+                // 持久化摘要只作为历史事实补充，旧系统消息不再逐条透传。
+                summary = msg.getContent();
             }
         }
 
+        ChatMessage systemMessage = buildSystemMessage(systemPrompt, ragContext, summary);
+        if (systemMessage != null) {
+            promptMessages.add(0, systemMessage);
+        }
         promptMessages.add(new ChatMessage(USER_ROLE, userMessage));
 
         return truncateMessages(promptMessages);
@@ -90,20 +101,16 @@ public class ChatMemoryService {
             return messages;
         }
 
-        List<ChatMessage> result = new ArrayList<>(messages);
-
+        List<ChatMessage> result = new ArrayList<>();
         ChatMessage systemMessage = null;
-        int systemIndex = -1;
-        for (int i = 0; i < result.size(); i++) {
-            if (SYSTEM_ROLE.equals(result.get(i).getRole()) && !result.get(i).getContent().startsWith(SUMMARY_PREFIX)) {
-                systemMessage = result.get(i);
-                systemIndex = i;
-                break;
+        for (ChatMessage message : messages) {
+            if (SYSTEM_ROLE.equals(message.getRole())) {
+                if (systemMessage == null) {
+                    systemMessage = message;
+                }
+            } else {
+                result.add(message);
             }
-        }
-
-        if (systemMessage != null) {
-            result.remove(systemIndex);
         }
 
         long totalTokens = result.stream().mapToLong(ChatMessage::getTokenCount).sum();
@@ -111,59 +118,74 @@ public class ChatMemoryService {
             totalTokens += systemMessage.getTokenCount();
         }
 
-        if (totalTokens > summaryThreshold && result.size() > summaryKeepRecent * 2) {
+        if (totalTokens > summaryThreshold
+                && result.size() > summaryKeepRecent * 2
+                && !containsSummary(systemMessage)) {
             logger.info("Total tokens {} exceeds summary threshold {}, generating rolling summary", totalTokens, summaryThreshold);
-            result = generateRollingSummary(result, systemMessage);
+            String summary = generateRollingSummaryContent(result);
+            if (summary != null && !summary.isEmpty()) {
+                String summaryMessage = SUMMARY_PREFIX + summary;
+                String baseSystemPrompt = systemMessage != null ? systemMessage.getContent() : null;
+                systemMessage = buildSystemMessage(baseSystemPrompt, null, summaryMessage);
+            }
             totalTokens = result.stream().mapToLong(ChatMessage::getTokenCount).sum();
             if (systemMessage != null) {
                 totalTokens += systemMessage.getTokenCount();
             }
         }
 
-        while (result.size() > maxMessages) {
-            result.remove(0);
-        }
-
-        while (totalTokens > maxTokens && result.size() > 0) {
+        while (result.size() > maxMessages && result.size() > 1) {
             totalTokens -= result.remove(0).getTokenCount();
         }
 
-        if (systemMessage != null) {
-            result.add(0, systemMessage);
+        while (totalTokens > maxTokens && result.size() > 1) {
+            totalTokens -= result.remove(0).getTokenCount();
         }
 
-        logger.debug("Truncated messages from {} to {}, total tokens: {}", messages.size(), result.size(), totalTokens);
-        return result;
+        List<ChatMessage> finalMessages = new ArrayList<>();
+        if (systemMessage != null) {
+            finalMessages.add(systemMessage);
+        }
+        finalMessages.addAll(result);
+
+        logger.debug("Truncated messages from {} to {}, total tokens: {}",
+                messages.size(), finalMessages.size(), totalTokens);
+        return finalMessages;
     }
 
-    private List<ChatMessage> generateRollingSummary(List<ChatMessage> messages, ChatMessage systemMessage) {
-        List<ChatMessage> result = new ArrayList<>();
-
-        int keepRecentCount = summaryKeepRecent * 2;
-        List<ChatMessage> recentMessages = new ArrayList<>();
-        List<ChatMessage> oldMessages = new ArrayList<>();
-
-        for (int i = 0; i < messages.size(); i++) {
-            if (i >= messages.size() - keepRecentCount) {
-                recentMessages.add(messages.get(i));
-            } else {
-                oldMessages.add(messages.get(i));
-            }
+    private ChatMessage buildSystemMessage(String systemPrompt, String ragContext, String summary) {
+        StringBuilder content = new StringBuilder();
+        appendSystemSection(content, systemPrompt);
+        if (ragContext != null && !ragContext.isBlank()) {
+            appendSystemSection(content, RAG_CONTEXT_PREFIX + "\n" + ragContext.trim());
         }
-
-        logger.info("Splitting messages: {} old messages, {} recent messages", oldMessages.size(), recentMessages.size());
-
-        String summary = generateSummary(oldMessages);
-
-        if (summary != null && !summary.isEmpty()) {
-            ChatMessage summaryMessage = new ChatMessage(SUMMARY_ROLE, SUMMARY_PREFIX + summary);
-            result.add(summaryMessage);
-            logger.info("Generated rolling summary, length: {} chars", summary.length());
+        appendSystemSection(content, summary);
+        if (content.length() == 0) {
+            return null;
         }
+        return new ChatMessage(SYSTEM_ROLE, content.toString());
+    }
 
-        result.addAll(recentMessages);
+    private void appendSystemSection(StringBuilder content, String section) {
+        if (section == null || section.isBlank()) {
+            return;
+        }
+        if (content.length() > 0) {
+            content.append("\n\n");
+        }
+        content.append(section.trim());
+    }
 
-        return result;
+    private boolean containsSummary(ChatMessage systemMessage) {
+        return systemMessage != null
+                && systemMessage.getContent() != null
+                && systemMessage.getContent().contains(SUMMARY_PREFIX);
+    }
+
+    private boolean isSummaryMessage(ChatMessage message) {
+        return SYSTEM_ROLE.equals(message.getRole())
+                && message.getContent() != null
+                && message.getContent().startsWith(SUMMARY_PREFIX);
     }
 
     private String generateSummary(List<ChatMessage> messages) {
@@ -188,29 +210,44 @@ public class ChatMemoryService {
         }
     }
 
-    public void saveMessagePair(String conversationId, String userMessage, String assistantReply) {
-        repository.addMessage(conversationId, new ChatMessage(USER_ROLE, userMessage));
-        repository.addMessage(conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
-        logger.debug("Saved message pair for conversation: {}", conversationId);
+    public void saveMessagePair(String userId, String conversationId, String userMessage, String assistantReply) {
+        repository.addMessage(userId, conversationId, new ChatMessage(USER_ROLE, userMessage));
+        repository.addMessage(userId, conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
+        logger.debug("Saved message pair for user: {}, conversation: {}", userId, conversationId);
         
-        eventPublisher.publishEvent(new VectorSaveEvent(conversationId, userMessage, assistantReply));
-        eventPublisher.publishEvent(new SummaryUpdateEvent(conversationId));
+        eventPublisher.publishEvent(new VectorSaveEvent(userId, conversationId, userMessage, assistantReply));
+        eventPublisher.publishEvent(new SummaryUpdateEvent(userId, conversationId));
     }
 
-    public void checkAndUpdateSummary(String conversationId) {
-        List<ChatMessage> history = repository.getMessages(conversationId);
+    public void checkAndUpdateSummary(String userId, String conversationId) {
+        List<ChatMessage> history = repository.getMessages(userId, conversationId);
         long totalTokens = history.stream().mapToLong(ChatMessage::getTokenCount).sum();
         
         if (totalTokens > summaryThreshold && history.size() > summaryKeepRecent * 2) {
             String summary = generateRollingSummaryContent(history);
             if (summary != null && !summary.isEmpty()) {
-                repository.removeSystemMessages(conversationId, SUMMARY_PREFIX);
+                // 生成摘要可能耗时较久，期间会话可能已被清空或新增消息。
+                // 写入前重新校验历史，避免把过期摘要回写到已清空的会话。
+                long snapshotCount = countConversationMessages(history);
+                long currentCount = countConversationMessages(repository.getMessages(userId, conversationId));
+                if (currentCount != snapshotCount) {
+                    logger.info("Conversation changed or was cleared during summary generation, "
+                            + "skipping stale summary write for conversation: {}", conversationId);
+                    return;
+                }
+                repository.removeSystemMessages(userId, conversationId, SUMMARY_PREFIX);
                 String timestamp = LocalDateTime.now().format(FORMATTER);
                 String summaryContent = SUMMARY_PREFIX + "[更新时间: " + timestamp.substring(0, 16) + "]\n" + summary;
-                repository.addMessage(conversationId, new ChatMessage(SYSTEM_ROLE, summaryContent));
+                repository.addMessage(userId, conversationId, new ChatMessage(SYSTEM_ROLE, summaryContent));
                 logger.info("Summary saved for conversation: {}, length: {} chars", conversationId, summary.length());
             }
         }
+    }
+
+    private long countConversationMessages(List<ChatMessage> history) {
+        return history.stream()
+                .filter(message -> !SYSTEM_ROLE.equals(message.getRole()))
+                .count();
     }
 
     private String generateRollingSummaryContent(List<ChatMessage> history) {
@@ -230,13 +267,24 @@ public class ChatMemoryService {
         return generateSummary(oldMessages);
     }
 
-    public void clearConversation(String conversationId) {
-        repository.clear(conversationId);
-        logger.info("Cleared conversation history for: {}", conversationId);
+    public void clearConversation(String userId, String conversationId) {
+        requireIdentifier(userId, "userId");
+        requireIdentifier(conversationId, "conversationId");
+        repository.clear(userId, conversationId);
+        vectorStoreService.clearConversationVectors(userId, conversationId);
+        userSessionService.clearSession(userId);
+        logger.info("Cleared conversation history, vectors and session state for user: {}, conversation: {}",
+                userId, conversationId);
     }
 
-    public boolean hasConversation(String conversationId) {
-        return repository.exists(conversationId);
+    public void clearUserSession(String userId) {
+        requireIdentifier(userId, "userId");
+        userSessionService.clearSession(userId);
+        logger.info("Cleared session state for user: {}", userId);
+    }
+
+    public boolean hasConversation(String userId, String conversationId) {
+        return repository.exists(userId, conversationId);
     }
 
     public void setMaxMessages(int maxMessages) {
@@ -245,5 +293,11 @@ public class ChatMemoryService {
 
     public void setMaxTokens(long maxTokens) {
         this.maxTokens = maxTokens;
+    }
+
+    private void requireIdentifier(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
     }
 }

@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -104,13 +105,17 @@ public class CommunityService {
         return post;
     }
 
+    @Transactional
     public void deletePost(Long postId, String userId) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new RuntimeException("帖子不存在"));
         if (!post.getUserId().equals(userId)) {
             throw new RuntimeException("无权删除此帖子");
         }
+
         postRepository.delete(post);
+        postRepository.flush();
+        vectorStoreService.clearDocumentVectorsStrict("post_" + postId);
         logger.info("Post deleted, id: {}, userId: {}", postId, userId);
     }
 

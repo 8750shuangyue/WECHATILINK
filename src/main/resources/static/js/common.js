@@ -44,29 +44,62 @@ function logout() {
     fetch('/api/auth/logout', { method: 'POST' }).then(function () { location.href = '/login'; });
 }
 
-/* 统一补充 ICP 备案页脚，已有备案链接的页面会自动跳过。 */
-(function ensureIcpFooter() {
+/* 统一补充 ICP 与公安备案页脚，已有备案链接的页面会自动跳过。 */
+(function ensureBeianFooter() {
     var ICP_TEXT = '苏ICP备2026075056号-1';
     var ICP_URL = 'https://beian.miit.gov.cn/';
+    var POLICE_TEXT = '苏公网安备32062102001471号';
+    var POLICE_URL = 'https://beian.mps.gov.cn/#/query/webSearch?code=32062102001471';
+    var STYLE_ID = 'site-beian-footer-style';
+
+    function ensureStyles() {
+        if (document.getElementById(STYLE_ID)) return;
+
+        var style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.textContent = [
+            '.site-beian{display:flex;flex-direction:column;align-items:center;gap:4px;' +
+                'margin-top:8px;text-align:center;}',
+            '.site-beian__item{display:inline-flex;align-items:center;justify-content:center;' +
+                'gap:6px;color:inherit;font:inherit;line-height:inherit;white-space:nowrap;' +
+                'text-decoration:none;}',
+            '.site-beian__icon{display:block;width:18px;height:18px;flex:0 0 18px;object-fit:contain;}',
+            '#site-beian-footer{margin:20px auto 18px;padding:0 16px;color:#6b7280;' +
+                'font-size:12px;line-height:1.6;}',
+            '#site-beian-footer a:hover{text-decoration:underline;}'
+        ].join('');
+        document.head.appendChild(style);
+    }
 
     function render() {
-        if (document.querySelector('a[href*="beian.miit.gov.cn"]')) return;
+        ensureStyles();
+        if (document.querySelector('a[href*="beian.miit.gov.cn"]') &&
+            document.querySelector('a[href*="beian.mps.gov.cn"]')) return;
 
-        var footer = document.createElement('footer');
-        footer.id = 'site-icp-footer';
-        footer.style.cssText = 'margin:20px auto 18px;padding:0 16px;text-align:center;' +
-            'font-size:12px;line-height:1.6;color:#6b7280;';
+        var footer = document.createElement('div');
+        footer.id = 'site-beian-footer';
+        footer.className = 'site-beian';
+        footer.setAttribute('aria-label', '网站备案信息');
 
-        var link = document.createElement('a');
-        link.href = ICP_URL;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = ICP_TEXT;
-        link.style.cssText = 'color:inherit;text-decoration:none;';
-        link.addEventListener('mouseenter', function () { link.style.textDecoration = 'underline'; });
-        link.addEventListener('mouseleave', function () { link.style.textDecoration = 'none'; });
+        function createLink(text, href, withIcon) {
+            var link = document.createElement('a');
+            link.className = 'site-beian__item';
+            link.href = href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            if (withIcon) {
+                var icon = document.createElement('img');
+                icon.className = 'site-beian__icon';
+                icon.src = '/images/public-security-badge.png';
+                icon.alt = '';
+                link.appendChild(icon);
+            }
+            link.appendChild(document.createTextNode(text));
+            return link;
+        }
 
-        footer.appendChild(link);
+        footer.appendChild(createLink(POLICE_TEXT, POLICE_URL, true));
+        footer.appendChild(createLink(ICP_TEXT, ICP_URL, false));
         document.body.appendChild(footer);
     }
 

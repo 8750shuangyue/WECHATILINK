@@ -250,14 +250,18 @@ public class MessageRouter {
     }
 
     public String process(RouteResult routeResult, String conversationId) throws Exception {
+        return process(null, routeResult, conversationId);
+    }
+
+    public String process(String userId, RouteResult routeResult, String conversationId) throws Exception {
         switch (routeResult.getRouteType()) {
             case TEXT_CHAT:
                 if (conversationId != null && !conversationId.isEmpty()) {
                     try {
-                        return springAiChatService.chat(routeResult.getTextContent(), null, conversationId);
+                        return springAiChatService.chat(userId, routeResult.getTextContent(), null, conversationId);
                     } catch (Exception e) {
                         logger.warn("Spring AI chat failed, falling back to legacy LLM: {}", e.getMessage());
-                        return llmService.chatWithMemory(conversationId, routeResult.getTextContent());
+                        return llmService.chatWithMemory(userId, conversationId, routeResult.getTextContent(), null);
                     }
                 }
                 try {
@@ -299,10 +303,10 @@ public class MessageRouter {
                 return weatherTool.execute(weatherParams).getData();
 
             case CARE_WORKFLOW:
-                String userId = conversationId;
-                logger.info("Routing to care workflow: userId={}, message={}", userId, routeResult.getTextContent());
+                String careUserId = conversationId;
+                logger.info("Routing to care workflow: userId={}, message={}", careUserId, routeResult.getTextContent());
                 SpringAiCareWorkflowService.WorkflowResult workflowResult = 
-                        careWorkflowService.executeWorkflow(userId, routeResult.getTextContent(), null);
+                        careWorkflowService.executeWorkflow(careUserId, routeResult.getTextContent(), null);
                 StringBuilder sb = new StringBuilder();
                 if (workflowResult.isEmergency()) {
                     sb.append("⚠️ 紧急情况！\n");
@@ -327,6 +331,11 @@ public class MessageRouter {
     }
 
     public String processFileQA(byte[] fileContent, String fileName, String question, String conversationId) throws Exception {
+        return processFileQA(null, fileContent, fileName, question, conversationId);
+    }
+
+    public String processFileQA(String userId, byte[] fileContent, String fileName, String question,
+                                String conversationId) throws Exception {
         logger.info("Processing file QA: fileName={}, question={}, fileSize={}, conversationId={}", fileName, question, fileContent.length, conversationId);
 
         if (!fileParserService.supports(fileName)) {
@@ -345,7 +354,8 @@ public class MessageRouter {
             String reply = llmService.chat(prompt, systemPrompt);
 
             if (conversationId != null) {
-                chatMemoryService.saveMessagePair(conversationId, "用户上传了文件" + fileName + "并提问：" + question, reply);
+                chatMemoryService.saveMessagePair(userId, conversationId,
+                        "用户上传了文件" + fileName + "并提问：" + question, reply);
             }
 
             return reply;
