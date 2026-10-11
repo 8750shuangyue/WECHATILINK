@@ -141,6 +141,24 @@ public class VectorStoreService {
         }
     }
 
+    /**
+     * 按 sourceId 整体替换文档：先删除旧向量，再批量入库新分块。
+     * @return 被替换掉的旧分块数
+     */
+    public long replaceDocument(String sourceId, List<String> chunks, Map<String, Object> metadata) {
+        long replaced = vectorStoreRepository.countBySourceId(sourceId);
+        if (replaced > 0) {
+            clearDocumentVectors(sourceId);
+            logger.info("Replaced {} old chunks for sourceId: {}", replaced, sourceId);
+        }
+        int saved = 0;
+        for (String c : chunks) {
+            saveDocument(sourceId, c, metadata);
+            saved++;
+        }
+        return replaced;
+    }
+
     public synchronized void addToIndex(int rowId, String content, float[] vector) {
         indexLock.writeLock().lock();
         try {
@@ -153,6 +171,7 @@ public class VectorStoreService {
             indexLock.writeLock().unlock();
         }
     }
+
 
     public List<String> searchSimilar(String query) {
         return searchSimilar(query, null);
@@ -278,6 +297,72 @@ public class VectorStoreService {
 
         } catch (Exception e) {
             logger.error("Failed to search vector with metadata", e);
+            return List.of();
+        } finally {
+            indexLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * 仅检索知识库文档（sourceId 非空的向量），跳过对话向量。
+     */
+    public List<SearchResult> searchKnowledgeBase(String query) {
+        indexLock.readLock().lock();
+        try {
+            if (!indexReady.get()) {
+                logger.warn("Vector index not ready");
+                return List.of();
+            }
+
+            float[] queryEmbedding = embeddingService.embed(query);
+            if (queryEmbedding.length == 0) {
+                logger.warn("Query embedding is empty");
+                return List.of();
+            }
+
+            List<SearchResult> similarityResults = new ArrayList<>();
+            for (VectorStore vs : vectorStoreRepository.findAll()) {
+                if (vs.getSourceId() == null || vs.getSourceId().isEmpty()) {
+                    continue;
+                }
+                float[] storedVector = deserializeVector(vs.getVector());
+                if (storedVector.length != queryEmbedding.length) {
+                    continue;
+                }
+
+                double similarity = cosineSimilarity(queryEmbedding, storedVector);
+                if (similarity >= similarityThreshold) {
+                    JSONObject metadata = null;
+                    if (vs.getMetadataJson() != null && !vs.getMetadataJson().isEmpty()) {
+                        metadata = JSON.parseObject(vs.getMetadataJson());
+                    }
+                    similarityResults.add(new SearchResult(
+                        vs.getDocumentId(),
+                        vs.getSourceId(),
+                        vs.getContent(),
+                        similarity,
+                        metadata
+                    ));
+                }
+            }
+
+            similarityResults.sort((a, b) -> Double.compare(b.similarity, a.similarity));
+
+            List<SearchResult> results = new ArrayList<>();
+            int count = 0;
+            for (SearchResult sr : similarityResults) {
+                if (count >= topK) {
+                    break;
+                }
+                results.add(sr);
+                count++;
+            }
+
+            logger.info("Knowledge base search found {} results (top {} requested)", results.size(), topK);
+            return results;
+
+        } catch (Exception e) {
+            logger.error("Failed to search knowledge base", e);
             return List.of();
         } finally {
             indexLock.readLock().unlock();

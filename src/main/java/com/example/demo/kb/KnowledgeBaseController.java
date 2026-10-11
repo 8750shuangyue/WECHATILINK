@@ -38,23 +38,32 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Map<String, Object>> upload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "sourceId", required = false) String sourceId,
+            @RequestParam(value = "dryRun", defaultValue = "false") boolean dryRun) {
         Map<String, Object> r = new HashMap<>();
         try {
             fileUploadValidator.validateDocument(file);
             String text = fileParserService.parseFile(file);
             String fileName = file.getOriginalFilename();
-            String sourceId = "kb_" + System.currentTimeMillis() + "_" + fileName;
-            List<String> chunks = chunk(text);
-            for (String c : chunks) {
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("fileName", fileName);
-                vectorStoreService.saveDocument(sourceId, c, meta);
+            if (sourceId == null || sourceId.isBlank()) {
+                sourceId = "kb_" + System.currentTimeMillis() + "_" + fileName;
             }
-            log.info("[KB] Uploaded {} -> {} chunks ({} chars)", fileName, chunks.size(), text.length());
+            List<String> chunks = chunk(text);
             r.put("success", true);
+            r.put("sourceId", sourceId);
             r.put("count", chunks.size());
             r.put("chars", text.length());
+            if (dryRun) {
+                r.put("dryRun", true);
+                r.put("chunks", chunks);
+                log.info("[KB] DryRun {} -> {} chunks ({} chars)", fileName, chunks.size(), text.length());
+                return ResponseEntity.ok(r);
+            }
+            long replaced = vectorStoreService.replaceDocument(sourceId, chunks, Map.of("fileName", fileName));
+            log.info("[KB] Uploaded {} (sourceId={}) -> {} chunks ({} chars), replaced {} chunks",
+                    fileName, sourceId, chunks.size(), text.length(), replaced);
         } catch (FileValidationException e) {
             log.warn("[KB] Upload rejected: {}", e.getMessage());
             r.put("success", false);

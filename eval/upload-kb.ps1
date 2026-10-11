@@ -18,11 +18,12 @@ try {
     exit 1
 }
 
-# 2. 逐个上传文档
+# 2. 逐个上传文档（sourceId = 文件名去 .md 后缀，支持 dryRun）
 $files = Get-ChildItem $DocsDir -Filter *.md | Sort-Object Name
 foreach ($f in $files) {
+    $sid = $f.BaseName
     try {
-        $resp = Invoke-WebRequest -Uri "$Base/api/kb/upload" -Method POST -Form @{ file = Get-Item $f.FullName } -WebSession $session -UseBasicParsing -TimeoutSec 120
+        $resp = Invoke-WebRequest -Uri "$Base/api/kb/upload" -Method POST -Form @{ file = Get-Item $f.FullName; sourceId = $sid } -WebSession $session -UseBasicParsing -TimeoutSec 120
         Write-Host "[OK] $($f.Name) -> $($resp.Content)"
     } catch {
         Write-Host "[XX] $($f.Name) upload failed: $($_.Exception.Message)"

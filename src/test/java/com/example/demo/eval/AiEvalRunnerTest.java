@@ -251,13 +251,13 @@ class AiEvalRunnerTest {
                 Object service = applicationContext.getBean("vectorStoreService");
                 Method target = null;
                 for (Method m : service.getClass().getMethods()) {
-                    if ("searchSimilarWithMetadata".equals(m.getName()) && m.getParameterCount() == 1) {
+                    if ("searchKnowledgeBase".equals(m.getName()) && m.getParameterCount() == 1) {
                         target = m;
                         break;
                     }
                 }
                 if (target == null) {
-                    System.out.println("[EVAL] 警告: 未找到 vectorStoreService.searchSimilarWithMetadata(question)，跳过 RAG 召回记录");
+                    System.out.println("[EVAL] 警告: 未找到 vectorStoreService.searchKnowledgeBase(question)，跳过 RAG 召回记录");
                     return hits;
                 }
                 Object result = target.invoke(service, question);

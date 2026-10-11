@@ -125,9 +125,9 @@ mvn -Pai-eval -Dai.eval.enabled=true `
 ## 七、题库维护指南
 
 1. 新增/修改题目：遵循 `schema.json` 字段规范，`id` 全局唯一；
-2. **RAG 题**的 `expectedSourceIds` 是占位 ID（如 `kb-doc:plant-winter-care`），首次运行前必须：
-   - 在知识库 `/kb` 上传对应文档；
-   - 查询该文档实际 `sourceId`，回填到题库后重跑；
+2. **RAG 题**的 `expectedSourceIds` 已回填真实来源 ID（如 `kb_pet_vaccine`），对应 `eval/kb-docs/` 下的知识文档；若知识库内容更新，需同步更新映射；
+   - 入库方式：`mvn -Pai-eval -Dai.eval.enabled=true -Dai.kb.clean=true -Dai.kb.dry-run=true test` 干跑校验分块；去掉 `-Dai.kb.dry-run=true` 正式入库（`KbImportRunnerTest`）；
+   - 或启动应用后执行 `eval/upload-kb.ps1`（HTTP 上传，sourceId=文件名去 `.md`）；
 3. **工具题**只允许使用只读工具（天气/附近服务/搜索/植物安全/宠物护理/症状分级），禁止写类工具；
 4. 多轮用例 `question` 为第一轮，`multiTurn` 为后续轮次；
 5. 修改题目后递增 `version`。
