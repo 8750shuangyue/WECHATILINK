@@ -1,6 +1,6 @@
 # Sekai PetPlant · AI 宠物 / 绿植护理平台
 
-> 最近更新：2026-10-01（正式域名 HTTPS 上线）
+> 最近更新：2026-10-11（AI 评测 40 题正式基线完成 · 知识库真实文档导入）
 
 一个以 **AI Agent 为核心**的一站式宠物与绿植智能护理 Web 平台：覆盖养护问答、AI 识图诊断、护理档案与提醒、知识库 RAG、商城库存、社区分享、每日简报、数据观测等全链路场景。
 
@@ -19,8 +19,8 @@
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
 | 第一批：安全与运行基线 | 已完成（持续加固） | 密钥外置、401 统一响应、Session Cookie、CORS、CSRF 来源校验、上传校验、安全响应头、Nginx HTTPS、域名备案和端口收敛已完成；密钥轮换与全局限流仍待处理 |
-| 第二批：AI 评测基线 | 未开始 | 需要建立 30～50 条固定评测问题，记录答案正确率、召回率、工具成功率和延迟 |
-| 第三批：记忆与 RAG | 未开始 | 继续完善用户隔离、混合召回、重排、上下文压缩和引用 |
+| 第二批：AI 评测基线 | **已完成** | 40 题正式基线跑通：全链路 0 异常、RAG 召回 1.0、拒答 1.0、平均 factScore 0.63；评分器升级为同义词 + 有序子序列匹配 |
+| 第三批：记忆与 RAG | 进行中 | 21 篇真实知识文档已导入线上向量库（替换测试种子），Recall@K=100%；下一步修复 RAG 提示词引导 |
 | 第四批：UI 与范围收敛 | 未开始 | 后续处理旧入口、公共前端模块和核心路径简化 |
 | 第五批：工程清理与可观测 | 未开始 | 后续处理死代码、统一异常、健康检查和监控 |
 
@@ -80,7 +80,8 @@
 
 - **对话记忆**：会话与消息持久化到 MySQL，采用“窗口截断 + 超阈值自动语义摘要”控制上下文成本，避免长对话丢失关键信息；
 - **文档知识库（RAG）**：知识库后台（`/kb`）上传 `txt`、`md`、`json`、`csv`、`log`、`pdf`、`docx` → 自动分块 → Embedding 向量化 → 存入 SQLite 向量库 → 对话时按相似度检索 Top-K 片段注入提示词，让 AI 基于私有资料回答；
-- **多级召回**：工具模式支持“对话历史 → 向量检索 → 工具实时结果”的多级信息融合。
+- **真实知识库**：线上向量库已导入 21 篇真实业务文档（绿植 7 篇、宠物 12 篇、平台服务边界 1 篇、宠物口腔护理 1 篇），sourceId 统一为 `kb_` 前缀，替代早期测试种子数据；
+- **多级召回**：工具模式支持“对话历史 → 向量检索 → 工具实时结果”的多级信息融合，检索仅命中知识库文档（`searchKnowledgeBase`），不受对话向量污染。
 
 ### 4. 智能护理中心
 
@@ -92,7 +93,7 @@
 
 ### 5. 知识库后台
 
-`/kb` 页面提供上传文档、查看知识条目、按来源删除等管理能力，是 RAG 的资料入口。
+`/kb` 页面提供上传文档、查看知识条目、按来源删除等管理能力，是 RAG 的资料入口。上传接口支持 `sourceId` 指定来源标识与 `dryRun` 分块干跑校验。
 
 ### 6. 图片中心与媒体管理
 
@@ -111,7 +112,7 @@
 
 ### 8. 账号与安全
 
-- 注册 / 登录 / 登出（Session）；
+- 注册 / 登录 / 登出（Session），评测账号可自动注册；
 - `WebAuthInterceptor` 统一鉴权：`/api/**`、`/uploads/**` 需登录，未登录返回 401；
 - Session Cookie 开启 `HttpOnly`、`SameSite=Lax`，生产可通过环境变量开启 `Secure`；
 - 登录失败按 IP + 用户名限流，注册字段做格式与长度校验；
@@ -119,6 +120,74 @@
 - 上传入口统一做大小、扩展名和文件内容校验，图片使用服务端 UUID 文件名；
 - 业务数据按 `user_id` 归属隔离，档案、记录、提醒、图片均校验归属；
 - 敏感词过滤（`SensitiveWordFilter`）防止不合规内容入库。
+
+---
+
+## AI 评测体系
+
+> 位于仓库根 `eval/` 目录，独立于生产代码运行，仅通过 `-Pai-eval` Maven Profile 触发。
+
+### 最新正式基线（baseline-20261011-222521）
+
+**40 题全链路执行，0 异常，HTTP 200。**
+
+| 指标 | 值 | 说明 |
+| --- | --- | --- |
+| RAG 召回 (sourceRecall) | **1.000 (40/40)** | 全部用例命中期望知识来源 |
+| 拒答 (refusalScore) | **1.000 (40/40)** | 敏感请求正确引导就医 / 拒答 |
+| 关键事实 (factScore) | **0.63 平均** | 16/40 满分，25/40 ≥0.5（取每例最佳 attempt） |
+| 工具选择 (toolSelectionScore) | **1.00 (6/6)** | 工具用例全部正确选型 |
+| forbiddenClaimHit | 12 | 命中禁用结论，主要分布在拒答 / 高风险护理场景 |
+
+**各类别 factScore：** tool 0.92 > memory 0.88 > refusal 0.67 > rag 0.54 > plant 0.47 > pet 0.37
+
+### 评测运行方式
+
+```powershell
+# 冒烟（12 条，先验证运行器）
+mvn -Pai-eval -Dai.eval.enabled=true `
+  -Dai.eval.username=eval_runner -Dai.eval.password=你的评测密码 `
+  -Dai.eval.case-file=eval/ai-eval-smoke-12.jsonl `
+  "-Dspring.datasource.url=jdbc:mysql://localhost:3306/ilink_eval?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai" `
+  test
+
+# 正式基线（40 条）
+mvn -Pai-eval -Dai.eval.enabled=true `
+  -Dai.eval.username=eval_runner -Dai.eval.password=你的评测密码 `
+  -Dai.eval.case-file=eval/ai-eval-v1.jsonl -Dai.eval.output=eval/results `
+  "-Dspring.datasource.url=jdbc:mysql://localhost:3306/ilink_eval?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai" `
+  test
+```
+
+### 知识库入库方式
+
+```powershell
+# 干跑校验分块（不写库）
+mvn -Pai-eval -Dai.eval.enabled=true -Dai.kb.dry-run=true test
+
+# 清理旧向量并正式入库（KbImportRunnerTest）
+mvn -Pai-eval -Dai.eval.enabled=true -Dai.kb.clean=true test
+
+# 或启动应用后 HTTP 上传（sourceId = 文件名去扩展名）
+PowerShell -File eval/upload-kb.ps1
+```
+
+### 主要成品清单
+
+| 产物 | 位置 | 说明 |
+| --- | --- | --- |
+| 正式题库 | `eval/ai-eval-v1.jsonl` | 40 条（plant/pet/rag/tool/memory/refusal），RAG 题 `expectedSourceIds` 已回填真实来源 |
+| 冒烟题库 | `eval/ai-eval-smoke-12.jsonl` | 12 条运行器自检用例 |
+| 知识文档 | `eval/kb-docs/*.md` | 21 篇 `kb_` 前缀真实业务文档 |
+| 运行器源码 | `src/test/java/com/example/demo/eval/` | `AiEvalRunnerTest`（入口）、`EvalHttpClient`（真实 HTTP）、`EvalScorer`（评分）、`KbImportRunnerTest`（入库） |
+| 结果目录 | `eval/results/` | 逐批 JSONL 原结果 + Markdown 报告 + 失败清单 |
+| 用例规范 | `eval/schema.json` | JSONL 单条用例字段规范 |
+
+### 已知待办
+
+- **RAG 提示词引导**：rag-003~007 检索结果正常传入但 LLM 回复“无法访问知识库”，需修正提示词让模型基于注入的检索片段作答；
+- **pet 类 factScore 偏低**（0.37）：需复核期望事实粒度 / 知识文档覆盖面；
+- **人工复核**：基准报告第 11 节待人工按正确性 / 依据性 / 安全性 / 可执行性复核。
 
 ---
 
@@ -215,6 +284,10 @@ src/main/java/com/example/demo/
 ├── config/ core/       # 拦截器、Web 配置、文件服务等基础设施
 ├── utils/              # 通用工具
 └── web/                # 页面路由（PageController）
+
+src/test/java/com/example/demo/eval/   # AI 评测运行器（-Pai-eval 才触发）
+
+eval/                    # 评测资源：题库、知识文档、结果、上传脚本
 ```
 
 前端为纯静态页面（无构建链），位于：
@@ -269,7 +342,7 @@ src/main/resources/static/
 | 宠物 / 植物档案 | `/api/pet/**` `/api/plant/**` | 档案增删改查 |
 | 护理 | `/api/care/identify` `/targets/**` `/records/**` `/qa` | 识图、档案记录、护理问答 |
 | 识病诊断 | `/api/disease/diagnose` `/history` | 拍照诊断与历史 |
-| 知识库 | `POST /api/kb/upload` `GET /api/kb/list` `DELETE /api/kb/{sourceId}` | 上传、列表、删除知识条目 |
+| 知识库 | `POST /api/kb/upload` `GET /api/kb/list` `DELETE /api/kb/{sourceId}` | 上传（支持 sourceId / dryRun）、列表、删除知识条目 |
 | 文件 | `/api/file/process` `/api/file/qa` | 文件解析与基于文件问答 |
 | 图片中心 | `/api/gallery/list` `/api/gallery/{id}` | 媒体资产列表 / 删除 |
 | 推送 | `/api/push/subscribe` `/unsubscribe` `/test` | WebPush 订阅管理 |
@@ -337,7 +410,7 @@ java -jar target/demo-0.0.1-SNAPSHOT.jar
 | `spring.datasource.url` | MySQL 连接串（默认 `localhost:3306/ilink_chat`） |
 | `dashscope.*` | 大模型对话 / Embedding / 视觉 / 图像 / ASR 的密钥与模型 |
 | `chat.memory.*` | 对话记忆窗口、摘要阈值 |
-| `chat.vectorstore.*` | RAG 检索开关、Top-K、相似度阈值 |
+| `chat.vectorstore.*` | RAG 检索开关、Top-K（默认 5）、相似度阈值（当前 0.35，验证后调低以提升日常问法召回） |
 | `weather.api.*` | 心知天气 |
 | `amap.*` | 高德地图 |
 | `xunfei.tts.*` | 讯飞语音合成 |
