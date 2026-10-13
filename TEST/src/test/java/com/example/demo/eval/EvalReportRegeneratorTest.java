@@ -52,7 +52,8 @@ class EvalReportRegeneratorTest {
                 first.runId,
                 OffsetDateTime.parse(first.startedAt).toInstant(),
                 results,
-                stoppedByBudget
+                stoppedByBudget,
+                sourceSuffix(resultFile)
         );
 
         System.out.printf(
@@ -63,6 +64,14 @@ class EvalReportRegeneratorTest {
                 paths.markdown().toAbsolutePath(),
                 paths.failures().toAbsolutePath()
         );
+    }
+
+    private String sourceSuffix(Path resultFile) {
+        String name = resultFile.getFileName().toString();
+        if (name.startsWith("baseline-") && name.endsWith(".jsonl")) {
+            return name.substring("baseline-".length(), name.length() - ".jsonl".length());
+        }
+        return null;
     }
 
     private List<EvalResult> loadResults(ObjectMapper objectMapper, Path resultFile) throws Exception {

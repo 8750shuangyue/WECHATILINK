@@ -43,6 +43,17 @@ public final class EvalReportWriter {
             List<EvalResult> results,
             boolean stoppedByBudget
     ) throws IOException {
+        return write(config, runId, startedAt, results, stoppedByBudget, null);
+    }
+
+    ReportPaths write(
+            EvalConfig config,
+            String runId,
+            Instant startedAt,
+            List<EvalResult> results,
+            boolean stoppedByBudget,
+            String suffixOverride
+    ) throws IOException {
         Objects.requireNonNull(config, "config");
         Objects.requireNonNull(runId, "runId");
         Objects.requireNonNull(startedAt, "startedAt");
@@ -50,7 +61,9 @@ public final class EvalReportWriter {
 
         Files.createDirectories(config.outputDir());
         ZonedDateTime localStartedAt = startedAt.atZone(ZoneId.systemDefault());
-        String suffix = FILE_TIME.format(localStartedAt);
+        String suffix = suffixOverride == null || suffixOverride.isBlank()
+                ? FILE_TIME.format(localStartedAt)
+                : suffixOverride;
 
         Path jsonlPath = config.outputDir().resolve("baseline-" + suffix + ".jsonl");
         Path markdownPath = config.outputDir().resolve("baseline-" + suffix + ".md");
@@ -180,6 +193,12 @@ public final class EvalReportWriter {
                 summary.averageRefusalScore(),
                 metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.refusalScore)
         );
+        appendMetric(
+                markdown,
+                "RAG 来源召回率 (Recall@K)",
+                summary.averageSourceRecall(),
+                metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.sourceRecall)
+        );
         markdown.append("| 禁用结论命中数 | ").append(summary.forbiddenClaimHits()).append(" | ")
                 .append(summary.qualityCount()).append(" |\n");
         markdown.append("| 禁用工具命中数 | ").append(summary.forbiddenToolHits()).append(" | ")
@@ -227,8 +246,9 @@ public final class EvalReportWriter {
         }
 
         markdown.append("## 能力缺口\n\n");
-        markdown.append("- RAG 来源召回：当前评测通过公开 HTTP 接口执行，生产接口未返回内部检索明细；")
-                .append("`sourceRecall` 保持为空，不能据此计算外部黑盒 `Recall@K`。\n");
+        markdown.append("- RAG 来源召回：评测通过 SSE `rag-trace` 事件取 `traceId`，再查受控只读接口 ")
+                .append("`/api/internal/rag/retrievals/{traceId}` 获取命中来源；仅当题库 `expectedSourceIds` 非空且检索状态为 ")
+                .append("`available` 时计算 `sourceRecall`，`path: tools` 的用例不参与。\n");
         markdown.append("- 普通流式聊天：接口不返回 Token 用量，本报告按回答长度给出估算值，不能替代服务端账单。\n");
         markdown.append("- 成本：仅按 `AI_EVAL_PRICE_PER_MILLION_TOKENS` 和计费口径 Token 估算，币种由执行人员自行统一。\n\n");
 
@@ -283,6 +303,7 @@ public final class EvalReportWriter {
                 markdown.append("- 工具选择分：").append(decimal(result.autoScore.toolSelectionScore)).append('\n');
                 markdown.append("- 工具成功率：").append(decimal(result.autoScore.toolSuccessRate)).append('\n');
                 markdown.append("- 拒答得分：").append(decimal(result.autoScore.refusalScore)).append('\n');
+                markdown.append("- 来源召回：").append(decimal(result.autoScore.sourceRecall)).append('\n');
             }
             markdown.append("- 工具调用：").append(result.toolCalls.size()).append('\n');
             markdown.append("\n回答摘录：\n\n```text\n")
@@ -352,6 +373,10 @@ public final class EvalReportWriter {
                 average(
                         qualityResults,
                         result -> result.autoScore.refusalScore
+                ),
+                average(
+                        qualityResults,
+                        result -> result.autoScore.sourceRecall
                 ),
                 qualityResults.stream()
                         .filter(result -> Boolean.TRUE.equals(result.autoScore.forbiddenClaimHit))
@@ -477,12 +502,14 @@ public final class EvalReportWriter {
             if (!Files.isDirectory(outputDir)) {
                 return Optional.empty();
             }
+            String currentName = currentJsonl.getFileName().toString();
             try (var files = Files.list(outputDir)) {
                 return files
                         .filter(path -> path.getFileName().toString().startsWith("baseline-"))
                         .filter(path -> path.getFileName().toString().endsWith(".jsonl"))
                         .filter(path -> !path.toAbsolutePath().normalize()
                                 .equals(currentJsonl.toAbsolutePath().normalize()))
+                        .filter(path -> path.getFileName().toString().compareTo(currentName) < 0)
                         .max(Comparator.comparing(path -> path.getFileName().toString()))
                         .map(path -> path.getFileName().toString());
             }
@@ -551,6 +578,7 @@ public final class EvalReportWriter {
             Double averageToolSelectionScore,
             Double averageToolSuccessRate,
             Double averageRefusalScore,
+            Double averageSourceRecall,
             long forbiddenClaimHits,
             long forbiddenToolHits,
             long infrastructureErrors,

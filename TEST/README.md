@@ -8,7 +8,7 @@
 - 默认不执行真实评测，避免误调用外部 API 和产生费用。
 - 使用独立评测账号、独立数据库和只读工具。
 - 不记录 Cookie、密码、API Key、Authorization 或真实用户隐私。
-- P1 已增加内部检索审计数据，但尚未提供受控只读 HTTP 明细接口；外部黑盒评测仍无法获取内部 RAG 召回明细，因此 `sourceRecall` 会保持为空，并在报告中标记为能力缺口。
+- 阶段 2.2 起，普通流式聊天会推送 SSE `rag-trace` 事件，评测侧可据此调用受控只读接口 `/api/internal/rag/retrievals/{traceId}` 取回该次问答命中的 `sourceId`；当题库 `expectedSourceIds` 非空且该次检索状态为 `available` 时，`sourceRecall` 可计算，否则保持为空。
 
 ## 运行前准备
 
@@ -70,7 +70,7 @@ $env:AI_EVAL_REPLAY_CASE_FILE = "eval/ai-eval-v1.jsonl"
 mvn -B -f TEST\pom.xml "-Dtest=EvalReportRegeneratorTest" test
 ```
 
-离线模式会重新计算自动评分并生成新的 JSONL、Markdown 和失败清单，不会调用被测服务。建议先保留原始 JSONL，再用重算结果做规则迭代。
+离线模式会重新计算自动评分，并就地覆盖同名 JSONL、Markdown 和失败清单，不会调用被测服务。输出文件名沿用原始运行的 `baseline-YYYYMMDD-HHmmss` 时间戳，因此建议先把原始 JSONL 备份到 `eval/archive/` 或 `tmp/`，再用重算结果做规则迭代。
 
 `TEST` 工程不会启动 Spring Boot，也不会自动创建数据库。被测服务必须由执行人员单独启动；评测只通过 HTTP 访问它。
 
@@ -100,7 +100,7 @@ mvn -B -f TEST\pom.xml "-Dtest=EvalReportRegeneratorTest" test
 - `toolSelectionScore` 只统计声明了 `expectedTools` 或 `forbiddenTools` 的用例。
 - `refusalScore` 只统计 `shouldRefuse=true` 的用例。
 - 工具执行成功率只统计实际发生工具调用的记录。
-- 公开 HTTP 接口暂未返回内部 RAG 召回明细；虽然 P1 已落库检索审计数据，但黑盒评测在只读明细接口接入前仍保持 `sourceRecall` 为空，不计算 `Recall@K`。
+- RAG 来源召回：评测通过 SSE `rag-trace` 事件取 `traceId`，再查受控只读接口 `/api/internal/rag/retrievals/{traceId}` 得到命中来源；`sourceRecall` 仅在 `expectedSourceIds` 非空且该次检索状态为 `available` 时计算，取值等于命中的期望来源数除以期望来源数，`path: tools` 的用例不参与。
 
 `critical=true` 的用例会执行三次。达到 `AI_EVAL_MAX_TOKENS` 预算时会停止后续执行，但仍会生成已经完成部分的结果和报告。
 
@@ -192,4 +192,26 @@ P1 与阶段 0.1 至 0.5 已完成 RAG 用户 / 会话隔离、检索审计日�
 
 1. 备份生产 JAR、配置和数据库，并按可回滚流程部署阶段 0.1 至 0.5。
 2. 上线后验证 HTTPS、登录、普通聊天、工具模式、会话记忆和知识库检索。
-3. 增加受控只读召回明细接口，将 `expectedSourceIds` 映射到真实来源后计算 `Recall@K`。
+
+### 阶段 2.3 真实知识导入与召回复测（2026-10-13）
+
+2026-10-13 在本地 MySQL 与 `main` 提交 `493447d` 的构建上完成阶段 2.3 真实知识导入：通过受控导入接口导入 20 篇知识文档共 22 个向量块（`DOCS=20`、`VECTORS=22`，无测试种子残留），并按导入清单把题库 29 行 `expectedSourceIds` 换成真实 `sourceId`。评测侧同时补齐来源召回取数口径、报告汇总行和失败清单明细；离线重算会直接覆盖原运行文件名，不再产生同名副本。
+
+- 冒烟运行：`eval/results/baseline-20261013-191647.md`
+- 正式运行：`eval/results/baseline-20261013-191950.md`
+- 失败清单：`eval/results/failures-20261013-191950.md`
+- 请求记录：56
+- 质量评分样本：52
+- 质量通过：49
+- 质量通过率：94.23%
+- 关键事实覆盖率：98.08%
+- 工具选择准确率：100.00%
+- 工具执行成功率：100.00%
+- 拒答边界得分：100.00%
+- RAG 来源召回率 (Recall@K)：65.38%（39 样本）
+- 禁用结论命中数：1 / 52
+- 基础设施失败：0
+- 总延迟均值：13.53 秒
+- 总延迟 P95：49.70 秒
+
+三条自动失败中，`plant-001`、`plant-002` 为关键事实覆盖不足，`plant-005` 为禁用结论命中；12 条冒烟题因 `expectedSourceIds` 为空，该行的召回率显示为 `N/A`，仅作链路检查。来源召回为 `0` 的样本集中在 `plant-001`、`plant-003`、`plant-010`、`pet-007`、`pet-008`、`refusal-002`，需要人工复核是检索未命中还是期望来源标注过窄。本地导入只作用于本地库，线上 `https://sekaipetplant.com` 仍是另一套数据。
