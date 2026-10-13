@@ -47,6 +47,11 @@ rag_knowledge.sqlite
 *.db
 query
 
+### Local archive snapshots (never commit) ###
+# 目录内容的过期快照，与已跟踪目录重复且容易不同步
+落地文档.zip
+TEST/eval/archive/*.zip
+
 ### Local secrets & config ###
 .env
 application-local.properties
