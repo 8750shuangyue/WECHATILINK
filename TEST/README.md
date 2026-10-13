@@ -246,4 +246,4 @@ P1 与阶段 0.1 至 0.5 已完成 RAG 用户 / 会话隔离、检索审计日�
 
 > 生产与本地用同一份知识库、同一份题库，质量通过率相差 3 条（98.08% 对 94.23%），失败用例集合不同。温度 `0.3` 下模型输出本身有波动，单次跑分不宜过度解读，比较时应以多次运行的稳定区间为准。
 
-> 生产导入后，`knowledge/kb_pet_bite_wound.md` 与 `knowledge/kb_plant_soil_iron.md` 又做了正文口径修正，生产库中这两条向量因此落后于仓库版本；一致性状态与重新导入方式见 `knowledge/README.md` 第十节。
+> 生产导入后，`knowledge/kb_pet_bite_wound.md` 与 `knowledge/kb_plant_soil_iron.md` 又做了正文口径修正，并已于同日重新导入对齐，生产与仓库当前内容一致。**本节评测指标为改稿前的口径**，见 `knowledge/README.md` 第十节。
