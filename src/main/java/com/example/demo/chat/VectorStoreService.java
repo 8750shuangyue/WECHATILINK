@@ -40,6 +40,9 @@ public class VectorStoreService {
 
     public static final String ORIGIN_PUBLIC_KB = "public_kb";
     public static final String ORIGIN_CONVERSATION = "conversation_memory";
+    public static final String CHANNEL_VECTOR = "vector";
+    public static final String CHANNEL_KEYWORD = "keyword";
+    public static final String CHANNEL_BOTH = "both";
     private static final String LEGACY_CONVERSATION_PREFIX = "用户: ";
     private static final String LEGACY_CONVERSATION_SEPARATOR = "\n助手: ";
     private static final int MAX_CLEARED_CONVERSATION_KEYS = 10_000;
@@ -51,8 +54,24 @@ public class VectorStoreService {
     @Value("${chat.vectorstore.top-k:5}")
     private int topK;
 
+    /**
+     * 向量通道的准入下限。注意它不再是唯一门槛：公共知识还可以经关键词通道准入，
+     * 见 {@link #keywordFloor}。排序仍然只按余弦，关键词只负责「把该进来的放进来」。
+     */
     @Value("${chat.vectorstore.similarity-threshold:0.5}")
     private double similarityThreshold;
+
+    /**
+     * 关键词通道的准入门槛（IDF 加权查询覆盖率，取值 [0,1]）。
+     */
+    @Value("${chat.vectorstore.keyword-floor:0.45}")
+    private double keywordFloor;
+
+    /**
+     * 关键词通道的总开关，也是回滚开关：设为 false 即退化为纯向量检索。
+     */
+    @Value("${chat.vectorstore.keyword.enabled:true}")
+    private boolean keywordEnabled;
 
     private final List<float[]> vectorIndex = new ArrayList<>();
     private final Map<Integer, IndexEntry> indexEntries = new ConcurrentHashMap<>();
@@ -491,7 +510,7 @@ public class VectorStoreService {
                     if (queryEmbedding.length == 0) {
                         logger.warn("[RAG] Query embedding is empty, traceId: {}", traceId);
                     } else {
-                        collectSimilar(queryEmbedding, userId, conversationId, results);
+                        collectSimilar(queryEmbedding, query, userId, conversationId, results);
                     }
                 }
             } finally {
@@ -514,8 +533,23 @@ public class VectorStoreService {
         return new SearchOutcome(traceId, List.copyOf(results));
     }
 
-    private void collectSimilar(float[] queryEmbedding, String userId, String conversationId,
-                                List<SearchResult> results) {
+    /**
+     * 双通道准入：
+     * <ul>
+     *   <li>向量通道——公共知识与对话记忆都走，门槛 {@link #similarityThreshold}；</li>
+     *   <li>关键词通道——<b>只对公共知识开放</b>，门槛 {@link #keywordFloor}。</li>
+     * </ul>
+     * 对话记忆刻意不接关键词通道：同一会话的旧轮次与当前问题词面天然高度重合，
+     * 接进来会把历史对话大量灌入上下文。
+     *
+     * <p>两条通道只决定「谁有资格进来」，排序仍然只按余弦，
+     * 所以低余弦的关键词命中会排在后面，由 topK 自然截断。
+     */
+    private void collectSimilar(float[] queryEmbedding, String query, String userId,
+                                String conversationId, List<SearchResult> results) {
+        Set<String> queryTokens = keywordEnabled ? RetrievalScorer.tokens(query) : Set.of();
+        Map<String, Double> idf = resolvePublicKnowledgeIdf();
+
         for (Map.Entry<Integer, IndexEntry> entry : indexEntries.entrySet()) {
             int rowId = entry.getKey();
             IndexEntry indexEntry = entry.getValue();
@@ -530,21 +564,59 @@ public class VectorStoreService {
                 continue;
             }
             double similarity = cosineSimilarity(queryEmbedding, storedVector);
-            if (similarity >= similarityThreshold) {
-                JSONObject metadata = null;
-                if (indexEntry.metadataJson != null && !indexEntry.metadataJson.isEmpty()) {
-                    metadata = JSON.parseObject(indexEntry.metadataJson);
-                }
-                results.add(new SearchResult(
-                        indexEntry.documentId,
-                        indexEntry.sourceId,
-                        indexEntry.content,
-                        similarity,
-                        metadata,
-                        isPublicKnowledge(indexEntry) ? ORIGIN_PUBLIC_KB : ORIGIN_CONVERSATION
-                ));
+            boolean publicKnowledge = isPublicKnowledge(indexEntry);
+            double keywordScore = publicKnowledge && keywordEnabled
+                    ? RetrievalScorer.keywordScore(queryTokens, indexEntry.tokens, idf)
+                    : 0.0;
+
+            if (!RetrievalScorer.admits(similarity, keywordScore, publicKnowledge,
+                    keywordEnabled, similarityThreshold, keywordFloor)) {
+                continue;
+            }
+            boolean admittedByVector = similarity >= similarityThreshold;
+            boolean admittedByKeyword = publicKnowledge && keywordEnabled
+                    && keywordScore >= keywordFloor;
+
+            JSONObject metadata = null;
+            if (indexEntry.metadataJson != null && !indexEntry.metadataJson.isEmpty()) {
+                metadata = JSON.parseObject(indexEntry.metadataJson);
+            }
+            results.add(new SearchResult(
+                    indexEntry.documentId,
+                    indexEntry.sourceId,
+                    indexEntry.content,
+                    similarity,
+                    metadata,
+                    publicKnowledge ? ORIGIN_PUBLIC_KB : ORIGIN_CONVERSATION,
+                    keywordScore,
+                    resolveChannel(admittedByVector, admittedByKeyword)
+            ));
+        }
+    }
+
+    /**
+     * IDF 只按公共知识块统计：对话记忆是每用户私有的短文本，
+     * 纳入统计既没有意义，也会随本地测试数据膨胀而漂移。
+     * 公共块只有二十来个，每次检索现算的开销远小于向量扫描本身。
+     */
+    private Map<String, Double> resolvePublicKnowledgeIdf() {
+        if (!keywordEnabled) {
+            return Map.of();
+        }
+        List<Set<String>> publicTokens = new ArrayList<>();
+        for (IndexEntry entry : indexEntries.values()) {
+            if (entry != null && isPublicKnowledge(entry)) {
+                publicTokens.add(entry.tokens);
             }
         }
+        return RetrievalScorer.idf(publicTokens);
+    }
+
+    private static String resolveChannel(boolean admittedByVector, boolean admittedByKeyword) {
+        if (admittedByVector && admittedByKeyword) {
+            return CHANNEL_BOTH;
+        }
+        return admittedByKeyword ? CHANNEL_KEYWORD : CHANNEL_VECTOR;
     }
 
     /**
@@ -581,6 +653,8 @@ public class VectorStoreService {
                 item.put("sourceId", result.getSourceId());
                 item.put("similarity", Math.round(result.getSimilarity() * 10000.0) / 10000.0);
                 item.put("origin", result.getOrigin());
+                item.put("keywordScore", Math.round(result.getKeywordScore() * 10000.0) / 10000.0);
+                item.put("channel", result.getChannel());
                 array.add(item);
             }
             ragRetrievalLogService.record(
@@ -834,6 +908,10 @@ public class VectorStoreService {
         final String conversationId;
         final String sourceId;
         final String metadataJson;
+        /**
+         * 入库时预计算的词面匹配单元，关键词通道直接复用，无需回查数据库。
+         */
+        final Set<String> tokens;
 
         IndexEntry(String documentId, String content, String userId, String conversationId,
                    String sourceId, String metadataJson) {
@@ -843,6 +921,7 @@ public class VectorStoreService {
             this.conversationId = conversationId;
             this.sourceId = sourceId;
             this.metadataJson = metadataJson;
+            this.tokens = RetrievalScorer.tokens(content);
         }
     }
 
@@ -853,19 +932,28 @@ public class VectorStoreService {
         private final double similarity;
         private final JSONObject metadata;
         private final String origin;
+        private final double keywordScore;
+        private final String channel;
 
         public SearchResult(String documentId, String sourceId, String content, double similarity, JSONObject metadata) {
-            this(documentId, sourceId, content, similarity, metadata, null);
+            this(documentId, sourceId, content, similarity, metadata, null, 0.0, null);
         }
 
         public SearchResult(String documentId, String sourceId, String content, double similarity,
                             JSONObject metadata, String origin) {
+            this(documentId, sourceId, content, similarity, metadata, origin, 0.0, null);
+        }
+
+        public SearchResult(String documentId, String sourceId, String content, double similarity,
+                            JSONObject metadata, String origin, double keywordScore, String channel) {
             this.documentId = documentId;
             this.sourceId = sourceId;
             this.content = content;
             this.similarity = similarity;
             this.metadata = metadata;
             this.origin = origin;
+            this.keywordScore = keywordScore;
+            this.channel = channel;
         }
 
         public String getDocumentId() {
@@ -890,6 +978,14 @@ public class VectorStoreService {
 
         public String getOrigin() {
             return origin;
+        }
+
+        public double getKeywordScore() {
+            return keywordScore;
+        }
+
+        public String getChannel() {
+            return channel;
         }
     }
 

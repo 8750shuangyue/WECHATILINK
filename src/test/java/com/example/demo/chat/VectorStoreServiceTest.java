@@ -329,6 +329,88 @@ class VectorStoreServiceTest {
         verify(repository, times(1)).deleteAllByIdInBatch(any());
     }
 
+    @Test
+    void vectorFloorAdmitsPublicChunkThatOldThresholdRejected() {
+        // 这正是一批零召回样本的成因：期望文档排在第 1、2 名，余弦却卡在 0.5 以下
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.45);
+        service.addToIndex(0, "浇水与积水：黄叶、掉叶、烂根早期", vectorAtCosine(0.47),
+                "doc-near", null, null, "kb_plant_watering", null);
+
+        assertEquals(List.of("浇水与积水：黄叶、掉叶、烂根早期"),
+                service.searchSimilar("绿萝叶子发黄", "user-a", "conversation-a"));
+
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.5);
+        assertTrue(service.searchSimilar("绿萝叶子发黄", "user-a", "conversation-a").isEmpty());
+    }
+
+    @Test
+    void keywordChannelAdmitsPublicChunkWithStrongTermOverlap() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.45);
+        ReflectionTestUtils.setField(service, "keywordFloor", 0.45);
+        ReflectionTestUtils.setField(service, "keywordEnabled", true);
+        // 余弦只有 0.30，远在任何合理阈值之下，只能靠词面命中进来
+        service.addToIndex(0, "仓鼠出现湿尾和严重腹泻是危急信号", vectorAtCosine(0.30),
+                "doc-keyword", null, null, "kb_pet_small_pet_abnormal", null);
+
+        assertEquals(List.of("仓鼠出现湿尾和严重腹泻是危急信号"),
+                service.searchSimilar("仓鼠湿尾和严重腹泻怎么办", "user-a", "conversation-a"));
+    }
+
+    @Test
+    void keywordChannelDoesNotAdmitPublicChunkWithoutTermOverlap() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.45);
+        ReflectionTestUtils.setField(service, "keywordFloor", 0.45);
+        ReflectionTestUtils.setField(service, "keywordEnabled", true);
+        service.addToIndex(0, "浇水与积水：黄叶、掉叶、烂根早期", vectorAtCosine(0.30),
+                "doc-near", null, null, "kb_plant_watering", null);
+
+        assertTrue(service.searchSimilar("仓鼠湿尾", "user-a", "conversation-a").isEmpty());
+    }
+
+    @Test
+    void keywordChannelIsIgnoredWhenDisabled() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.45);
+        ReflectionTestUtils.setField(service, "keywordFloor", 0.45);
+        ReflectionTestUtils.setField(service, "keywordEnabled", false);
+        service.addToIndex(0, "仓鼠出现湿尾和严重腹泻是危急信号", vectorAtCosine(0.30),
+                "doc-keyword", null, null, "kb_pet_small_pet_abnormal", null);
+
+        // 关掉关键词通道就是纯向量检索，这正是回滚路径
+        assertTrue(service.searchSimilar("仓鼠湿尾和严重腹泻怎么办", "user-a", "conversation-a").isEmpty());
+    }
+
+    @Test
+    void keywordChannelDoesNotApplyToConversationMemory() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.45);
+        ReflectionTestUtils.setField(service, "keywordFloor", 0.45);
+        ReflectionTestUtils.setField(service, "keywordEnabled", true);
+        // 同一会话的旧轮次与当前问题词面天然重合，所以对话记忆刻意不接关键词通道
+        service.addToIndex(0, "仓鼠湿尾和严重腹泻", vectorAtCosine(0.30),
+                "doc-memory", "user-a", "conversation-a", null, null);
+
+        assertTrue(service.searchSimilar("仓鼠湿尾和严重腹泻怎么办", "user-a", "conversation-a").isEmpty());
+    }
+
+    @Test
+    void recordsAdmittingChannelAndKeywordScoreInAuditLog() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.45);
+        ReflectionTestUtils.setField(service, "keywordFloor", 0.45);
+        ReflectionTestUtils.setField(service, "keywordEnabled", true);
+        service.addToIndex(0, "仓鼠出现湿尾和严重腹泻是危急信号", vectorAtCosine(0.30),
+                "doc-keyword", null, null, "kb_pet_small_pet_abnormal", null);
+
+        service.searchSimilarWithMetadata("仓鼠湿尾和严重腹泻怎么办", "user-a", "conversation-a");
+
+        ArgumentCaptor<String> resultsJson = ArgumentCaptor.forClass(String.class);
+        verify(retrievalLogService).record(
+                anyString(), eq("user-a"), eq("conversation-a"), anyString(), eq("public_only"),
+                eq(5), eq(0.45), eq(1), anyLong(), resultsJson.capture());
+
+        assertTrue(resultsJson.getValue().contains("\"channel\":\"keyword\""));
+        assertTrue(resultsJson.getValue().contains("keywordScore"));
+        assertFalse(resultsJson.getValue().contains("仓鼠"), "命中正文不得进入审计日志");
+    }
+
     private void assertSqliteTransaction(String methodName, Class<?>... parameterTypes) throws Exception {
         Transactional transactional = VectorStoreService.class
                 .getMethod(methodName, parameterTypes)
@@ -354,5 +436,13 @@ class VectorStoreServiceTest {
             buffer.putFloat(value);
         }
         return buffer.array();
+    }
+
+    /**
+     * 构造一个与查询向量 {1,0} 夹角余弦恰好为 {@code cosine} 的文档向量。
+     * 现有测试一直用恒定向量，相似度恒为 1.0，阈值边界从来没被覆盖过。
+     */
+    private static float[] vectorAtCosine(double cosine) {
+        return new float[]{(float) cosine, (float) Math.sqrt(Math.max(0.0, 1.0 - cosine * cosine))};
     }
 }

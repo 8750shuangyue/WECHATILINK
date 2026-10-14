@@ -152,7 +152,9 @@ public class RagObservabilityService {
                         item.getString("documentId"),
                         item.getString("sourceId"),
                         item.getDouble("similarity"),
-                        item.getString("origin")
+                        item.getString("origin"),
+                        item.getDouble("keywordScore"),
+                        item.getString("channel")
                 ));
             }
             return results;
@@ -223,6 +225,8 @@ public class RagObservabilityService {
             String documentId,
             String sourceId,
             Double similarity,
-            String origin) {
+            String origin,
+            Double keywordScore,
+            String channel) {
     }
 }
