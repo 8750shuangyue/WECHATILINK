@@ -3,6 +3,8 @@ package com.example.demo.chat.config;
 import com.example.demo.chat.repository.ChatMemoryRepository;
 import com.example.demo.chat.repository.DatabaseChatMemoryRepository;
 import com.example.demo.chat.repository.mysql.ConversationRepository;
+import com.example.demo.chat.repository.mysql.ConversationSummaryRepository;
+import com.example.demo.chat.repository.mysql.MessageArchiveRepository;
 import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,8 +20,11 @@ public class ChatMemoryConfig {
     @Bean
     @Primary
     public ChatMemoryRepository chatMemoryRepository(ConversationRepository conversationRepository,
-                                                     MessageRepository messageRepository) {
+                                                     MessageRepository messageRepository,
+                                                     MessageArchiveRepository messageArchiveRepository,
+                                                     ConversationSummaryRepository conversationSummaryRepository) {
         logger.info("========== Initializing DatabaseChatMemoryRepository (MySQL) as Primary ==========");
-        return new DatabaseChatMemoryRepository(conversationRepository, messageRepository);
+        return new DatabaseChatMemoryRepository(conversationRepository, messageRepository,
+                messageArchiveRepository, conversationSummaryRepository);
     }
 }

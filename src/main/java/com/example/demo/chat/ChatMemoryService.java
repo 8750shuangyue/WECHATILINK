@@ -1,8 +1,11 @@
 package com.example.demo.chat;
 
+import com.example.demo.chat.entity.ConversationSummary;
 import com.example.demo.chat.event.SummaryUpdateEvent;
 import com.example.demo.chat.event.VectorSaveEvent;
+import com.example.demo.chat.lifecycle.SummaryLifecycleService;
 import com.example.demo.chat.repository.ChatMemoryRepository;
+import com.example.demo.chat.repository.mysql.ConversationSummaryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +44,15 @@ public class ChatMemoryService {
     @Autowired
     @Lazy
     private VectorStoreService vectorStoreService;
+
+    @Autowired(required = false)
+    private ConversationSummaryRepository conversationSummaryRepository;
+
+    @Autowired(required = false)
+    private SummaryLifecycleService summaryLifecycleService;
+
+    @Value("${app.message-lifecycle.enabled:false}")
+    private boolean messageLifecycleEnabled = false;
 
     @Value("${chat.memory.max-messages:10}")
     private int maxMessages;
@@ -90,13 +102,13 @@ public class ChatMemoryService {
                                                  String userMessage) {
         List<ChatMessage> history = repository.getMessages(userId, conversationId);
         List<ChatMessage> promptMessages = new ArrayList<>();
-        String summary = null;
+        String summary = loadPersistedSummary(conversationId);
 
         for (ChatMessage msg : history) {
             if (!SYSTEM_ROLE.equals(msg.getRole())) {
                 promptMessages.add(sanitizeCitationMarkers(msg));
-            } else if (isSummaryMessage(msg)) {
-                // 持久化摘要只作为历史事实补充，旧系统消息不再逐条透传。
+            } else if (summary == null && isSummaryMessage(msg)) {
+                // 新摘要在 conversation_summaries 中；没有行时回退到旧 system 镜像行。
                 summary = msg.getContent();
             }
         }
@@ -108,6 +120,32 @@ public class ChatMemoryService {
         promptMessages.add(new ChatMessage(USER_ROLE, userMessage));
 
         return truncateMessages(promptMessages);
+    }
+
+    private String loadPersistedSummary(String conversationId) {
+        if (conversationSummaryRepository == null || conversationId == null || conversationId.isBlank()) {
+            return null;
+        }
+        try {
+            return conversationSummaryRepository.findById(conversationId)
+                    .map(this::formatStoredSummary)
+                    .orElse(null);
+        } catch (Exception exception) {
+            logger.warn("Failed to load conversation summary for {}: {}",
+                    conversationId, exception.getMessage());
+            return null;
+        }
+    }
+
+    private String formatStoredSummary(ConversationSummary summary) {
+        if (summary == null || summary.getSummaryText() == null
+                || summary.getSummaryText().isBlank()) {
+            return null;
+        }
+        String updatedAt = summary.getUpdatedAt() == null
+                ? ""
+                : "[更新时间: " + summary.getUpdatedAt().format(FORMATTER).substring(0, 16) + "]\n";
+        return SUMMARY_PREFIX + updatedAt + summary.getSummaryText().trim();
     }
 
     private List<ChatMessage> truncateMessages(List<ChatMessage> messages) {
@@ -263,6 +301,13 @@ public class ChatMemoryService {
     }
 
     public void checkAndUpdateSummary(String userId, String conversationId) {
+        if (messageLifecycleEnabled) {
+            if (summaryLifecycleService != null) {
+                summaryLifecycleService.summarize(userId, conversationId);
+            }
+            return;
+        }
+
         List<ChatMessage> history = repository.getMessages(userId, conversationId);
         long totalTokens = history.stream().mapToLong(ChatMessage::getTokenCount).sum();
         

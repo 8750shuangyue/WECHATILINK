@@ -6,11 +6,15 @@ import com.example.demo.chat.HistoryPage;
 import com.example.demo.chat.SourceRefCodec;
 import com.example.demo.chat.entity.Conversation;
 import com.example.demo.chat.entity.Message;
+import com.example.demo.chat.entity.MessageHistoryRow;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
 import com.example.demo.chat.repository.mysql.ConversationRepository;
+import com.example.demo.chat.repository.mysql.ConversationSummaryRepository;
+import com.example.demo.chat.repository.mysql.MessageArchiveRepository;
 import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,11 +34,24 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
+    private final MessageArchiveRepository messageArchiveRepository;
+    private final ConversationSummaryRepository conversationSummaryRepository;
 
-    public DatabaseChatMemoryRepository(ConversationRepository conversationRepository, 
+    /** 测试/旧装配兼容：没有归档与摘要仓库时保持旧行为。 */
+    public DatabaseChatMemoryRepository(ConversationRepository conversationRepository,
                                         MessageRepository messageRepository) {
+        this(conversationRepository, messageRepository, null, null);
+    }
+
+    @Autowired
+    public DatabaseChatMemoryRepository(ConversationRepository conversationRepository,
+                                        MessageRepository messageRepository,
+                                        MessageArchiveRepository messageArchiveRepository,
+                                        ConversationSummaryRepository conversationSummaryRepository) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
+        this.messageArchiveRepository = messageArchiveRepository;
+        this.conversationSummaryRepository = conversationSummaryRepository;
     }
 
     @Override
@@ -47,7 +64,7 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
             return List.of();
         }
 
-        List<Message> messages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
+        List<Message> messages = messageRepository.findByConversationIdOrderByIdAsc(conversationId);
         List<ChatMessage> chatMessages = new ArrayList<>();
         for (Message message : messages) {
             chatMessages.add(convertToChatMessage(message));
@@ -104,6 +121,35 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
         }
 
         int safeLimit = Math.max(1, Math.min(limit, 100));
+
+        if (messageArchiveRepository != null && conversationSummaryRepository != null) {
+            long before = beforeId == null ? Long.MAX_VALUE : beforeId;
+            List<MessageHistoryRow> rows = messageRepository.findMergedHistory(
+                    conversationId, before, safeLimit + 1);
+            boolean hasMore = rows.size() > safeLimit;
+            List<MessageHistoryRow> page = new ArrayList<>(
+                    rows.subList(0, Math.min(rows.size(), safeLimit)));
+            Long nextBeforeId = hasMore && !page.isEmpty()
+                    ? page.get(page.size() - 1).getId()
+                    : null;
+            Collections.reverse(page);
+
+            List<ChatHistoryEntry> entries = new ArrayList<>(page.size());
+            for (MessageHistoryRow row : page) {
+                entries.add(new ChatHistoryEntry(
+                        row.getId(),
+                        row.getRole(),
+                        row.getContent(),
+                        row.getTs() == null ? null : row.getTs().format(FORMATTER),
+                        SourceRefCodec.fromJson(row.getSourcesJson())
+                ));
+            }
+            logger.info("Database getHistory - loaded {} merged messages for conversationId: {}",
+                    entries.size(), conversationId);
+            return new HistoryPage(conversationId, entries, hasMore, nextBeforeId);
+        }
+
+        // 测试/旧装配兼容：没有归档仓库时只查 active。
         PageRequest pageRequest = PageRequest.of(0, safeLimit + 1);
         List<Message> messages = beforeId == null
                 ? messageRepository.findByConversationIdAndRoleInOrderByIdDesc(
@@ -128,7 +174,7 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
                     SourceRefCodec.fromJson(message.getSourcesJson())
             ));
         }
-        logger.info("Database getHistory - loaded {} messages for conversationId: {}",
+        logger.info("Database getHistory - loaded {} active messages for conversationId: {}",
                 entries.size(), conversationId);
         return new HistoryPage(conversationId, entries, hasMore, nextBeforeId);
     }
@@ -146,7 +192,17 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
         if (!userId.equals(existing.get().getUserId())) {
             throw new ConversationAccessDeniedException(conversationId);
         }
+        // 先锁摘要行，与正在提交的摘要/归档事务串行化；随后清空 active、archive、summary。
+        if (conversationSummaryRepository != null) {
+            conversationSummaryRepository.findForUpdate(conversationId);
+        }
         messageRepository.deleteByConversationId(conversationId);
+        if (messageArchiveRepository != null) {
+            messageArchiveRepository.deleteByConversationId(conversationId);
+        }
+        if (conversationSummaryRepository != null) {
+            conversationSummaryRepository.deleteByConversationId(conversationId);
+        }
         logger.info("Database clear - completed");
     }
 

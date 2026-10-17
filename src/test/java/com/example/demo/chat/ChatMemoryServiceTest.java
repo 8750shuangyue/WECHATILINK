@@ -1,16 +1,22 @@
 package com.example.demo.chat;
 
+import com.example.demo.chat.entity.ConversationSummary;
+import com.example.demo.chat.entity.SummaryStatus;
+import com.example.demo.chat.lifecycle.SummaryLifecycleService;
 import com.example.demo.chat.repository.ChatMemoryRepository;
+import com.example.demo.chat.repository.mysql.ConversationSummaryRepository;
 import com.example.demo.chat.event.SummaryUpdateEvent;
 import com.example.demo.chat.event.VectorSaveEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -155,6 +162,64 @@ class ChatMemoryServiceTest {
         assertEquals(1, prompt.size());
         assertEquals("user", prompt.get(0).getRole());
         assertEquals("Current question.", prompt.get(0).getContent());
+    }
+
+    @Test
+    void promptUsesPersistedSummaryTable() {
+        ConversationSummaryRepository summaryRepository = mock(ConversationSummaryRepository.class);
+        when(summaryRepository.findById("conversation-a")).thenReturn(Optional.of(
+                new ConversationSummary("conversation-a", "用户正在为宠物调整饮水方案。",
+                        0L, 0L, SummaryStatus.READY, 0,
+                        LocalDateTime.now(), LocalDateTime.now())));
+        ReflectionTestUtils.setField(service, "conversationSummaryRepository", summaryRepository);
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "q"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "a"));
+
+        List<ChatMessage> prompt = service.buildPromptMessages(
+                "user-a", "conversation-a", "Business rules.", "What next?");
+
+        assertEquals("system", prompt.get(0).getRole());
+        assertTrue(prompt.get(0).getContent().contains("【对话摘要】"));
+        assertTrue(prompt.get(0).getContent().contains("用户正在为宠物调整饮水方案。"));
+    }
+
+    @Test
+    void promptFallsBackToLegacySummaryRowWhenTableMissing() {
+        ConversationSummaryRepository summaryRepository = mock(ConversationSummaryRepository.class);
+        when(summaryRepository.findById("conversation-a")).thenReturn(Optional.empty());
+        ReflectionTestUtils.setField(service, "conversationSummaryRepository", summaryRepository);
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "q"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "a"));
+        repository.addMessage("user-a", "conversation-a",
+                new ChatMessage("system", "【对话摘要】旧摘要"));
+
+        List<ChatMessage> prompt = service.buildPromptMessages(
+                "user-a", "conversation-a", "Business rules.", "What next?");
+
+        assertTrue(prompt.get(0).getContent().contains("旧摘要"));
+    }
+
+    @Test
+    void routesSummaryToLifecycleServiceWhenEnabled() {
+        SummaryLifecycleService lifecycleService = mock(SummaryLifecycleService.class);
+        ReflectionTestUtils.setField(service, "summaryLifecycleService", lifecycleService);
+        ReflectionTestUtils.setField(service, "messageLifecycleEnabled", true);
+
+        service.checkAndUpdateSummary("user-a", "conversation-a");
+
+        verify(lifecycleService).summarize("user-a", "conversation-a");
+    }
+
+    @Test
+    void keepsLegacySummaryPathWhenLifecycleDisabled() {
+        SummaryLifecycleService lifecycleService = mock(SummaryLifecycleService.class);
+        ReflectionTestUtils.setField(service, "summaryLifecycleService", lifecycleService);
+        ReflectionTestUtils.setField(service, "messageLifecycleEnabled", false);
+        ReflectionTestUtils.setField(service, "summaryThreshold", 100_000L);
+
+        service.checkAndUpdateSummary("user-a", "conversation-a");
+
+        verify(lifecycleService, never()).summarize(anyString(), anyString());
     }
 
     @Test

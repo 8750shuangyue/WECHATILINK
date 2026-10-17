@@ -46,6 +46,8 @@ class ChatMemorySchemaIntegrationTest {
     @AfterEach
     void cleanup() {
         for (String conversationId : conversationIds) {
+            jdbcTemplate.update("DELETE FROM messages_archive WHERE conversation_id = ?", conversationId);
+            jdbcTemplate.update("DELETE FROM conversation_summaries WHERE conversation_id = ?", conversationId);
             jdbcTemplate.update("DELETE FROM messages WHERE conversation_id = ?", conversationId);
             jdbcTemplate.update("DELETE FROM conversations WHERE conversation_id = ?", conversationId);
         }
@@ -102,6 +104,100 @@ class ChatMemorySchemaIntegrationTest {
         chatMemoryRepository.clear("user-a", conversationId);
         assertTrue(chatMemoryRepository.getHistory("user-a", conversationId, null, 10)
                 .messages().isEmpty());
+    }
+
+    @Test
+    void lifecycleTablesAndMessageIndexExist() {
+        Integer tables = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME IN ('messages_archive','conversation_summaries')
+                """,
+                Integer.class);
+        Integer index = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'messages'
+                   AND INDEX_NAME = 'idx_messages_conv_id'
+                """,
+                Integer.class);
+
+        assertEquals(2, tables);
+        assertEquals(1, index);
+    }
+
+    @Test
+    void historyMergesActiveAndArchivedMessagesWithSources() {
+        String conversationId = newConversationId("history");
+        String sourcesJson = "{\"v\":1,\"traceId\":\"trace-1\",\"sources\":["
+                + "{\"sourceId\":\"kb_a\",\"title\":\"标题 A\",\"rank\":1}]}";
+
+        chatMemoryRepository.addMessage("user-a", conversationId,
+                new ChatMessage("user", "q1"));
+        chatMemoryRepository.addMessage("user-a", conversationId,
+                new ChatMessage("assistant", "a1[1]"), sourcesJson);
+        chatMemoryRepository.addMessage("user-a", conversationId,
+                new ChatMessage("user", "q2"));
+        chatMemoryRepository.addMessage("user-a", conversationId,
+                new ChatMessage("assistant", "a2"));
+
+        List<Long> ids = jdbcTemplate.queryForList(
+                "SELECT id FROM messages WHERE conversation_id = ? ORDER BY id",
+                Long.class, conversationId);
+        jdbcTemplate.update("""
+                INSERT INTO messages_archive
+                    (id, conversation_id, role, content, `timestamp`, sources_json, archived_at)
+                SELECT id, conversation_id, role, content, `timestamp`, sources_json, NOW(6)
+                  FROM messages WHERE id IN (?, ?)
+                """, ids.get(0), ids.get(1));
+        jdbcTemplate.update("DELETE FROM messages WHERE id IN (?, ?)",
+                ids.get(0), ids.get(1));
+
+        var page = chatMemoryRepository.getHistory("user-a", conversationId, null, 10);
+
+        assertEquals(4, page.messages().size());
+        assertEquals(ids.get(0), page.messages().get(0).id());
+        assertEquals("kb_a", page.messages().get(1).sources().get(0).sourceId());
+        assertEquals(ids.get(3), page.messages().get(3).id());
+    }
+
+    @Test
+    void clearDeletesActiveArchiveAndSummaryRows() {
+        String conversationId = newConversationId("clear-lifecycle");
+        chatMemoryRepository.addMessage("user-a", conversationId,
+                new ChatMessage("user", "q1"));
+        chatMemoryRepository.addMessage("user-a", conversationId,
+                new ChatMessage("assistant", "a1"));
+
+        Long firstId = jdbcTemplate.queryForObject(
+                "SELECT MIN(id) FROM messages WHERE conversation_id = ?",
+                Long.class, conversationId);
+        jdbcTemplate.update("""
+                INSERT INTO messages_archive
+                    (id, conversation_id, role, content, `timestamp`, sources_json, archived_at)
+                SELECT id, conversation_id, role, content, `timestamp`, sources_json, NOW(6)
+                  FROM messages WHERE id = ?
+                """, firstId);
+        jdbcTemplate.update("""
+                INSERT INTO conversation_summaries
+                    (conversation_id, summary_text, covered_until_id, version, status,
+                     attempt_count, created_at, updated_at)
+                VALUES (?, 'summary', 0, 0, 'READY', 0, NOW(6), NOW(6))
+                """, conversationId);
+
+        chatMemoryRepository.clear("user-a", conversationId);
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = ?",
+                Integer.class, conversationId));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM messages_archive WHERE conversation_id = ?",
+                Integer.class, conversationId));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM conversation_summaries WHERE conversation_id = ?",
+                Integer.class, conversationId));
     }
 
     @Test

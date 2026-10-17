@@ -5,8 +5,11 @@ import com.example.demo.chat.ChatMessage;
 import com.example.demo.chat.HistoryPage;
 import com.example.demo.chat.entity.Conversation;
 import com.example.demo.chat.entity.Message;
+import com.example.demo.chat.entity.MessageHistoryRow;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
 import com.example.demo.chat.repository.mysql.ConversationRepository;
+import com.example.demo.chat.repository.mysql.ConversationSummaryRepository;
+import com.example.demo.chat.repository.mysql.MessageArchiveRepository;
 import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -208,6 +211,75 @@ class DatabaseChatMemoryRepositoryTest {
                 "conversation-a", role, content, LocalDateTime.now(), sourcesJson);
         message.setId(id);
         return message;
+    }
+
+    @Test
+    void getMessagesUsesIdOrder() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+        Message message = new Message("conversation-a", "user", "hello",
+                LocalDateTime.now(), null);
+        message.setId(1L);
+        when(messageRepository.findByConversationIdOrderByIdAsc("conversation-a"))
+                .thenReturn(List.of(message));
+
+        var messages = repository.getMessages("user-a", "conversation-a");
+
+        assertEquals(1, messages.size());
+        verify(messageRepository).findByConversationIdOrderByIdAsc("conversation-a");
+    }
+
+    @Test
+    void mergedHistoryReadsAcrossActiveAndArchive() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+        String sourcesJson = "{\"v\":1,\"traceId\":\"t\",\"sources\":["
+                + "{\"sourceId\":\"kb_a\",\"title\":\"A\",\"rank\":1}]}";
+        MessageHistoryRow newest = historyRow(5L, "assistant", "a5", sourcesJson);
+        MessageHistoryRow middle = historyRow(4L, "user", "q4", null);
+        MessageHistoryRow oldest = historyRow(3L, "assistant", "a3", null);
+        when(messageRepository.findMergedHistory("conversation-a", Long.MAX_VALUE, 3))
+                .thenReturn(List.of(newest, middle, oldest));
+        DatabaseChatMemoryRepository mergedRepository = new DatabaseChatMemoryRepository(
+                conversationRepository,
+                messageRepository,
+                mock(MessageArchiveRepository.class),
+                mock(ConversationSummaryRepository.class));
+
+        HistoryPage page = mergedRepository.getHistory("user-a", "conversation-a", null, 2);
+
+        assertTrue(page.hasMore());
+        assertEquals(4L, page.nextBeforeId());
+        assertEquals(List.of(4L, 5L),
+                page.messages().stream().map(ChatHistoryEntry::id).toList());
+        assertEquals("kb_a", page.messages().get(1).sources().get(0).sourceId());
+    }
+
+    @Test
+    void clearDeletesActiveArchiveAndSummary() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+        MessageArchiveRepository archiveRepository = mock(MessageArchiveRepository.class);
+        ConversationSummaryRepository summaryRepository = mock(ConversationSummaryRepository.class);
+        when(summaryRepository.findForUpdate("conversation-a")).thenReturn(Optional.empty());
+        DatabaseChatMemoryRepository lifecycleRepository = new DatabaseChatMemoryRepository(
+                conversationRepository, messageRepository, archiveRepository, summaryRepository);
+
+        lifecycleRepository.clear("user-a", "conversation-a");
+
+        verify(messageRepository).deleteByConversationId("conversation-a");
+        verify(archiveRepository).deleteByConversationId("conversation-a");
+        verify(summaryRepository).deleteByConversationId("conversation-a");
+    }
+
+    private MessageHistoryRow historyRow(Long id, String role, String content, String sourcesJson) {
+        MessageHistoryRow row = mock(MessageHistoryRow.class);
+        when(row.getId()).thenReturn(id);
+        when(row.getRole()).thenReturn(role);
+        when(row.getContent()).thenReturn(content);
+        when(row.getTs()).thenReturn(LocalDateTime.now());
+        when(row.getSourcesJson()).thenReturn(sourcesJson);
+        return row;
     }
 
     @Test
