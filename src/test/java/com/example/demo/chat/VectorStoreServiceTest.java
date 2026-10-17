@@ -8,6 +8,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,6 +52,14 @@ class VectorStoreServiceTest {
         retrievalLogService = mock(RagRetrievalLogService.class);
         when(repository.findAll()).thenReturn(List.of());
         when(embeddingService.embed(anyString())).thenReturn(new float[]{1.0f, 0.0f});
+        when(embeddingService.embedBatch(anyList())).thenAnswer(invocation -> {
+            List<String> texts = invocation.getArgument(0);
+            List<float[]> embeddings = new ArrayList<>(texts.size());
+            for (int i = 0; i < texts.size(); i++) {
+                embeddings.add(new float[]{1.0f, 0.0f});
+            }
+            return embeddings;
+        });
 
         service = new VectorStoreService(repository, embeddingService, retrievalLogService);
         ReflectionTestUtils.setField(service, "topK", 5);
@@ -205,6 +215,30 @@ class VectorStoreServiceTest {
         inOrder.verify(repository).deleteBySourceId("guide-1");
         inOrder.verify(repository).flush();
         inOrder.verify(repository).saveAll(any());
+    }
+
+    @Test
+    void replaceDocumentUsesOneBatchEmbeddingCall() throws Exception {
+        when(repository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        int count = service.replaceDocument("guide-batch",
+                List.of("first chunk", "second chunk"), Map.of());
+
+        assertEquals(2, count);
+        verify(embeddingService).embedBatch(List.of("first chunk", "second chunk"));
+        verify(embeddingService, never()).embed(anyString());
+    }
+
+    @Test
+    void embeddingFailureLeavesExistingVectorsUntouched() throws Exception {
+        when(embeddingService.embedBatch(anyList()))
+                .thenThrow(new IOException("embedding unavailable"));
+
+        assertThrows(IllegalStateException.class, () -> service.replaceDocument(
+                "guide-batch", List.of("first chunk", "second chunk"), Map.of()));
+
+        verify(repository, never()).deleteBySourceId("guide-batch");
+        verify(repository, never()).saveAll(any());
     }
 
     @Test

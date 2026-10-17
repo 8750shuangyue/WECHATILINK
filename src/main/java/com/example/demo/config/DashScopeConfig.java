@@ -154,6 +154,11 @@ public class DashScopeConfig {
         private String apiKey;
         private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
         private String model = "text-embedding-v2";
+        private boolean batchEnabled = true;
+        private int batchSize = 10;
+        private int maxAttempts = 3;
+        private long retryBackoffMs = 500;
+        private int timeoutSeconds = 30;
 
         public String getApiKey() {
             return apiKey;
@@ -169,6 +174,46 @@ public class DashScopeConfig {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+
+        public boolean isBatchEnabled() {
+            return batchEnabled;
+        }
+
+        public void setBatchEnabled(boolean batchEnabled) {
+            this.batchEnabled = batchEnabled;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int maxAttempts) {
+            this.maxAttempts = maxAttempts;
+        }
+
+        public long getRetryBackoffMs() {
+            return retryBackoffMs;
+        }
+
+        public void setRetryBackoffMs(long retryBackoffMs) {
+            this.retryBackoffMs = retryBackoffMs;
+        }
+
+        public int getTimeoutSeconds() {
+            return timeoutSeconds;
+        }
+
+        public void setTimeoutSeconds(int timeoutSeconds) {
+            this.timeoutSeconds = timeoutSeconds;
         }
 
         public String getModel() {

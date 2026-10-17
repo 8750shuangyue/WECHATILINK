@@ -8,11 +8,15 @@ import com.example.demo.chat.repository.sqlite.VectorStoreRepository;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -50,6 +54,7 @@ public class VectorStoreService {
     private final VectorStoreRepository vectorStoreRepository;
     private final EmbeddingService embeddingService;
     private final RagRetrievalLogService ragRetrievalLogService;
+    private final PlatformTransactionManager sqliteTransactionManager;
 
     @Value("${chat.vectorstore.top-k:5}")
     private int topK;
@@ -80,12 +85,23 @@ public class VectorStoreService {
     private final AtomicBoolean indexReady = new AtomicBoolean(false);
     private final ReadWriteLock indexLock = new ReentrantReadWriteLock();
 
+    /** 测试/旧装配兼容：没有事务模板时直接写库。 */
     public VectorStoreService(VectorStoreRepository vectorStoreRepository,
                               EmbeddingService embeddingService,
                               RagRetrievalLogService ragRetrievalLogService) {
+        this(vectorStoreRepository, embeddingService, ragRetrievalLogService, null);
+    }
+
+    @Autowired
+    public VectorStoreService(VectorStoreRepository vectorStoreRepository,
+                              EmbeddingService embeddingService,
+                              RagRetrievalLogService ragRetrievalLogService,
+                              @Qualifier("sqliteTransactionManager")
+                              PlatformTransactionManager sqliteTransactionManager) {
         this.vectorStoreRepository = vectorStoreRepository;
         this.embeddingService = embeddingService;
         this.ragRetrievalLogService = ragRetrievalLogService;
+        this.sqliteTransactionManager = sqliteTransactionManager;
     }
 
     @PostConstruct
@@ -378,7 +394,12 @@ public class VectorStoreService {
     /**
      * 以 sourceId 为单位整体替换公共知识向量，避免同一文档重复上传后追加旧片段。
      */
-    @Transactional(transactionManager = "sqliteTransactionManager")
+    /**
+     * 以 sourceId 为单位整体替换公共知识向量。
+     *
+     * <p>Embedding 在事务外批量完成；只有 SQLite 写入和索引重载放在短事务里。
+     * embedding 失败时旧向量完全不变。</p>
+     */
     public int replaceDocument(String sourceId, List<String> chunks, Map<String, Object> metadata) {
         if (sourceId == null || sourceId.isBlank()) {
             throw new IllegalArgumentException("sourceId must not be blank");
@@ -386,21 +407,27 @@ public class VectorStoreService {
         if (chunks == null || chunks.isEmpty()) {
             throw new IllegalArgumentException("chunks must not be empty");
         }
+        for (int i = 0; i < chunks.size(); i++) {
+            if (chunks.get(i) == null || chunks.get(i).isBlank()) {
+                throw new IllegalArgumentException("chunk content must not be blank");
+            }
+        }
+
+        List<float[]> embeddings;
+        try {
+            embeddings = embeddingService.embedBatch(chunks);
+        } catch (IOException exception) {
+            throw new IllegalStateException("embedding failed for sourceId " + sourceId, exception);
+        }
+        if (embeddings == null || embeddings.size() != chunks.size()) {
+            throw new IllegalStateException("embedding count mismatch for sourceId " + sourceId);
+        }
 
         List<VectorStore> vectors = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
             String content = chunks.get(i);
-            if (content == null || content.isBlank()) {
-                throw new IllegalArgumentException("chunk content must not be blank");
-            }
-
-            float[] embedding;
-            try {
-                embedding = embeddingService.embed(content);
-            } catch (IOException e) {
-                throw new IllegalStateException("embedding failed for chunk " + (i + 1), e);
-            }
-            if (embedding.length == 0) {
+            float[] embedding = embeddings.get(i);
+            if (embedding == null || embedding.length == 0) {
                 throw new IllegalStateException("embedding is empty for chunk " + (i + 1));
             }
 
@@ -422,15 +449,24 @@ public class VectorStoreService {
             vectors.add(vectorStore);
         }
 
+        int savedCount = sqliteTransactionManager == null
+                ? persistReplacedDocument(sourceId, vectors)
+                : new TransactionTemplate(sqliteTransactionManager)
+                        .execute(status -> persistReplacedDocument(sourceId, vectors));
+
+        logger.info("Replaced public knowledge sourceId: {}, chunks: {}",
+                sourceId, savedCount);
+        return savedCount;
+    }
+
+    private int persistReplacedDocument(String sourceId, List<VectorStore> vectors) {
         vectorStoreRepository.deleteBySourceId(sourceId);
         // 正文未变的文档会生成相同的 documentId；必须先落删除，否则本次插入会撞旧行的唯一索引。
         vectorStoreRepository.flush();
         List<VectorStore> saved = vectorStoreRepository.saveAll(vectors);
         vectorStoreRepository.flush();
         loadFromSQLite();
-
-        logger.info("Replaced public knowledge sourceId: {}, chunks: {}", sourceId, saved.size());
-        return saved.size();
+        return saved == null ? vectors.size() : saved.size();
     }
 
     private String buildChunkDocumentId(String sourceId, int chunkIndex, String content) {
