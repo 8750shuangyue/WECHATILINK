@@ -33,6 +33,7 @@ public class MessageLifecycleScheduler {
     private final MessageArchiveRepository archiveRepository;
     private final ConversationRepository conversationRepository;
     private final ChatMemoryService chatMemoryService;
+    private final SummaryStateStore summaryStateStore;
     private final Executor summaryExecutor;
 
     @Value("${app.message-lifecycle.enabled:false}")
@@ -60,11 +61,13 @@ public class MessageLifecycleScheduler {
                                      MessageArchiveRepository archiveRepository,
                                      ConversationRepository conversationRepository,
                                      ChatMemoryService chatMemoryService,
+                                     SummaryStateStore summaryStateStore,
                                      @Qualifier("summaryTaskExecutor") Executor summaryExecutor) {
         this.summaryRepository = summaryRepository;
         this.archiveRepository = archiveRepository;
         this.conversationRepository = conversationRepository;
         this.chatMemoryService = chatMemoryService;
+        this.summaryStateStore = summaryStateStore;
         this.summaryExecutor = summaryExecutor;
     }
 
@@ -76,7 +79,7 @@ public class MessageLifecycleScheduler {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime staleBefore = now.minusSeconds(summaryLockTtlSeconds);
         LocalDateTime nextRetryAt = now.plusSeconds(60);
-        int stale = summaryRepository.markStalePendingFailed(staleBefore, now, nextRetryAt);
+        int stale = summaryStateStore.markStalePendingFailed(staleBefore, now, nextRetryAt);
         if (stale > 0) {
             logger.warn("summary_stale_released count={}", stale);
         }

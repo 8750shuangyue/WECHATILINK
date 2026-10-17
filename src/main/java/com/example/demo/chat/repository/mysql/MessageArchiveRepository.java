@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +30,7 @@ public interface MessageArchiveRepository extends JpaRepository<MessageArchive, 
                        @Param("maxId") long maxId,
                        @Param("archivedAt") LocalDateTime archivedAt);
 
+    @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "DELETE FROM messages_archive WHERE archived_at < :cutoff LIMIT :batch",
             nativeQuery = true)

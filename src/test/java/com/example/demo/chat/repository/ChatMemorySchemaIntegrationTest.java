@@ -4,6 +4,7 @@ import com.example.demo.chat.ChatMessage;
 import com.example.demo.chat.entity.Conversation;
 import com.example.demo.chat.entity.Message;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
+import com.example.demo.chat.lifecycle.MessageLifecycleScheduler;
 import com.example.demo.chat.repository.mysql.ConversationRepository;
 import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -18,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,6 +43,9 @@ class ChatMemorySchemaIntegrationTest {
 
     @Autowired
     private DatabaseChatMemoryRepository chatMemoryRepository;
+
+    @Autowired
+    private MessageLifecycleScheduler lifecycleScheduler;
 
     private final List<String> conversationIds = new ArrayList<>();
 
@@ -104,6 +110,17 @@ class ChatMemorySchemaIntegrationTest {
         chatMemoryRepository.clear("user-a", conversationId);
         assertTrue(chatMemoryRepository.getHistory("user-a", conversationId, null, 10)
                 .messages().isEmpty());
+    }
+
+    @Test
+    void lifecycleSchedulerModifyingTasksRunInsideTransactions() {
+        ReflectionTestUtils.setField(lifecycleScheduler, "enabled", true);
+        ReflectionTestUtils.setField(lifecycleScheduler, "retryLimit", 0);
+        ReflectionTestUtils.setField(lifecycleScheduler, "summaryKeepRecent", 1_000_000);
+        ReflectionTestUtils.setField(lifecycleScheduler, "archiveRetentionDays", 180L);
+
+        assertDoesNotThrow(lifecycleScheduler::retrySummaries);
+        assertDoesNotThrow(lifecycleScheduler::cleanupArchive);
     }
 
     @Test

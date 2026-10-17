@@ -32,6 +32,7 @@ class MessageLifecycleSchedulerTest {
     private MessageArchiveRepository archiveRepository;
     private ConversationRepository conversationRepository;
     private ChatMemoryService chatMemoryService;
+    private SummaryStateStore summaryStateStore;
     private MessageLifecycleScheduler scheduler;
 
     @BeforeEach
@@ -40,10 +41,11 @@ class MessageLifecycleSchedulerTest {
         archiveRepository = mock(MessageArchiveRepository.class);
         conversationRepository = mock(ConversationRepository.class);
         chatMemoryService = mock(ChatMemoryService.class);
+        summaryStateStore = mock(SummaryStateStore.class);
         Executor directExecutor = Runnable::run;
         scheduler = new MessageLifecycleScheduler(
                 summaryRepository, archiveRepository, conversationRepository,
-                chatMemoryService, directExecutor);
+                chatMemoryService, summaryStateStore, directExecutor);
         ReflectionTestUtils.setField(scheduler, "enabled", true);
         ReflectionTestUtils.setField(scheduler, "summaryKeepRecent", 5);
         ReflectionTestUtils.setField(scheduler, "summaryLockTtlSeconds", 600L);
@@ -61,7 +63,7 @@ class MessageLifecycleSchedulerTest {
         scheduler.cleanupArchive();
 
         verifyNoInteractions(summaryRepository, archiveRepository,
-                conversationRepository, chatMemoryService);
+                conversationRepository, chatMemoryService, summaryStateStore);
     }
 
     @Test
@@ -78,7 +80,7 @@ class MessageLifecycleSchedulerTest {
 
     @Test
     void retrySubmitsDueAndReconciliationConversationsOnce() {
-        when(summaryRepository.markStalePendingFailed(any(), any(), any())).thenReturn(1);
+        when(summaryStateStore.markStalePendingFailed(any(), any(), any())).thenReturn(1);
         when(summaryRepository.findDueRetries(any(LocalDateTime.class), eq(50)))
                 .thenReturn(List.of("c1"));
         when(summaryRepository.findReconciliationCandidates(eq(10), any(LocalDateTime.class), eq(50)))
