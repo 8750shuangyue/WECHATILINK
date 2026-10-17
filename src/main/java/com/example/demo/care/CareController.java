@@ -2,6 +2,7 @@ package com.example.demo.care;
 
 import com.example.demo.aicare.Result;
 import com.example.demo.chat.ChatMessage;
+import com.example.demo.chat.RagContextService;
 import com.example.demo.chat.entity.CareRecord;
 import com.example.demo.chat.entity.PlantProfile;
 import com.example.demo.chat.entity.PetProfile;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/care")
@@ -257,13 +259,17 @@ public class CareController {
                                context.toString() + "\n\n" + systemPrompt;
             }
 
-            String reply = llmService.chatWithMemory(userName, conversationId, question, systemPrompt);
-            
+            AtomicReference<List<RagContextService.SourceRef>> sourcesRef =
+                    new AtomicReference<>(List.of());
+            String reply = llmService.chatWithMemory(
+                    userName, conversationId, question, systemPrompt, sourcesRef::set);
+
             Map<String, Object> result = new HashMap<>();
             result.put("reply", reply);
             result.put("targetName", targetName);
             result.put("species", species);
-            
+            result.put("sources", sourcesRef.get());
+
             return Result.success(result);
         } catch (IOException e) {
             logger.error("Care QA failed", e);

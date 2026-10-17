@@ -524,6 +524,8 @@ img {
 
 .bot-msg {
   justify-content: flex-start;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .system-msg {

@@ -423,6 +423,8 @@ public class VectorStoreService {
         }
 
         vectorStoreRepository.deleteBySourceId(sourceId);
+        // 正文未变的文档会生成相同的 documentId；必须先落删除，否则本次插入会撞旧行的唯一索引。
+        vectorStoreRepository.flush();
         List<VectorStore> saved = vectorStoreRepository.saveAll(vectors);
         vectorStoreRepository.flush();
         loadFromSQLite();
@@ -856,6 +858,7 @@ public class VectorStoreService {
                 Map<String, Object> m = new HashMap<>();
                 m.put("sourceId", k);
                 m.put("fileName", resolveDocumentFileName(vs, k));
+                m.put("title", resolveDocumentTitle(vs, k));
                 m.put("count", 0);
                 m.put("sample", "");
                 m.put("timestamp", vs.getTimestamp());
@@ -870,6 +873,28 @@ public class VectorStoreService {
             }
         }
         return new ArrayList<>(grouped.values());
+    }
+
+    private String resolveDocumentTitle(VectorStore vectorStore, String sourceId) {
+        if (vectorStore.getMetadataJson() == null || vectorStore.getMetadataJson().isBlank()) {
+            return sourceId;
+        }
+        try {
+            JSONObject metadata = JSON.parseObject(vectorStore.getMetadataJson());
+            String title = metadata.getString("title");
+            if (title != null && !title.isBlank()) {
+                return title;
+            }
+            String fileName = metadata.getString("fileName");
+            if (fileName != null && !fileName.isBlank()) {
+                String stripped = fileName.replaceFirst("(?i)\\.(md|markdown)$", "").trim();
+                return stripped.isEmpty() ? sourceId : stripped;
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to parse vector metadata for sourceId: {}, cause: {}",
+                    sourceId, e.getMessage());
+        }
+        return sourceId;
     }
 
     private String resolveDocumentFileName(VectorStore vectorStore, String sourceId) {

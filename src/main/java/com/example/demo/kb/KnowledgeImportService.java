@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -14,8 +15,11 @@ public class KnowledgeImportService {
 
     public static final int CHUNK_LENGTH = 500;
     private static final int SOURCE_ID_MAX_LENGTH = 200;
+    private static final int TITLE_MAX_LENGTH = 200;
     private static final Pattern SOURCE_ID_PATTERN =
             Pattern.compile("[\\p{L}\\p{N}._:-]+");
+    private static final Pattern H1_PATTERN =
+            Pattern.compile("^#\\s+(.+?)\\s*#*\\s*$");
 
     public ImportPlan plan(String requestedSourceId, String originalFilename, String text) {
         String fileName = normalizeFileName(originalFilename);
@@ -32,9 +36,40 @@ public class KnowledgeImportService {
         return new ImportPlan(
                 resolveSourceId(requestedSourceId, fileName),
                 fileName,
+                extractTitle(normalizedText),
                 normalizedText.length(),
                 chunks
         );
+    }
+
+    /**
+     * 取文档第一条非空行作为可读标题；只认 H1，不做全文搜索。
+     * 不修改正文，因此分块、documentId 与向量输入都不受影响。
+     */
+    private String extractTitle(String text) {
+        if (text == null) {
+            return null;
+        }
+        for (String rawLine : text.split("\n", -1)) {
+            String line = rawLine.startsWith("﻿") ? rawLine.substring(1) : rawLine;
+            line = line.strip();
+            if (line.isEmpty()) {
+                continue;
+            }
+            Matcher matcher = H1_PATTERN.matcher(line);
+            if (!matcher.matches()) {
+                return null;
+            }
+            String title = matcher.group(1).strip();
+            if (title.isEmpty()) {
+                return null;
+            }
+            if (title.length() > TITLE_MAX_LENGTH) {
+                title = title.substring(0, TITLE_MAX_LENGTH).strip();
+            }
+            return title;
+        }
+        return null;
     }
 
     private String resolveSourceId(String requestedSourceId, String fileName) {
@@ -107,7 +142,8 @@ public class KnowledgeImportService {
         }
     }
 
-    public record ImportPlan(String sourceId, String fileName, int charCount, List<String> chunks) {
+    public record ImportPlan(String sourceId, String fileName, String title,
+                             int charCount, List<String> chunks) {
         public ImportPlan {
             chunks = List.copyOf(chunks);
         }

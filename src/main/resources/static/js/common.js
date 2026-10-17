@@ -115,6 +115,87 @@ function toast(msg, ms) {
     showToast(msg, ms);
 }
 
+/* ============================================================
+   回答来源引用（RAG sources）
+   ============================================================ */
+
+function ensureSourceStyles() {
+    if (document.getElementById('msg-sources-style')) return;
+    var style = document.createElement('style');
+    style.id = 'msg-sources-style';
+    style.textContent = [
+        '.msg-sources{margin-top:8px;max-width:70%;background:#f4faf6;' +
+            'border:1px solid #d9ebe0;border-radius:12px;padding:8px 12px;' +
+            'font-size:12px;line-height:1.55;color:#3f5a4b;box-sizing:border-box;}',
+        '.msg-sources-label{font-size:11px;font-weight:600;color:#6b8576;margin-bottom:4px;}',
+        '.source-list{list-style:none;margin:0;padding:0;display:flex;' +
+            'flex-direction:column;gap:3px;}',
+        '.source-item{display:flex;align-items:baseline;gap:6px;}',
+        '.source-index{color:#2f8f5b;font-weight:700;flex:0 0 auto;}',
+        '.source-title{word-break:break-word;}',
+        '@media (max-width:720px){.msg-sources{max-width:85%;}}'
+    ].join('');
+    document.head.appendChild(style);
+}
+
+/**
+ * 把后端下发的 [{sourceId, title}] 构建成来源块。
+ * 所有文本都通过 textContent 写入，避免知识标题里的 HTML 被执行。
+ * 空列表或非法数据返回 null。
+ */
+function buildSourcesElement(sources) {
+    if (!Array.isArray(sources) || !sources.length) return null;
+    var seen = {};
+    var items = [];
+    for (var i = 0; i < sources.length; i++) {
+        var s = sources[i];
+        if (!s || typeof s !== 'object') continue;
+        var sourceId = typeof s.sourceId === 'string' ? s.sourceId.trim() : '';
+        var title = typeof s.title === 'string' ? s.title.trim() : '';
+        var key = sourceId || title;
+        if (!key || seen[key]) continue;
+        seen[key] = true;
+        items.push(title || sourceId);
+    }
+    if (!items.length) return null;
+
+    ensureSourceStyles();
+    var box = document.createElement('div');
+    box.className = 'msg-sources';
+    box.setAttribute('aria-label', '本次回答的知识来源');
+
+    var label = document.createElement('div');
+    label.className = 'msg-sources-label';
+    label.textContent = '参考来源';
+    box.appendChild(label);
+
+    var list = document.createElement('ol');
+    list.className = 'source-list';
+    for (var j = 0; j < items.length; j++) {
+        var li = document.createElement('li');
+        li.className = 'source-item';
+        var index = document.createElement('span');
+        index.className = 'source-index';
+        index.textContent = '[' + (j + 1) + ']';
+        var titleEl = document.createElement('span');
+        titleEl.className = 'source-title';
+        titleEl.textContent = items[j];
+        li.appendChild(index);
+        li.appendChild(titleEl);
+        list.appendChild(li);
+    }
+    box.appendChild(list);
+    return box;
+}
+
+function renderSourcesBlock(container, sources) {
+    if (!container) return;
+    var old = container.querySelector('.msg-sources');
+    if (old) old.remove();
+    var element = buildSourcesElement(sources);
+    if (element) container.appendChild(element);
+}
+
 /* 图片压缩：读取后缩放到 maxSize 内并转 WebP（失败回退 JPEG） */
 function compressImage(file, maxSize, quality) {
     maxSize = maxSize || 1280;

@@ -93,6 +93,7 @@ function addMessage(text, dir, from, time) {
     div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#4a9' : 'rgba(255,255,255,0.7)') + ';margin-bottom:3px;">' + from + timeStr + '</div>' + text.replace(/\n/g, '<br>') + '</div>';
     document.getElementById('chatMessages').appendChild(div);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+    return div;
 }
 
 function addImageMessage(url, from, time) {
@@ -198,7 +199,7 @@ function addStreamingBubble() {
     div.innerHTML = '<div class="msg-bubble bot-bubble"></div>';
     document.getElementById('chatMessages').appendChild(div);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-    return div.querySelector('.msg-bubble');
+    return div;
 }
 
 function addBotText(text, small) {
@@ -278,11 +279,13 @@ async function sendText() {
     }
     try {
         if (text) {
-            var liveBubble = addStreamingBubble();
+            var liveMsg = addStreamingBubble();
+            var liveBubble = liveMsg.querySelector('.msg-bubble');
+            var sources = [];
             var res = await fetch('/api/ai/chat/stream', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ message: text, includeSources: 'true' })
             });
             if (!res.ok || !res.body) {
                 liveBubble.textContent = '连接失败，请稍后再试';
@@ -310,6 +313,19 @@ async function sendText() {
                         }
                     });
                     if (eventName === 'rag-trace') continue;
+                    if (eventName === 'rag-sources') {
+                        var sourceData = dataLines.join('\n').trim();
+                        if (sourceData) {
+                            try {
+                                var sourcePayload = JSON.parse(sourceData);
+                                if (sourcePayload && Array.isArray(sourcePayload.sources)) {
+                                    sources = sourcePayload.sources;
+                                }
+                            } catch (ignore) {
+                            }
+                        }
+                        continue;
+                    }
                     var data = dataLines.join('\n').trim();
                     if (!data || data === '[DONE]') continue;
                     try {
@@ -322,6 +338,7 @@ async function sendText() {
                 }
             }
             if (!acc) liveBubble.textContent = 'AI 没有回复，请稍后再试';
+            else renderSourcesBlock(liveMsg, sources);
         } else {
             var res = await fetch('/api/care/qa', {
                 method: 'POST',
@@ -331,7 +348,8 @@ async function sendText() {
             var x = await res.json();
             var reply = (x.data && x.data.reply) ? x.data.reply : null;
             if (reply) {
-                addMessage(reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+                var replyMsg = addMessage(reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+                renderSourcesBlock(replyMsg, x.data && x.data.sources);
             } else {
                 showToast(x.error || 'AI 没有回复，请稍后再试');
             }

@@ -198,6 +198,13 @@ class VectorStoreServiceTest {
         assertEquals(2, database.size());
         verify(repository, times(2)).deleteBySourceId("guide-1");
         verify(repository, times(2)).saveAll(any());
+        verify(repository, times(4)).flush();
+
+        // 删除必须先落库，否则正文未变的文档会以其相同的 documentId 撞旧行唯一索引。
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(repository);
+        inOrder.verify(repository).deleteBySourceId("guide-1");
+        inOrder.verify(repository).flush();
+        inOrder.verify(repository).saveAll(any());
     }
 
     @Test

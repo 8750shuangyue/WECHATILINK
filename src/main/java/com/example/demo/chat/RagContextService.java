@@ -1,12 +1,16 @@
 package com.example.demo.chat;
 
+import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.chat.VectorStoreService.SearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class RagContextService {
@@ -25,7 +29,7 @@ public class RagContextService {
 
     public ContextResult buildContextWithTrace(String userId, String conversationId, String query) {
         if (query == null || query.isBlank()) {
-            return new ContextResult("", null);
+            return new ContextResult("", null, List.of());
         }
 
         try {
@@ -34,19 +38,74 @@ public class RagContextService {
                             query, userId, conversationId);
             List<SearchResult> results = outcome == null ? null : outcome.results();
             if (results == null || results.isEmpty()) {
-                return new ContextResult("", outcome == null ? null : outcome.traceId());
+                return new ContextResult("", outcome == null ? null : outcome.traceId(), List.of());
             }
-            return new ContextResult(formatResults(results), outcome.traceId());
+            return new ContextResult(formatResults(results), outcome.traceId(),
+                    buildSourceRefs(results));
         } catch (Exception e) {
             logger.warn("Failed to build RAG context: {}", e.getMessage());
-            return new ContextResult("", null);
+            return new ContextResult("", null, List.of());
         }
     }
 
-    public record ContextResult(String context, String traceId) {
+    /**
+     * 对外可展示的来源：仅公共知识块，按 sourceId 去重并保留相似度最高的一条。
+     * 不暴露 documentId、正文、相似度或 metadata 原文。
+     */
+    public record SourceRef(String sourceId, String title) {
+    }
+
+    public record ContextResult(String context, String traceId, List<SourceRef> sources) {
         public ContextResult {
             context = context == null ? "" : context;
+            sources = sources == null ? List.of() : List.copyOf(sources);
         }
+
+        public ContextResult(String context, String traceId) {
+            this(context, traceId, List.of());
+        }
+    }
+
+    private List<SourceRef> buildSourceRefs(List<SearchResult> results) {
+        List<SearchResult> candidates = new ArrayList<>();
+        for (SearchResult result : results) {
+            if (result == null || result.getContent() == null || result.getContent().isBlank()) {
+                continue;
+            }
+            if (!VectorStoreService.ORIGIN_PUBLIC_KB.equals(result.getOrigin())) {
+                continue;
+            }
+            if (result.getSourceId() == null || result.getSourceId().isBlank()) {
+                continue;
+            }
+            candidates.add(result);
+        }
+
+        candidates.sort(Comparator.comparingDouble(SearchResult::getSimilarity).reversed());
+        Map<String, SourceRef> bySourceId = new LinkedHashMap<>();
+        for (SearchResult result : candidates) {
+            bySourceId.putIfAbsent(result.getSourceId(),
+                    new SourceRef(result.getSourceId(), resolveTitle(result)));
+        }
+        return List.copyOf(bySourceId.values());
+    }
+
+    private String resolveTitle(SearchResult result) {
+        JSONObject metadata = result.getMetadata();
+        if (metadata != null) {
+            String title = metadata.getString("title");
+            if (title != null && !title.isBlank()) {
+                return title.trim();
+            }
+            String fileName = metadata.getString("fileName");
+            if (fileName != null && !fileName.isBlank()) {
+                String stripped = fileName.replaceFirst("(?i)\\.(md|markdown)$", "").trim();
+                if (!stripped.isEmpty()) {
+                    return stripped;
+                }
+            }
+        }
+        return result.getSourceId();
     }
 
     private String formatResults(List<SearchResult> results) {

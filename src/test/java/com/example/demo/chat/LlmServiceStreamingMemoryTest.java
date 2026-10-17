@@ -300,6 +300,87 @@ class LlmServiceStreamingMemoryTest {
         assertEquals(List.of("trace:trace-1", "Doudou", " is 5.", "done"), events);
     }
 
+    @Test
+    void emitsSourcesAfterTraceBeforeTheFirstToken() throws Exception {
+        response.set(new StreamResponse(200,
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Doudou\"}}]}\n\n"
+                        + "data: {\"choices\":[{\"delta\":{\"content\":\" is 5.\"}}]}\n\n"
+                        + "data: [DONE]\n\n"
+        ));
+        String ragContext = "公共知识库信息 1:\n狗的正常年龄判断需要结合体型。";
+        ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        when(memoryService.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                ragContext,
+                "How old is Doudou?"
+        )).thenReturn(List.of(new ChatMessage("user", "How old is Doudou?")));
+        RagContextService ragContextService = mock(RagContextService.class);
+        RagContextService.SourceRef source =
+                new RagContextService.SourceRef("kb_pet_age", "犬猫年龄与体型判断");
+        when(ragContextService.buildContextWithTrace(
+                "user-a", "conversation-a", "How old is Doudou?"))
+                .thenReturn(new RagContextService.ContextResult(
+                        ragContext, "trace-1", List.of(source)));
+        LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", ragContextService);
+        List<String> events = new ArrayList<>();
+
+        service.chatStream(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                null,
+                traceId -> events.add("trace:" + traceId),
+                sources -> events.add("sources:" + sources.size()
+                        + ":" + sources.get(0).sourceId()),
+                events::add,
+                () -> events.add("done")
+        );
+
+        assertEquals(List.of("trace:trace-1", "sources:1:kb_pet_age",
+                "Doudou", " is 5.", "done"), events);
+    }
+
+    @Test
+    void chatWithMemoryProvidesSourcesToCallback() throws Exception {
+        response.set(new StreamResponse(200,
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Doudou is 5.\"}}]}"
+        ));
+        String ragContext = "公共知识库信息 1:\n狗的正常年龄判断需要结合体型。";
+        ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        when(memoryService.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                ragContext,
+                "How old is Doudou?"
+        )).thenReturn(List.of(new ChatMessage("user", "How old is Doudou?")));
+        RagContextService ragContextService = mock(RagContextService.class);
+        RagContextService.SourceRef source =
+                new RagContextService.SourceRef("kb_pet_age", "犬猫年龄与体型判断");
+        when(ragContextService.buildContextWithTrace(
+                "user-a", "conversation-a", "How old is Doudou?"))
+                .thenReturn(new RagContextService.ContextResult(
+                        ragContext, "trace-1", List.of(source)));
+        LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", ragContextService);
+        AtomicReference<List<RagContextService.SourceRef>> captured = new AtomicReference<>(List.of());
+
+        String reply = service.chatWithMemory(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                null,
+                captured::set
+        );
+
+        assertEquals("Doudou is 5.", reply);
+        assertEquals(1, captured.get().size());
+        assertEquals("kb_pet_age", captured.get().get(0).sourceId());
+    }
+
     private RagContextService emptyRagContextService() {
         RagContextService ragContextService = mock(RagContextService.class);
         when(ragContextService.buildContext(org.mockito.ArgumentMatchers.anyString(),

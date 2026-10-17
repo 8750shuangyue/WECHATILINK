@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,5 +50,43 @@ class KnowledgeImportServiceTest {
     void rejectsBlankParsedText() {
         assertThrows(KnowledgeImportException.class,
                 () -> service.plan("guide-1", "empty.txt", " \n \t "));
+    }
+
+    @Test
+    void extractsH1TitleWithoutChangingChunking() {
+        String text = "# 月季黑斑病\n\n第一段内容\n第二段内容";
+        KnowledgeImportService.ImportPlan plan =
+                service.plan("guide-plant-blackspot", "blackspot.md", text);
+
+        assertEquals("月季黑斑病", plan.title());
+        assertEquals(1, plan.chunks().size());
+        assertTrue(plan.chunks().get(0).startsWith("# 月季黑斑病"));
+        assertEquals(text.length(), plan.charCount());
+    }
+
+    @Test
+    void returnsNullTitleWhenFirstNonBlankLineIsNotH1() {
+        KnowledgeImportService.ImportPlan plan =
+                service.plan("guide-1", "doc.md", "正文第一行\n# 后面出现的标题");
+
+        assertNull(plan.title());
+    }
+
+    @Test
+    void handlesBomLeadingBlankLinesAndTrailingHashes() {
+        KnowledgeImportService.ImportPlan plan =
+                service.plan("guide-1", "doc.md", "﻿\n\n# 浇水与积水 ###\n正文");
+
+        assertEquals("浇水与积水", plan.title());
+        assertEquals(1, plan.chunks().size());
+    }
+
+    @Test
+    void capsOversizedTitle() {
+        String title = "标题".repeat(120);
+        KnowledgeImportService.ImportPlan plan =
+                service.plan("guide-1", "doc.md", "# " + title + "\n正文");
+
+        assertEquals(200, plan.title().length());
     }
 }

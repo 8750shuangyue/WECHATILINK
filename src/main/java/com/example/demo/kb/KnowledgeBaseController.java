@@ -53,6 +53,7 @@ public class KnowledgeBaseController {
             r.put("dryRun", dryRun);
             r.put("sourceId", plan.sourceId());
             r.put("fileName", plan.fileName());
+            r.put("title", plan.title());
             r.put("count", plan.chunks().size());
             r.put("chars", plan.charCount());
 
@@ -65,6 +66,9 @@ public class KnowledgeBaseController {
             metadata.put("type", "document");
             metadata.put("fileName", plan.fileName());
             metadata.put("importMode", "replace");
+            if (plan.title() != null && !plan.title().isBlank()) {
+                metadata.put("title", plan.title());
+            }
             int count = vectorStoreService.replaceDocument(
                     plan.sourceId(), plan.chunks(), metadata);
 

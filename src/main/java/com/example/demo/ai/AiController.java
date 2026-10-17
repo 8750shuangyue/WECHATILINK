@@ -62,6 +62,7 @@ public class AiController {
     public SseEmitter chatStream(@RequestBody Map<String, String> request, HttpSession session) {
         String message = request.get("message");
         String systemPrompt = request.get("systemPrompt");
+        boolean includeSources = Boolean.parseBoolean(request.get("includeSources"));
         String conversationId = getOrCreateConversationId(session);
         String userId = (String) session.getAttribute("user");
         SseEmitter emitter = new SseEmitter(120000L);
@@ -73,6 +74,18 @@ public class AiController {
                                 emitter.send(SseEmitter.event()
                                         .name("rag-trace")
                                         .data(Map.of("traceId", traceId)));
+                            } catch (Exception e) {
+                                emitter.completeWithError(e);
+                            }
+                        },
+                        sources -> {
+                            if (!includeSources) {
+                                return;
+                            }
+                            try {
+                                emitter.send(SseEmitter.event()
+                                        .name("rag-sources")
+                                        .data(Map.of("sources", sources)));
                             } catch (Exception e) {
                                 emitter.completeWithError(e);
                             }
