@@ -107,6 +107,10 @@ public interface ConversationSummaryRepository extends JpaRepository<Conversatio
     @Query(value = """
             SELECT m.conversation_id
               FROM messages m
+              JOIN conversations c
+                ON c.conversation_id = m.conversation_id
+               AND c.user_id IS NOT NULL
+               AND c.user_id <> ''
               LEFT JOIN conversation_summaries s ON s.conversation_id = m.conversation_id
              WHERE m.role IN ('user','assistant')
                AND m.id > COALESCE(s.covered_until_id, 0)

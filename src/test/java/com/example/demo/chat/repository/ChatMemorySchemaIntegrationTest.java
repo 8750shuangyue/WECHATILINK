@@ -6,6 +6,7 @@ import com.example.demo.chat.entity.Message;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
 import com.example.demo.chat.lifecycle.MessageLifecycleScheduler;
 import com.example.demo.chat.repository.mysql.ConversationRepository;
+import com.example.demo.chat.repository.mysql.ConversationSummaryRepository;
 import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,9 @@ class ChatMemorySchemaIntegrationTest {
 
     @Autowired
     private MessageLifecycleScheduler lifecycleScheduler;
+
+    @Autowired
+    private ConversationSummaryRepository summaryRepository;
 
     private final List<String> conversationIds = new ArrayList<>();
 
@@ -110,6 +114,27 @@ class ChatMemorySchemaIntegrationTest {
         chatMemoryRepository.clear("user-a", conversationId);
         assertTrue(chatMemoryRepository.getHistory("user-a", conversationId, null, 10)
                 .messages().isEmpty());
+    }
+
+    @Test
+    void reconciliationCandidatesExcludeLegacyUnownedConversations() {
+        String ownedConversation = newConversationId("reconcile-owned");
+        String legacyConversation = newConversationId("reconcile-legacy");
+        conversationRepository.save(new Conversation(ownedConversation, "user-a"));
+        conversationRepository.save(new Conversation(legacyConversation, null));
+        for (int i = 0; i < 11; i++) {
+            String role = i % 2 == 0 ? "user" : "assistant";
+            messageRepository.save(new Message(
+                    ownedConversation, role, "owned-" + i, LocalDateTime.now()));
+            messageRepository.save(new Message(
+                    legacyConversation, role, "legacy-" + i, LocalDateTime.now()));
+        }
+
+        List<String> candidates = summaryRepository.findReconciliationCandidates(
+                10, LocalDateTime.now(), 50);
+
+        assertTrue(candidates.contains(ownedConversation));
+        assertFalse(candidates.contains(legacyConversation));
     }
 
     @Test
