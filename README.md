@@ -63,7 +63,7 @@ P1 与阶段 0.1 至 0.5 已完成代码和自动化验证：向量记忆增加 
 - 2026-10-17 15:36 已在生产开启 `APP_MESSAGE_LIFECYCLE_ENABLED=true`（JAR sha256 `b46fe6e2…`，备份 `/opt/ilink/backups/20261017-153053-message-lifecycle/`）：启动时迁移 2 条旧摘要；临时账号 6 轮冒烟后首轮 2 条进入 archive、主表剩 10 条 user/assistant + 摘要镜像、历史跨表翻页正常、清空后三张表与向量均为 0；临时账号及其会话/消息/会话向量已删除，`FAILED=0`。归档清理 cron 03:40，24–48 小时观察中。
 - 观察期间发现定时任务在 15:50–16:30 每 10 分钟抛 `TransactionRequiredException`：`retrySummaries`/`cleanupArchive` 直接调用 `@Modifying` repository，没有事务。已在 `8b9ecb14…` 修复：过期租约通过事务性的 `SummaryStateStore` 释放，`deleteExpired` 每批独立事务；对账查询同时排除 `user_id` 为空的旧会话。16:50 起的调度 tick 无异常、无 legacy 候选。
 
-阶段 3.3「Embedding 与检索性能」的批量改造已完成代码与本地验证，生产待发布：
+阶段 3.3「Embedding 与检索性能」的批量改造已完成并部署生产：
 
 - `EmbeddingService` 支持真正批量：一次请求提交多个 input，按响应 `index` 还原顺序；整批失败二分拆批、最终逐条回退；429/5xx 指数退避重试。
 - 新增 `dashscope.embedding.batch-enabled/batch-size/max-attempts/retry-backoff-ms/timeout-seconds` 配置，默认批量 10 条、3 次重试、30s 超时，并复用带超时的共享 HTTP 客户端。
