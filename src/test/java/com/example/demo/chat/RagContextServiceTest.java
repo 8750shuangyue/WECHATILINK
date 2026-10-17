@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -105,6 +106,86 @@ class RagContextServiceTest {
         assertEquals("kb_plant_watering", result.sources().get(0).sourceId());
         assertEquals("浇水与积水", result.sources().get(0).title());
         assertEquals("kb_plant_soil_iron", result.sources().get(1).sourceId());
+    }
+
+    @Test
+    void citationModeAlignsChunkMarkersWithSourceRanks() {
+        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
+        JSONObject wateringMeta = metadata("浇水与积水", "kb_plant_watering.md");
+        JSONObject soilMeta = metadata("土壤与缺铁", "kb_plant_soil_iron.md");
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a"))
+                .thenReturn(new VectorStoreService.SearchOutcome(
+                        "trace-cite",
+                        List.of(
+                                publicResult("doc-1", "kb_plant_watering", "浇水下篇", 0.90, wateringMeta),
+                                publicResult("doc-2", "kb_plant_watering", "浇水上篇", 0.95, wateringMeta),
+                                publicResult("doc-3", "kb_plant_soil_iron", "缺铁表现", 0.93, soilMeta),
+                                new VectorStoreService.SearchResult(
+                                        "conversation-doc", null, "用户: 豆豆", 0.80, null,
+                                        VectorStoreService.ORIGIN_CONVERSATION)
+                        )));
+        RagContextService service = new RagContextService(vectorStoreService);
+
+        RagContextService.ContextResult result =
+                service.buildContextWithTrace("user-a", "conversation-a", "question", true);
+
+        assertEquals(2, result.sources().size());
+        assertEquals("kb_plant_watering", result.sources().get(0).sourceId());
+        assertEquals(1, result.sources().get(0).rank());
+        assertEquals("kb_plant_soil_iron", result.sources().get(1).sourceId());
+        assertEquals(2, result.sources().get(1).rank());
+
+        String context = result.context();
+        assertTrue(context.contains("公共知识库信息（以下编号可在回答中引用）："));
+        assertTrue(context.contains("[1] 浇水与积水\n浇水上篇"));
+        assertTrue(context.contains("[2] 土壤与缺铁\n缺铁表现"));
+        assertTrue(context.contains("[1] 浇水与积水\n浇水下篇"));
+        assertTrue(context.contains("相关历史对话（仅供理解上下文，不可引用）："));
+        assertTrue(context.contains("- 用户: 豆豆"));
+        assertFalse(context.contains("公共知识库信息 1:"));
+    }
+
+    @Test
+    void citationModeSkipsPublicChunksWithoutSourceId() {
+        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a"))
+                .thenReturn(new VectorStoreService.SearchOutcome(
+                        "trace-no-source",
+                        List.of(
+                                publicResult("doc-x", null, "无来源公共块", 0.99, null),
+                                new VectorStoreService.SearchResult(
+                                        "conversation-doc", null, "用户: 豆豆", 0.80, null,
+                                        VectorStoreService.ORIGIN_CONVERSATION)
+                        )));
+        RagContextService service = new RagContextService(vectorStoreService);
+
+        RagContextService.ContextResult result =
+                service.buildContextWithTrace("user-a", "conversation-a", "question", true);
+
+        assertTrue(result.sources().isEmpty());
+        assertFalse(result.context().contains("公共知识库信息"));
+        assertTrue(result.context().contains("相关历史对话（仅供理解上下文，不可引用）："));
+        assertFalse(result.context().contains("[1]"));
+    }
+
+    @Test
+    void citationModeDisabledKeepsLegacyChunkNumbering() {
+        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a"))
+                .thenReturn(new VectorStoreService.SearchOutcome(
+                        "trace-legacy",
+                        List.of(publicResult("doc-1", "kb_water", "浇水知识", 0.95,
+                                metadata("浇水与积水", "kb_plant_watering.md")))));
+        RagContextService service = new RagContextService(vectorStoreService);
+
+        RagContextService.ContextResult result =
+                service.buildContextWithTrace("user-a", "conversation-a", "question", false);
+
+        assertEquals("公共知识库信息 1:\n浇水知识", result.context());
+        assertFalse(result.context().contains("以下编号可在回答中引用"));
     }
 
     @Test

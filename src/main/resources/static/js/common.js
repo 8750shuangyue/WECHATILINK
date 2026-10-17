@@ -130,21 +130,29 @@ function ensureSourceStyles() {
         '.msg-sources-label{font-size:11px;font-weight:600;color:#6b8576;margin-bottom:4px;}',
         '.source-list{list-style:none;margin:0;padding:0;display:flex;' +
             'flex-direction:column;gap:3px;}',
-        '.source-item{display:flex;align-items:baseline;gap:6px;}',
+        '.source-item{display:flex;align-items:baseline;gap:6px;scroll-margin-top:16px;}',
         '.source-index{color:#2f8f5b;font-weight:700;flex:0 0 auto;}',
         '.source-title{word-break:break-word;}',
+        '.citation-badge{display:inline;border:0;background:transparent;color:#2f8f5b;' +
+            'font:inherit;font-weight:700;padding:0 1px;margin:0;cursor:pointer;' +
+            'border-radius:4px;line-height:inherit;}',
+        '.citation-badge:hover,.citation-badge:focus{background:#e6f6ec;outline:none;}',
+        '.source-item.source-highlight{background:#e6f6ec;border-radius:6px;' +
+            'box-shadow:0 0 0 4px #e6f6ec;transition:background .2s;}',
         '@media (max-width:720px){.msg-sources{max-width:85%;}}'
     ].join('');
     document.head.appendChild(style);
 }
 
 /**
- * 把后端下发的 [{sourceId, title}] 构建成来源块。
+ * 把后端下发的 [{sourceId, title, rank}] 构建成来源块。
+ * rank 由后端保证与正文 [n] 一致；缺失时回退到数组位置。
  * 所有文本都通过 textContent 写入，避免知识标题里的 HTML 被执行。
  * 空列表或非法数据返回 null。
  */
-function buildSourcesElement(sources) {
+function buildSourcesElement(sources, options) {
     if (!Array.isArray(sources) || !sources.length) return null;
+    options = options || {};
     var seen = {};
     var items = [];
     for (var i = 0; i < sources.length; i++) {
@@ -155,7 +163,8 @@ function buildSourcesElement(sources) {
         var key = sourceId || title;
         if (!key || seen[key]) continue;
         seen[key] = true;
-        items.push(title || sourceId);
+        var rank = (typeof s.rank === 'number' && s.rank > 0) ? s.rank : (i + 1);
+        items.push({rank: rank, title: title || sourceId});
     }
     if (!items.length) return null;
 
@@ -172,14 +181,17 @@ function buildSourcesElement(sources) {
     var list = document.createElement('ol');
     list.className = 'source-list';
     for (var j = 0; j < items.length; j++) {
+        var item = items[j];
         var li = document.createElement('li');
         li.className = 'source-item';
+        li.setAttribute('data-source-rank', String(item.rank));
+        if (options.idPrefix) li.id = options.idPrefix + '-source-' + item.rank;
         var index = document.createElement('span');
         index.className = 'source-index';
-        index.textContent = '[' + (j + 1) + ']';
+        index.textContent = '[' + item.rank + ']';
         var titleEl = document.createElement('span');
         titleEl.className = 'source-title';
-        titleEl.textContent = items[j];
+        titleEl.textContent = item.title;
         li.appendChild(index);
         li.appendChild(titleEl);
         list.appendChild(li);
@@ -188,12 +200,82 @@ function buildSourcesElement(sources) {
     return box;
 }
 
-function renderSourcesBlock(container, sources) {
+function renderSourcesBlock(container, sources, options) {
     if (!container) return;
     var old = container.querySelector('.msg-sources');
     if (old) old.remove();
-    var element = buildSourcesElement(sources);
+    var element = buildSourcesElement(sources, options);
     if (element) container.appendChild(element);
+}
+
+/**
+ * 安全渲染带 [n] 引用的正文：普通片段用文本节点，合法编号生成可点击角标。
+ * 非法编号或不完整标记保持普通文本；全程不使用 innerHTML。
+ */
+function renderAnswerWithCitations(container, text, sources, options) {
+    if (!container) return;
+    options = options || {};
+    var value = text == null ? '' : String(text);
+    var rankTitles = {};
+    if (Array.isArray(sources)) {
+        for (var i = 0; i < sources.length; i++) {
+            var s = sources[i];
+            if (!s || typeof s !== 'object') continue;
+            var rank = (typeof s.rank === 'number' && s.rank > 0) ? s.rank : (i + 1);
+            if (rankTitles[rank] === undefined) {
+                var title = typeof s.title === 'string' ? s.title.trim() : '';
+                var sourceId = typeof s.sourceId === 'string' ? s.sourceId.trim() : '';
+                rankTitles[rank] = title || sourceId || '';
+            }
+        }
+    }
+
+    container.textContent = '';
+    container.style.whiteSpace = 'pre-wrap';
+    var regex = /\[(\d{1,2})\]/g;
+    var lastIndex = 0;
+    var match;
+    while ((match = regex.exec(value)) !== null) {
+        if (match.index > lastIndex) {
+            container.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+        }
+        var citationRank = parseInt(match[1], 10);
+        if (rankTitles[citationRank] !== undefined) {
+            container.appendChild(buildCitationBadge(citationRank, rankTitles[citationRank], container));
+        } else {
+            container.appendChild(document.createTextNode(match[0]));
+        }
+        lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < value.length) {
+        container.appendChild(document.createTextNode(value.slice(lastIndex)));
+    }
+}
+
+function buildCitationBadge(rank, title, bubble) {
+    ensureSourceStyles();
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'citation-badge';
+    button.textContent = '[' + rank + ']';
+    button.setAttribute('data-source-rank', String(rank));
+    button.setAttribute('aria-label', '查看来源 ' + rank + (title ? '：' + title : ''));
+    button.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        scrollToSource(bubble, rank);
+    });
+    return button;
+}
+
+function scrollToSource(container, rank) {
+    var root = container && container.closest ? container.closest('.msg') : null;
+    if (!root) root = document;
+    var item = root.querySelector('.source-item[data-source-rank="' + rank + '"]');
+    if (!item) return;
+    if (item.scrollIntoView) item.scrollIntoView({behavior: 'smooth', block: 'center'});
+    item.classList.add('source-highlight');
+    setTimeout(function () { item.classList.remove('source-highlight'); }, 1800);
 }
 
 /* 图片压缩：读取后缩放到 maxSize 内并转 WebP（失败回退 JPEG） */

@@ -1,6 +1,9 @@
 package com.example.demo.chat.repository;
 
+import com.example.demo.chat.ChatHistoryEntry;
 import com.example.demo.chat.ChatMessage;
+import com.example.demo.chat.HistoryPage;
+import com.example.demo.chat.SourceRefCodec;
 import com.example.demo.chat.entity.Conversation;
 import com.example.demo.chat.entity.Message;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
@@ -8,11 +11,13 @@ import com.example.demo.chat.repository.mysql.ConversationRepository;
 import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +26,7 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseChatMemoryRepository.class);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final String SYSTEM_ROLE = "system";
+    private static final List<String> HISTORY_ROLES = List.of("user", "assistant");
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
@@ -71,14 +77,60 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
     @Override
     @Transactional
     public void addMessage(String userId, String conversationId, ChatMessage message) {
+        addMessage(userId, conversationId, message, null);
+    }
+
+    @Override
+    @Transactional
+    public void addMessage(String userId, String conversationId, ChatMessage message,
+                           String sourcesJson) {
         logger.info("Database addMessage - conversationId: {}, role: {}", conversationId, message.getRole());
-        
+
         ensureConversationOwnedBy(userId, conversationId);
-        
-        Message entity = convertToMessage(conversationId, message);
+
+        Message entity = convertToMessage(conversationId, message, sourcesJson);
         messageRepository.save(entity);
-        
+
         logger.info("Database addMessage - completed");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HistoryPage getHistory(String userId, String conversationId, Long beforeId, int limit) {
+        requireIdentifiers(userId, conversationId);
+        if (!isConversationOwnedBy(userId, conversationId)) {
+            logger.warn("Database getHistory - access denied or unowned conversation: {}", conversationId);
+            return new HistoryPage(conversationId, List.of(), false, null);
+        }
+
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        PageRequest pageRequest = PageRequest.of(0, safeLimit + 1);
+        List<Message> messages = beforeId == null
+                ? messageRepository.findByConversationIdAndRoleInOrderByIdDesc(
+                        conversationId, HISTORY_ROLES, pageRequest)
+                : messageRepository.findByConversationIdAndRoleInAndIdLessThanOrderByIdDesc(
+                        conversationId, HISTORY_ROLES, beforeId, pageRequest);
+
+        boolean hasMore = messages.size() > safeLimit;
+        List<Message> page = new ArrayList<>(messages.subList(0, Math.min(messages.size(), safeLimit)));
+        Long nextBeforeId = hasMore && !page.isEmpty()
+                ? page.get(page.size() - 1).getId()
+                : null;
+        Collections.reverse(page);
+
+        List<ChatHistoryEntry> entries = new ArrayList<>(page.size());
+        for (Message message : page) {
+            entries.add(new ChatHistoryEntry(
+                    message.getId(),
+                    message.getRole(),
+                    message.getContent(),
+                    message.getTimestamp() == null ? null : message.getTimestamp().format(FORMATTER),
+                    SourceRefCodec.fromJson(message.getSourcesJson())
+            ));
+        }
+        logger.info("Database getHistory - loaded {} messages for conversationId: {}",
+                entries.size(), conversationId);
+        return new HistoryPage(conversationId, entries, hasMore, nextBeforeId);
     }
 
     @Override
@@ -151,18 +203,23 @@ public class DatabaseChatMemoryRepository implements ChatMemoryRepository {
     }
 
     private Message convertToMessage(String conversationId, ChatMessage chatMessage) {
+        return convertToMessage(conversationId, chatMessage, null);
+    }
+
+    private Message convertToMessage(String conversationId, ChatMessage chatMessage, String sourcesJson) {
         LocalDateTime timestamp;
         if (chatMessage.getTimestamp() != null && !chatMessage.getTimestamp().isEmpty()) {
             timestamp = LocalDateTime.parse(chatMessage.getTimestamp(), FORMATTER);
         } else {
             timestamp = LocalDateTime.now();
         }
-        
+
         return new Message(
                 conversationId,
                 chatMessage.getRole(),
                 chatMessage.getContent(),
-                timestamp
+                timestamp,
+                sourcesJson
         );
     }
 }

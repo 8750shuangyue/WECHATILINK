@@ -200,6 +200,7 @@ public class CareController {
         String question = (String) params.get("question");
         String targetType = (String) params.get("targetType");
         Long targetId = params.get("targetId") != null ? ((Number) params.get("targetId")).longValue() : null;
+        boolean includeCitations = Boolean.parseBoolean(String.valueOf(params.get("includeCitations")));
 
         String userName = (String) session.getAttribute("user");
         if (targetType != null && targetId != null && !ownsTarget(targetType, targetId, userName)) {
@@ -261,8 +262,11 @@ public class CareController {
 
             AtomicReference<List<RagContextService.SourceRef>> sourcesRef =
                     new AtomicReference<>(List.of());
-            String reply = llmService.chatWithMemory(
-                    userName, conversationId, question, systemPrompt, sourcesRef::set);
+            String reply = includeCitations
+                    ? llmService.chatWithMemory(
+                            userName, conversationId, question, systemPrompt, sourcesRef::set, true)
+                    : llmService.chatWithMemory(
+                            userName, conversationId, question, systemPrompt, sourcesRef::set);
 
             Map<String, Object> result = new HashMap<>();
             result.put("reply", reply);

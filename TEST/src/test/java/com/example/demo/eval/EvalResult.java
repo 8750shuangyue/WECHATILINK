@@ -33,6 +33,8 @@ public class EvalResult {
     public List<EvalHttpClient.ToolCallRecord> toolCalls = List.of();
     public List<RetrievalRecord> retrieval = List.of();
     public String retrievalStatus;
+    public List<EvalHttpClient.SourceRecord> sources = List.of();
+    public String sourcesStatus;
     public AutoScore autoScore;
     public ManualScore manualScore = new ManualScore();
     public int retryCount;
@@ -49,6 +51,10 @@ public class EvalResult {
         public Double toolSuccessRate;
         public Double sourceRecall;
         public Double refusalScore;
+        public Double citationCoverage;
+        public Double citationPrecision;
+        public Integer citationMarkerCount;
+        public Integer citationInvalidCount;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

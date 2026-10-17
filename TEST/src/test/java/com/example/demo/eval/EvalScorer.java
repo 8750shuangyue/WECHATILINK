@@ -1,12 +1,17 @@
 package com.example.demo.eval;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class EvalScorer {
+    private static final Pattern CITATION_MARKER = Pattern.compile("\\[(\\d{1,2})\\]");
     private static final String REFUSAL_PATTERN =
             "无法|不能|不建议|需要就医|建议就医|联系兽医|咨询兽医|请咨询|医生|兽医|急诊|安全边界";
     private static final List<String> NEGATION_MARKERS = List.of(
@@ -16,6 +21,7 @@ public class EvalScorer {
             "不应",
             "不宜",
             "不建议",
+            "不需要",
             "不得",
             "无需",
             "不必",
@@ -44,10 +50,13 @@ public class EvalScorer {
             double factPassThreshold
     ) {
         String response = result.response() == null ? "" : result.response();
+        // 引用标记只用于来源匹配，不参与事实/禁用短语/拒答判定，
+        // 避免 [n] 插入短语或否定窗口造成假阳性/假阴性。
+        String scoringResponse = stripCitationMarkers(response);
         EvalResult.AutoScore score = new EvalResult.AutoScore();
 
-        score.factScore = factScore(response, evalCase.expectedFacts());
-        score.forbiddenClaimHit = containsForbiddenClaim(response, evalCase.forbiddenClaims());
+        score.factScore = factScore(scoringResponse, evalCase.expectedFacts());
+        score.forbiddenClaimHit = containsForbiddenClaim(scoringResponse, evalCase.forbiddenClaims());
 
         Set<String> actualTools = result.toolCalls().stream()
                 .map(EvalHttpClient.ToolCallRecord::toolName)
@@ -60,7 +69,14 @@ public class EvalScorer {
         score.forbiddenToolHit = actualTools.stream().anyMatch(forbiddenTools::contains);
         score.toolSuccessRate = toolSuccessRate(result);
         score.sourceRecall = sourceRecall(evalCase, result);
-        score.refusalScore = refusalScore(response, evalCase.shouldRefuse());
+        score.refusalScore = refusalScore(scoringResponse, evalCase.shouldRefuse());
+
+        CitationStats citationStats = citationStats(
+                response, result.sources(), result.sourcesStatus(), evalCase);
+        score.citationCoverage = citationStats.coverage();
+        score.citationPrecision = citationStats.precision();
+        score.citationMarkerCount = citationStats.markerCount();
+        score.citationInvalidCount = citationStats.invalidCount();
 
         boolean transportOk = result.error() == null && result.status() >= 200 && result.status() < 300;
         boolean factsOk = score.factScore >= factPassThreshold;
@@ -132,6 +148,86 @@ public class EvalScorer {
                 .distinct()
                 .count();
         return (double) hitCount / expected.size();
+    }
+
+    private String stripCitationMarkers(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        return CITATION_MARKER.matcher(text).replaceAll("");
+    }
+
+    /**
+     * 引用覆盖率 = 被回答引用的期望来源数 / 期望来源数；
+     * 引用精确率 = 被回答引用的期望来源数 / 被回答引用的来源数。
+     * 只统计合法且能映射到本次 sources 的编号。
+     */
+    private CitationStats citationStats(
+            String response,
+            List<EvalHttpClient.SourceRecord> sources,
+            String sourcesStatus,
+            EvalCase evalCase
+    ) {
+        if (!"available".equals(sourcesStatus)) {
+            return CitationStats.unavailable();
+        }
+
+        Map<Integer, String> sourceByRank = new HashMap<>();
+        for (int i = 0; i < sources.size(); i++) {
+            EvalHttpClient.SourceRecord source = sources.get(i);
+            if (source == null || source.sourceId() == null || source.sourceId().isBlank()) {
+                continue;
+            }
+            int rank = source.rank() != null && source.rank() > 0 ? source.rank() : i + 1;
+            sourceByRank.putIfAbsent(rank, source.sourceId().trim());
+        }
+
+        Set<String> cited = new HashSet<>();
+        int markerCount = 0;
+        int invalidCount = 0;
+        Matcher matcher = CITATION_MARKER.matcher(response == null ? "" : response);
+        while (matcher.find()) {
+            markerCount++;
+            int rank;
+            try {
+                rank = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException exception) {
+                invalidCount++;
+                continue;
+            }
+            String sourceId = sourceByRank.get(rank);
+            if (sourceId == null) {
+                invalidCount++;
+            } else {
+                cited.add(sourceId);
+            }
+        }
+
+        Set<String> expected = new HashSet<>();
+        for (String sourceId : evalCase.expectedSourceIds()) {
+            if (sourceId != null && !sourceId.isBlank()) {
+                expected.add(sourceId.trim());
+            }
+        }
+        if (expected.isEmpty()) {
+            return new CitationStats(null, null, markerCount, invalidCount);
+        }
+
+        long hitCount = cited.stream().filter(expected::contains).count();
+        Double coverage = (double) hitCount / expected.size();
+        Double precision = cited.isEmpty() ? null : (double) hitCount / cited.size();
+        return new CitationStats(coverage, precision, markerCount, invalidCount);
+    }
+
+    private record CitationStats(
+            Double coverage,
+            Double precision,
+            Integer markerCount,
+            Integer invalidCount
+    ) {
+        private static CitationStats unavailable() {
+            return new CitationStats(null, null, null, null);
+        }
     }
 
     private Double refusalScore(String response, boolean shouldRefuse) {

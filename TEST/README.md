@@ -9,6 +9,7 @@
 - 使用独立评测账号、独立数据库和只读工具。
 - 不记录 Cookie、密码、API Key、Authorization 或真实用户隐私。
 - 阶段 2.2 起，普通流式聊天会推送 SSE `rag-trace` 事件，评测侧可据此调用受控只读接口 `/api/internal/rag/retrievals/{traceId}` 取回该次问答命中的 `sourceId`；当题库 `expectedSourceIds` 非空且该次检索状态为 `available` 时，`sourceRecall` 可计算，否则保持为空。
+- 引用追溯第二阶段起，流式评测请求会带 `includeSources=true`，并默认带 `includeCitations=true`；评测侧从 SSE `rag-sources` 采集本次来源列表，用于计算引用覆盖率/精确率。`AI_EVAL_INCLUDE_CITATIONS=false` 可关闭引用指令与正文 `[n]`，用于 A/B 对照。
 
 ## 运行前准备
 
@@ -29,6 +30,7 @@ $env:AI_EVAL_PASSWORD = "replace-in-local-environment"
 $env:AI_EVAL_CASE_FILE = "eval/ai-eval-smoke-12.jsonl"
 $env:AI_EVAL_MAX_CASES = "12"
 $env:AI_EVAL_MAX_TOKENS = "50000"
+$env:AI_EVAL_INCLUDE_CITATIONS = "true"
 ```
 
 ## 执行命令
@@ -101,6 +103,10 @@ mvn -B -f TEST\pom.xml "-Dtest=EvalReportRegeneratorTest" test
 - `refusalScore` 只统计 `shouldRefuse=true` 的用例。
 - 工具执行成功率只统计实际发生工具调用的记录。
 - RAG 来源召回：评测通过 SSE `rag-trace` 事件取 `traceId`，再查受控只读接口 `/api/internal/rag/retrievals/{traceId}` 得到命中来源；`sourceRecall` 仅在 `expectedSourceIds` 非空且该次检索状态为 `available` 时计算，取值等于命中的期望来源数除以期望来源数，`path: tools` 的用例不参与。
+- 引用覆盖率：`expectedSourceIds` 非空且 SSE `rag-sources` 可用时，被回答引用的期望来源数 / 期望来源数。
+- 引用精确率：被回答引用的期望来源数 / 被回答引用的来源数；回答没有引用时为 null。
+- 引用标记数 / 无效标记数：分别统计正文中全部 `[n]` 和无法映射到本次来源的编号；无效标记只计数，不改变用例通过判定。
+- 为了不让 `[n]` 干扰短语规则，事实分、禁用结论和拒答匹配前会先剥离引用标记；引用指标本身仍使用原始正文。覆盖率/精确率只做来源匹配，不能判断编号是否真的支持该句。
 
 `critical=true` 的用例会执行三次。达到 `AI_EVAL_MAX_TOKENS` 预算时会停止后续执行，但仍会生成已经完成部分的结果和报告。
 
@@ -308,4 +314,33 @@ P1 与阶段 0.1 至 0.5 已完成 RAG 用户 / 会话隔离、检索审计日�
 
 该机制与 2026-10-16 本地复测记录的一致：新召回的知识块把禁用短语本身注入上下文，模型以否定形式复述后触发短语规则。这不是回答内容或安全边界回归。温度 `0.3` 下单次运行的质量通过率波动较大，跨版本比较以召回率与事实分为准。
 
-> 2026-10-17 同日后续部署了「回答来源列表」：检索结果按 `sourceId` 去重后，以 SSE `rag-sources`（仅当请求体带 `includeSources=true`）或 `/api/care/qa` 的 `sources` 字段下发，前端在回答下方展示。本评测客户端不发送 `includeSources`，不会接收到该事件，评分链路和本报告口径均不受影响。
+> 2026-10-17 同日后续部署了「回答来源列表」：检索结果按 `sourceId` 去重后，以 SSE `rag-sources`（仅当请求体带 `includeSources=true`）或 `/api/care/qa` 的 `sources` 字段下发，前端在回答下方展示。引用追溯第二阶段起，本评测客户端改为发送 `includeSources=true` 和（默认）`includeCitations=true`，并解析 `rag-sources` 计算引用指标；评分口径见前文。
+
+### 引用追溯第二阶段复测（2026-10-17，生产）
+
+第二阶段把正文内联 `[n]`、来源持久化（`messages.sources_json`）和历史回放一起上线。生产 JAR sha256 `f47ea73519f117789fdadaa02a2bb8710030328a11278ee1b20628dfe48caca4`，服务重启后本地与公网入口均返回 `200`。
+
+- 本次运行：`eval/results/baseline-20261017-142210.md`
+- 失败清单：`eval/results/failures-20261017-142210.md`
+- 运行参数：引用指令开启，40 条正式题，52 个质量样本
+
+| 指标 | 数值 |
+| --- | ---: |
+| 质量通过率 | 90.38%（47/52） |
+| 关键事实覆盖率 | 0.9519 |
+| RAG 来源召回率 (Recall@K) | 0.9615（39 样本） |
+| 引用覆盖率 | 0.9615（39 样本） |
+| 引用精确率 | 0.9231（39 样本） |
+| 无效引用标记数 | 0 |
+| 禁用结论命中数 | 0 / 52 |
+| 基础设施失败 | 0 |
+| 首字 / 总延迟均值 | 5.82 s / 6.75 s |
+| 总延迟 P95 | 15.07 s |
+
+5 条失败逐条复核均为短语评分误伤，不是内容或安全边界回归：`pet-007` 三次（「立即带去就医」未逐字命中「立即就医」）、`plant-002`（「先不要继续浇水 / 停水」未命中「停止浇水|暂停浇水|控水」）、`rag-002`（「有剧毒」未命中「有毒」，且检索只命中 1/2 个期望来源）。
+
+本地 A/B（同机、同库、同一评分器）：引用开启（细化 Prompt）为 `92.31%`（48/52），对照关闭为 `90.38%`（47/52）；对照组自身在不同轮次间落在 `90.38%–96.15%`，说明温度 `0.3` 下单次通过率波动较大。引用侧指标在各轮稳定：覆盖率 `0.9615`、精确率约 `0.90–0.94`、无效标记 `0`。
+
+评测客户端同时做了两项健壮性调整：`rag-sources` 不再被拼进回答正文或首字延迟；SSE 流中途被连接重置时保留已收到的部分结果并记为基础设施失败，继续后续用例而不是整轮中止。
+
+生产收尾：临时评测账号及其 85 个会话、184 条消息、16 条工具日志和 92 条对话向量已删除；临时观测配置已还原并重启；`rag_retrieval_log` 与 `rag_observability_access_log` 按阶段 2.3 先例保留。

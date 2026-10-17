@@ -11,9 +11,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -220,6 +223,86 @@ class ChatMemoryServiceTest {
     }
 
     @Test
+    void writesSourcesOnlyOnAssistantMessage() {
+        service.saveMessagePair(
+                "user-a",
+                "conversation-a",
+                "绿萝叶子发黄怎么办",
+                "先检查浇水频率[1]。",
+                List.of(new RagContextService.SourceRef("kb_plant_watering", "浇水与积水")),
+                "trace-1"
+        );
+
+        assertEquals(2, repository.savedSources.size());
+        assertEquals("user", repository.savedSources.get(0).role());
+        assertNull(repository.savedSources.get(0).sourcesJson());
+        String assistantSources = repository.savedSources.get(1).sourcesJson();
+        assertNotNull(assistantSources);
+        assertTrue(assistantSources.contains("\"sourceId\":\"kb_plant_watering\""));
+        assertTrue(assistantSources.contains("\"rank\":1"));
+        assertTrue(assistantSources.contains("\"traceId\":\"trace-1\""));
+    }
+
+    @Test
+    void leavesSourcesEmptyForLegacySavePath() {
+        service.saveMessagePair("user-a", "conversation-a", "hello", "hi");
+
+        assertEquals(2, repository.savedSources.size());
+        assertNull(repository.savedSources.get(0).sourcesJson());
+        assertNull(repository.savedSources.get(1).sourcesJson());
+    }
+
+    @Test
+    void promptHistoryStripsCitationMarkersFromAssistantMessages() {
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "问题"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "答案[1]。"));
+
+        List<ChatMessage> prompt = service.buildPromptMessages(
+                "user-a", "conversation-a", null, "下一问");
+
+        assertEquals(3, prompt.size());
+        assertEquals("答案。", prompt.get(1).getContent());
+        assertEquals("下一问", prompt.get(2).getContent());
+    }
+
+    @Test
+    void summaryInputStripsCitationMarkers() throws Exception {
+        ReflectionTestUtils.setField(service, "summaryThreshold", 0L);
+        ReflectionTestUtils.setField(service, "summaryKeepRecent", 1);
+
+        LlmService llmService = mock(LlmService.class);
+        AtomicReference<String> capturedPrompt = new AtomicReference<>();
+        when(llmService.chat(anyString(), anyString())).thenAnswer(invocation -> {
+            capturedPrompt.set(invocation.getArgument(0));
+            return "摘要内容";
+        });
+        ReflectionTestUtils.setField(service, "llmService", llmService);
+
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "q1"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "a1[1]"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "q2"));
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("assistant", "a2"));
+
+        service.checkAndUpdateSummary("user-a", "conversation-a");
+
+        assertNotNull(capturedPrompt.get());
+        assertTrue(capturedPrompt.get().contains("a1"));
+        assertFalse(capturedPrompt.get().contains("[1]"));
+    }
+
+    @Test
+    void vectorSaveEventStripsCitationMarkers() {
+        service.saveMessagePair("user-a", "conversation-a", "问题", "答案[1]。");
+
+        VectorSaveEvent event = events.stream()
+                .filter(VectorSaveEvent.class::isInstance)
+                .map(VectorSaveEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals("答案。", event.getAssistantReply());
+    }
+
+    @Test
     void skipsSummaryWriteWhenConversationClearedDuringGeneration() throws Exception {
         ReflectionTestUtils.setField(service, "summaryThreshold", 0L);
         ReflectionTestUtils.setField(service, "summaryKeepRecent", 1);
@@ -251,6 +334,7 @@ class ChatMemoryServiceTest {
 
     private static final class InMemoryChatMemoryRepository implements ChatMemoryRepository {
         private final Map<String, List<ChatMessage>> conversations = new LinkedHashMap<>();
+        private final List<SavedSource> savedSources = new ArrayList<>();
 
         @Override
         public List<ChatMessage> getMessages(String userId, String conversationId) {
@@ -264,6 +348,13 @@ class ChatMemoryServiceTest {
 
         @Override
         public void addMessage(String userId, String conversationId, ChatMessage message) {
+            addMessage(userId, conversationId, message, null);
+        }
+
+        @Override
+        public void addMessage(String userId, String conversationId, ChatMessage message,
+                               String sourcesJson) {
+            savedSources.add(new SavedSource(message.getRole(), sourcesJson));
             conversations.computeIfAbsent(key(userId, conversationId), ignored -> new ArrayList<>()).add(message);
         }
 
@@ -275,6 +366,9 @@ class ChatMemoryServiceTest {
         @Override
         public boolean exists(String userId, String conversationId) {
             return conversations.containsKey(key(userId, conversationId));
+        }
+
+        private record SavedSource(String role, String sourcesJson) {
         }
 
         @Override

@@ -8,9 +8,11 @@ import com.example.demo.care.service.MedicalTriageService;
 import com.example.demo.care.service.SpringAiCareWorkflowService;
 import com.example.demo.chat.ChatMemoryService;
 import com.example.demo.chat.LlmService;
+import com.example.demo.chat.RagContextService;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpSession;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 
@@ -62,48 +65,86 @@ public class AiController {
     public SseEmitter chatStream(@RequestBody Map<String, String> request, HttpSession session) {
         String message = request.get("message");
         String systemPrompt = request.get("systemPrompt");
-        boolean includeSources = Boolean.parseBoolean(request.get("includeSources"));
+        boolean includeCitations = Boolean.parseBoolean(request.get("includeCitations"));
+        boolean includeSources = Boolean.parseBoolean(request.get("includeSources")) || includeCitations;
         String conversationId = getOrCreateConversationId(session);
         String userId = (String) session.getAttribute("user");
         SseEmitter emitter = new SseEmitter(120000L);
         CompletableFuture.runAsync(() -> {
             try {
-                llmService.chatStream(userId, conversationId, message, systemPrompt,
-                        traceId -> {
-                            try {
-                                emitter.send(SseEmitter.event()
-                                        .name("rag-trace")
-                                        .data(Map.of("traceId", traceId)));
-                            } catch (Exception e) {
-                                emitter.completeWithError(e);
-                            }
-                        },
-                        sources -> {
-                            if (!includeSources) {
-                                return;
-                            }
-                            try {
-                                emitter.send(SseEmitter.event()
-                                        .name("rag-sources")
-                                        .data(Map.of("sources", sources)));
-                            } catch (Exception e) {
-                                emitter.completeWithError(e);
-                            }
-                        },
-                        token -> {
-                            try {
-                                emitter.send(SseEmitter.event().data(token));
-                            } catch (Exception e) {
-                                emitter.completeWithError(e);
-                            }
-                        },
-                        emitter::complete);
+                Consumer<String> onTrace = traceId -> {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .name("rag-trace")
+                                .data(Map.of("traceId", traceId)));
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                };
+                Consumer<List<RagContextService.SourceRef>> onSources = sources -> {
+                    if (!includeSources) {
+                        return;
+                    }
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .name("rag-sources")
+                                .data(Map.of("sources", sources)));
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                };
+                Consumer<String> onToken = token -> {
+                    try {
+                        emitter.send(SseEmitter.event().data(token));
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                };
+                if (includeCitations) {
+                    llmService.chatStream(userId, conversationId, message, systemPrompt,
+                            onTrace, onSources, onToken, emitter::complete, true);
+                } else {
+                    llmService.chatStream(userId, conversationId, message, systemPrompt,
+                            onTrace, onSources, onToken, emitter::complete);
+                }
             } catch (Exception e) {
                 log.error("AI chat stream failed", e);
                 emitter.completeWithError(e);
             }
         });
         return emitter;
+    }
+
+    /**
+     * 历史回放：conversationId 只从 Session 取，客户端不能指定。
+     * 只返回 user/assistant 消息，system 摘要不展示。
+     */
+    @GetMapping("/chat/history")
+    public ResponseEntity<Map<String, Object>> getHistory(
+            @RequestParam(value = "limit", defaultValue = "50") int limit,
+            @RequestParam(value = "beforeId", required = false) Long beforeId,
+            HttpSession session) {
+        String userId = (String) session.getAttribute("user");
+        Map<String, Object> response = new HashMap<>();
+        if (userId == null || userId.isBlank()) {
+            response.put("success", false);
+            response.put("error", "请先登录");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .cacheControl(CacheControl.noStore())
+                    .body(response);
+        }
+
+        String conversationId = (String) session.getAttribute("conversationId");
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        var page = chatMemoryService.getHistory(userId, conversationId, beforeId, safeLimit);
+        response.put("success", true);
+        response.put("conversationId", page.conversationId());
+        response.put("messages", page.messages());
+        response.put("hasMore", page.hasMore());
+        response.put("nextBeforeId", page.nextBeforeId());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(response);
     }
 
     private String getOrCreateConversationId(HttpSession session) {

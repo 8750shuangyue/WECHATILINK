@@ -68,6 +68,43 @@ class ChatMemorySchemaIntegrationTest {
     }
 
     @Test
+    void messagesTableHasNullableSourcesJsonColumn() {
+        String nullable = jdbcTemplate.queryForObject(
+                """
+                SELECT IS_NULLABLE
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'messages'
+                  AND COLUMN_NAME = 'sources_json'
+                """,
+                String.class);
+
+        assertEquals("YES", nullable);
+    }
+
+    @Test
+    void sourcesJsonRoundTripsThroughHistoryAndIsClearedWithConversation() {
+        String conversationId = newConversationId("sources");
+        String sourcesJson = "{\"v\":1,\"traceId\":\"trace-1\",\"sources\":["
+                + "{\"sourceId\":\"kb_a\",\"title\":\"标题 A\",\"rank\":1}]}";
+
+        chatMemoryRepository.addMessage(
+                "user-a", conversationId, new ChatMessage("user", "question"));
+        chatMemoryRepository.addMessage(
+                "user-a", conversationId, new ChatMessage("assistant", "answer[1]"), sourcesJson);
+
+        var page = chatMemoryRepository.getHistory("user-a", conversationId, null, 10);
+        assertEquals(2, page.messages().size());
+        assertEquals(1, page.messages().get(1).sources().size());
+        assertEquals("kb_a", page.messages().get(1).sources().get(0).sourceId());
+        assertEquals(1, page.messages().get(1).sources().get(0).rank());
+
+        chatMemoryRepository.clear("user-a", conversationId);
+        assertTrue(chatMemoryRepository.getHistory("user-a", conversationId, null, 10)
+                .messages().isEmpty());
+    }
+
+    @Test
     void legacyUnownedConversationIsReadOnlyAndCannotBeClaimed() {
         String conversationId = newConversationId("legacy");
         conversationRepository.saveAndFlush(new Conversation(conversationId, null));

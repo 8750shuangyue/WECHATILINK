@@ -4,7 +4,9 @@ import com.example.demo.care.service.CareRecordService;
 import com.example.demo.care.service.CareReminderService;
 import com.example.demo.care.service.MedicalTriageService;
 import com.example.demo.care.service.SpringAiCareWorkflowService;
+import com.example.demo.chat.ChatHistoryEntry;
 import com.example.demo.chat.ChatMemoryService;
+import com.example.demo.chat.HistoryPage;
 import com.example.demo.chat.LlmService;
 import com.example.demo.chat.RagContextService;
 import org.junit.jupiter.api.Test;
@@ -85,6 +87,59 @@ class AiControllerSessionTest {
         assertEquals("user-a", userByMessage.get("first"));
         assertEquals("user-a", userByMessage.get("second"));
         assertEquals("user-b", userByMessage.get("third"));
+    }
+
+    @Test
+    void historyRequiresLogin() {
+        ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
+        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+
+        var response = controller.getHistory(50, null, new MockHttpSession());
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals(Boolean.FALSE, response.getBody().get("success"));
+        verifyNoInteractions(chatMemoryService);
+    }
+
+    @Test
+    void historyReturnsEmptyPageWhenSessionHasNoConversation() {
+        ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
+        when(chatMemoryService.getHistory("user-a", null, null, 50))
+                .thenReturn(new HistoryPage(null, List.of(), false, null));
+        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("user", "user-a");
+
+        var response = controller.getHistory(50, null, session);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(Boolean.TRUE, response.getBody().get("success"));
+        assertNull(response.getBody().get("conversationId"));
+        assertTrue(((List<?>) response.getBody().get("messages")).isEmpty());
+        assertEquals(Boolean.FALSE, response.getBody().get("hasMore"));
+    }
+
+    @Test
+    void historyClampsLimitAndReturnsStoredSources() {
+        ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
+        HistoryPage page = new HistoryPage("conversation-a", List.of(
+                new ChatHistoryEntry(1L, "user", "问题", "2026-10-17T12:00:00", List.of()),
+                new ChatHistoryEntry(2L, "assistant", "回答[1]", "2026-10-17T12:00:01",
+                        List.of(new RagContextService.SourceRef("kb_a", "标题 A", 1)))
+        ), false, null);
+        when(chatMemoryService.getHistory("user-a", "conversation-a", 5L, 100))
+                .thenReturn(page);
+        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("user", "user-a");
+        session.setAttribute("conversationId", "conversation-a");
+
+        var response = controller.getHistory(500, 5L, session);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("conversation-a", response.getBody().get("conversationId"));
+        assertEquals(2, ((List<?>) response.getBody().get("messages")).size());
+        verify(chatMemoryService).getHistory("user-a", "conversation-a", 5L, 100);
     }
 
     @Test
@@ -239,6 +294,42 @@ class AiControllerSessionTest {
         assertTrue(body.indexOf("event:rag-sources") < body.indexOf("hello"));
         assertTrue(body.contains("kb_plant_watering"));
         assertFalse(body.contains("documentId"));
+    }
+
+    @Test
+    void includeCitationsForcesRagSourcesEvent() throws Exception {
+        LlmService llmService = mock(LlmService.class);
+        doAnswer(invocation -> {
+            Consumer<String> trace = invocation.getArgument(4);
+            Consumer<List<RagContextService.SourceRef>> sources = invocation.getArgument(5);
+            Consumer<String> token = invocation.getArgument(6);
+            Runnable done = invocation.getArgument(7);
+            trace.accept("trace-1");
+            sources.accept(List.of(
+                    new RagContextService.SourceRef("kb_plant_watering", "浇水与积水", 1)));
+            token.accept("hello[1]");
+            done.run();
+            return null;
+        }).when(llmService).chatStream(
+                any(), any(), any(), any(), any(), any(), any(), any(), eq(true));
+        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("user", "user-a");
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        MvcResult result = mockMvc.perform(post("/api/ai/chat/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hello\",\"includeCitations\":\"true\"}")
+                        .session(session))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        result.getAsyncResult(2_000);
+        mockMvc.perform(asyncDispatch(result)).andExpect(status().isOk());
+
+        String body = result.getResponse().getContentAsString();
+        assertTrue(body.contains("event:rag-sources"));
+        assertTrue(body.contains("\"rank\":1"));
+        assertTrue(body.contains("hello[1]"));
     }
 
     @Test

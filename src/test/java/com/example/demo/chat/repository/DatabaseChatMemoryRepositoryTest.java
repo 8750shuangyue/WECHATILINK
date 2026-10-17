@@ -1,6 +1,8 @@
 package com.example.demo.chat.repository;
 
+import com.example.demo.chat.ChatHistoryEntry;
 import com.example.demo.chat.ChatMessage;
+import com.example.demo.chat.HistoryPage;
 import com.example.demo.chat.entity.Conversation;
 import com.example.demo.chat.entity.Message;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
@@ -9,15 +11,19 @@ import com.example.demo.chat.repository.mysql.MessageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,6 +58,32 @@ class DatabaseChatMemoryRepositoryTest {
         verify(messageRepository).save(messageCaptor.capture());
         assertEquals("conversation-a", messageCaptor.getValue().getConversationId());
         assertEquals("hello", messageCaptor.getValue().getContent());
+    }
+
+    @Test
+    void storesSourcesJsonOnTheMessageEntity() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+        String sourcesJson = "{\"v\":1,\"traceId\":\"trace-1\",\"sources\":[]}";
+
+        repository.addMessage("user-a", "conversation-a",
+                new ChatMessage("assistant", "answer[1]"), sourcesJson);
+
+        ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).save(messageCaptor.capture());
+        assertEquals(sourcesJson, messageCaptor.getValue().getSourcesJson());
+    }
+
+    @Test
+    void leavesSourcesJsonNullForLegacyAddMessage() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+
+        repository.addMessage("user-a", "conversation-a", new ChatMessage("user", "hello"));
+
+        ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).save(messageCaptor.capture());
+        assertNull(messageCaptor.getValue().getSourcesJson());
     }
 
     @Test
@@ -112,6 +144,70 @@ class DatabaseChatMemoryRepositoryTest {
         verify(messageRepository).deleteByConversationIdAndRoleAndContentStartingWith(
                 "conversation-a", "system", "summary");
         verify(messageRepository, never()).save(any(Message.class));
+    }
+
+    @Test
+    void returnsHistoryPageWithSourcesInAscendingOrder() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+        String sourcesJson = "{\"v\":1,\"traceId\":\"trace-1\",\"sources\":["
+                + "{\"sourceId\":\"kb_a\",\"title\":\"标题 A\",\"rank\":1}]}";
+        Message oldest = message(1L, "user", "q1", null);
+        Message middle = message(2L, "assistant", "a1", null);
+        Message newest = message(3L, "assistant", "a2[1]", sourcesJson);
+        when(messageRepository.findByConversationIdAndRoleInOrderByIdDesc(
+                eq("conversation-a"), eq(List.of("user", "assistant")), any(Pageable.class)))
+                .thenReturn(List.of(newest, middle, oldest));
+
+        HistoryPage page = repository.getHistory("user-a", "conversation-a", null, 2);
+
+        assertTrue(page.hasMore());
+        assertEquals(2L, page.nextBeforeId());
+        assertEquals(2, page.messages().size());
+        assertEquals(2L, page.messages().get(0).id());
+        assertEquals(3L, page.messages().get(1).id());
+        assertEquals("kb_a", page.messages().get(1).sources().get(0).sourceId());
+        assertEquals(1, page.messages().get(1).sources().get(0).rank());
+    }
+
+    @Test
+    void appliesBeforeIdCursorAndToleratesBrokenSourcesJson() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+        Message older = message(1L, "user", "q1", null);
+        Message newer = message(2L, "assistant", "a1", "{broken");
+        when(messageRepository.findByConversationIdAndRoleInAndIdLessThanOrderByIdDesc(
+                eq("conversation-a"), eq(List.of("user", "assistant")), eq(3L),
+                any(Pageable.class)))
+                .thenReturn(List.of(newer, older));
+
+        HistoryPage page = repository.getHistory("user-a", "conversation-a", 3L, 50);
+
+        assertFalse(page.hasMore());
+        assertNull(page.nextBeforeId());
+        assertEquals(2, page.messages().size());
+        assertEquals(1L, page.messages().get(0).id());
+        assertTrue(page.messages().get(1).sources().isEmpty());
+    }
+
+    @Test
+    void returnsEmptyHistoryForAnotherUserWithoutLeakingExistence() {
+        when(conversationRepository.findById("conversation-a"))
+                .thenReturn(Optional.of(new Conversation("conversation-a", "user-a")));
+
+        HistoryPage page = repository.getHistory("user-b", "conversation-a", null, 50);
+
+        assertTrue(page.messages().isEmpty());
+        assertFalse(page.hasMore());
+        assertNull(page.nextBeforeId());
+        verifyNoInteractions(messageRepository);
+    }
+
+    private Message message(Long id, String role, String content, String sourcesJson) {
+        Message message = new Message(
+                "conversation-a", role, content, LocalDateTime.now(), sourcesJson);
+        message.setId(id);
+        return message;
     }
 
     @Test

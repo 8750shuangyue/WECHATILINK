@@ -23,14 +23,27 @@ public class Message {
     @Column(name = "timestamp", nullable = false)
     private LocalDateTime timestamp;
 
+    /**
+     * 助手消息的知识来源快照（JSON 信封，见 SourceRefCodec）。
+     * 只写 assistant 行；用户消息和摘要消息为 NULL。
+     */
+    @Column(name = "sources_json", columnDefinition = "TEXT")
+    private String sourcesJson;
+
     public Message() {
     }
 
     public Message(String conversationId, String role, String content, LocalDateTime timestamp) {
+        this(conversationId, role, content, timestamp, null);
+    }
+
+    public Message(String conversationId, String role, String content, LocalDateTime timestamp,
+                   String sourcesJson) {
         this.conversationId = conversationId;
         this.role = role;
         this.content = content;
         this.timestamp = timestamp;
+        this.sourcesJson = sourcesJson;
     }
 
     public Long getId() {
@@ -71,5 +84,13 @@ public class Message {
 
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getSourcesJson() {
+        return sourcesJson;
+    }
+
+    public void setSourcesJson(String sourcesJson) {
+        this.sourcesJson = sourcesJson;
     }
 }

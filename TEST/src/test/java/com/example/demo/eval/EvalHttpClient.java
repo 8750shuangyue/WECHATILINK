@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
@@ -97,6 +98,8 @@ public final class EvalHttpClient implements AutoCloseable {
     public HttpResult chatStream(String message) throws IOException, InterruptedException {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("message", message);
+        body.put("includeSources", "true");
+        body.put("includeCitations", Boolean.toString(config.includeCitations()));
 
         HttpResult result = executeWithRetry(() -> streamOnce(message, body.toString()));
         if (result.status() == 401) {
@@ -147,81 +150,134 @@ public final class EvalHttpClient implements AutoCloseable {
                     List.of(),
                     "unavailable",
                     "Stream request failed with HTTP " + response.statusCode(),
-                    0
+                    0,
+                    List.of(),
+                    "unavailable"
             );
         }
 
-        StringBuilder responseText = new StringBuilder();
+        StreamState state = new StreamState();
         StringBuilder eventData = new StringBuilder();
         String currentEvent = "message";
-        String traceId = null;
-        long firstTokenMs = -1;
+        String streamError = null;
 
         try (Stream<String> lines = response.body()) {
-            for (String line : (Iterable<String>) lines::iterator) {
-                if (line.isEmpty()) {
-                    String eventName = currentEvent;
-                    String payload = eventData.toString();
-                    if (!payload.isEmpty()) {
-                        if ("rag-trace".equals(eventName)) {
-                            traceId = parseTraceId(payload);
-                        } else if (!"[DONE]".equals(payload.trim())) {
-                            String text = decodeSsePayload(payload);
-                            if (!text.isEmpty()) {
-                                if (firstTokenMs < 0) {
-                                    firstTokenMs = elapsedMillis(startedAt);
-                                }
-                                responseText.append(text);
-                            }
+            try {
+                for (String line : (Iterable<String>) lines::iterator) {
+                    if (line.isEmpty()) {
+                        handleSseEvent(currentEvent, eventData.toString(), state, startedAt);
+                        currentEvent = "message";
+                        eventData.setLength(0);
+                    } else if (line.startsWith("event:")) {
+                        currentEvent = line.substring("event:".length()).trim();
+                    } else if (line.startsWith("data:")) {
+                        String payload = line.substring("data:".length());
+                        if (payload.startsWith(" ")) {
+                            payload = payload.substring(1);
                         }
+                        if (eventData.length() > 0) {
+                            eventData.append('\n');
+                        }
+                        eventData.append(payload);
                     }
-                    currentEvent = "message";
-                    eventData.setLength(0);
-                } else if (line.startsWith("event:")) {
-                    currentEvent = line.substring("event:".length()).trim();
-                } else if (line.startsWith("data:")) {
-                    String payload = line.substring("data:".length());
-                    if (payload.startsWith(" ")) {
-                        payload = payload.substring(1);
-                    }
-                    if (eventData.length() > 0) {
-                        eventData.append('\n');
-                    }
-                    eventData.append(payload);
                 }
+            } catch (UncheckedIOException exception) {
+                // 生产 HTTP 链路可能在流中途重置；保留已收到的部分结果，
+                // 让 runner 记为基础设施失败并继续后续用例，而不是整轮中止。
+                Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+                streamError = "Stream interrupted: " + cause.getClass().getSimpleName()
+                        + (cause.getMessage() == null ? "" : ": " + cause.getMessage());
             }
         }
         if (eventData.length() > 0) {
-            String payload = eventData.toString();
-            if ("rag-trace".equals(currentEvent)) {
-                traceId = parseTraceId(payload);
-            } else if (!"[DONE]".equals(payload.trim())) {
-                String text = decodeSsePayload(payload);
-                if (!text.isEmpty()) {
-                    if (firstTokenMs < 0) {
-                        firstTokenMs = elapsedMillis(startedAt);
-                    }
-                    responseText.append(text);
-                }
-            }
+            handleSseEvent(currentEvent, eventData.toString(), state, startedAt);
         }
 
-        RetrievalLookup retrieval = fetchRetrieval(traceId);
+        RetrievalLookup retrieval = fetchRetrieval(state.traceId);
 
         return new HttpResult(
                 response.statusCode(),
-                responseText.toString(),
-                firstTokenMs,
+                state.responseText.toString(),
+                state.firstTokenMs,
                 elapsedMillis(startedAt),
-                traceId,
+                state.traceId,
                 null,
                 null,
                 List.of(),
                 retrieval.records(),
                 retrieval.status(),
-                null,
-                0
+                streamError,
+                0,
+                state.sources,
+                state.sourcesSeen ? "available" : "unavailable"
         );
+    }
+
+    /**
+     * 命名事件分派：只有正文事件（message/无事件名）才拼入回答并记录首字延迟。
+     * rag-sources 绝不能进入 response，否则会污染评分与延迟口径。
+     */
+    private void handleSseEvent(String eventName, String payload, StreamState state, long startedAt) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+        if ("rag-trace".equals(eventName)) {
+            state.traceId = parseTraceId(payload);
+            return;
+        }
+        if ("rag-sources".equals(eventName)) {
+            List<SourceRecord> parsed = parseSources(payload);
+            if (parsed != null) {
+                state.sources = parsed;
+                state.sourcesSeen = true;
+            }
+            return;
+        }
+        if (!"message".equals(eventName)) {
+            // 未知命名事件直接忽略，避免未来新增事件污染正文。
+            return;
+        }
+        if ("[DONE]".equals(payload.trim())) {
+            return;
+        }
+        String text = decodeSsePayload(payload);
+        if (!text.isEmpty()) {
+            if (state.firstTokenMs < 0) {
+                state.firstTokenMs = elapsedMillis(startedAt);
+            }
+            state.responseText.append(text);
+        }
+    }
+
+    private List<SourceRecord> parseSources(String payload) {
+        try {
+            JsonNode json = objectMapper.readTree(payload);
+            JsonNode array = json.path("sources");
+            if (!array.isArray()) {
+                return null;
+            }
+            List<SourceRecord> sources = new ArrayList<>();
+            for (JsonNode item : array) {
+                sources.add(new SourceRecord(
+                        textOrNull(item, "sourceId"),
+                        textOrNull(item, "title"),
+                        item.hasNonNull("rank") && item.path("rank").isNumber()
+                                ? item.path("rank").intValue()
+                                : null
+                ));
+            }
+            return List.copyOf(sources);
+        } catch (IOException exception) {
+            return null;
+        }
+    }
+
+    private static final class StreamState {
+        private final StringBuilder responseText = new StringBuilder();
+        private String traceId;
+        private long firstTokenMs = -1;
+        private boolean sourcesSeen;
+        private List<SourceRecord> sources = List.of();
     }
 
     private HttpResult toolsOnce(String requestBody) throws IOException, InterruptedException {
@@ -246,7 +302,9 @@ public final class EvalHttpClient implements AutoCloseable {
                     List.of(),
                     "not_applicable",
                     "Tool request failed with HTTP " + response.statusCode(),
-                    0
+                    0,
+                    List.of(),
+                    "not_applicable"
             );
         }
 
@@ -273,7 +331,9 @@ public final class EvalHttpClient implements AutoCloseable {
                 List.of(),
                 "not_applicable",
                 error,
-                0
+                0,
+                List.of(),
+                "not_applicable"
         );
     }
 
@@ -483,6 +543,13 @@ public final class EvalHttpClient implements AutoCloseable {
         }
     }
 
+    public record SourceRecord(
+            String sourceId,
+            String title,
+            Integer rank
+    ) {
+    }
+
     public record HttpResult(
             int status,
             String response,
@@ -495,13 +562,17 @@ public final class EvalHttpClient implements AutoCloseable {
             List<RetrievalRecord> retrieval,
             String retrievalStatus,
             String error,
-            int retryCount
+            int retryCount,
+            List<SourceRecord> sources,
+            String sourcesStatus
     ) {
         public HttpResult {
             response = response == null ? "" : response;
             toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
             retrieval = retrieval == null ? List.of() : List.copyOf(retrieval);
             retrievalStatus = retrievalStatus == null ? "unavailable" : retrievalStatus;
+            sources = sources == null ? List.of() : List.copyOf(sources);
+            sourcesStatus = sourcesStatus == null ? "unavailable" : sourcesStatus;
         }
 
         public HttpResult withRetryCount(int value) {
@@ -517,7 +588,9 @@ public final class EvalHttpClient implements AutoCloseable {
                     retrieval,
                     retrievalStatus,
                     error,
-                    value
+                    value,
+                    sources,
+                    sourcesStatus
             );
         }
     }

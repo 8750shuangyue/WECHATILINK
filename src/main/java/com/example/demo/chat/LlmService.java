@@ -17,6 +17,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
@@ -43,6 +44,13 @@ public class LlmService {
     @Autowired
     @Lazy
     private WeatherTool weatherTool;
+
+    /**
+     * 内联引用的全局开关。关闭后即使调用方开启 includeCitations，
+     * 也不追加引用指令、不改变上下文格式，便于线上快速回滚。
+     */
+    @Value("${chat.citations.enabled:true}")
+    private boolean citationsEnabled = true;
 
     public LlmService(DashScopeConfig config, ChatMemoryService chatMemoryService) {
         this.config = config;
@@ -151,6 +159,19 @@ public class LlmService {
                            Consumer<String> onRetrievalTrace,
                            Consumer<List<RagContextService.SourceRef>> onSources,
                            Consumer<String> onToken, Runnable onDone) throws Exception {
+        chatStream(userId, conversationId, userMessage, systemPrompt,
+                onRetrievalTrace, onSources, onToken, onDone, false);
+    }
+
+    /**
+     * @param includeCitations true 时按来源编号构建上下文，并要求模型在正文中标注 [n]。
+     */
+    public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onRetrievalTrace,
+                           Consumer<List<RagContextService.SourceRef>> onSources,
+                           Consumer<String> onToken, Runnable onDone,
+                           boolean includeCitations) throws Exception {
+        boolean citationEnabled = includeCitations && citationsEnabled;
         String effectivePrompt = systemPrompt;
 
         // 普通流式对话没有工具调用能力，天气这类强实时需求需要提前取数注入，
@@ -171,9 +192,17 @@ public class LlmService {
         }
 
         JSONArray messages = new JSONArray();
+        List<RagContextService.SourceRef> retrievedSources = List.of();
+        String retrievalTraceId = null;
         if (conversationId != null && !conversationId.isBlank()) {
-            String ragContext = retrieveRagContext(
-                    userId, userMessage, conversationId, onRetrievalTrace, onSources);
+            RetrievalResult retrieval = retrieveRagContext(
+                    userId, userMessage, conversationId, onRetrievalTrace, onSources, citationEnabled);
+            String ragContext = retrieval.context();
+            retrievedSources = retrieval.sources();
+            retrievalTraceId = retrieval.traceId();
+            if (citationEnabled) {
+                ragContext = CitationPrompt.appendTo(ragContext, retrievedSources.size());
+            }
             List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
                     userId,
                     conversationId,
@@ -202,6 +231,9 @@ public class LlmService {
             user.put("content", userMessage);
             messages.add(user);
         }
+
+        final List<RagContextService.SourceRef> savedSources = retrievedSources;
+        final String savedTraceId = retrievalTraceId;
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", config.getModel());
@@ -259,7 +291,13 @@ public class LlmService {
 
             if (conversationId != null && !conversationId.isBlank() && fullReply.length() > 0) {
                 try {
-                    chatMemoryService.saveMessagePair(userId, conversationId, userMessage, fullReply.toString());
+                    if (savedSources == null || savedSources.isEmpty()) {
+                        chatMemoryService.saveMessagePair(userId, conversationId, userMessage,
+                                fullReply.toString());
+                    } else {
+                        chatMemoryService.saveMessagePair(userId, conversationId, userMessage,
+                                fullReply.toString(), savedSources, savedTraceId);
+                    }
                 } catch (Exception e) {
                     logger.error("Failed to save streaming conversation memory, conversationId: {}",
                             conversationId, e);
@@ -278,6 +316,14 @@ public class LlmService {
     public String chatWithMemory(String userId, String conversationId, String userMessage,
                                  String systemPrompt,
                                  Consumer<List<RagContextService.SourceRef>> onSources) throws IOException {
+        return chatWithMemory(userId, conversationId, userMessage, systemPrompt, onSources, false);
+    }
+
+    public String chatWithMemory(String userId, String conversationId, String userMessage,
+                                 String systemPrompt,
+                                 Consumer<List<RagContextService.SourceRef>> onSources,
+                                 boolean includeCitations) throws IOException {
+        boolean citationEnabled = includeCitations && citationsEnabled;
         logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}", userId, conversationId, userMessage);
 
         String effectivePrompt = systemPrompt;
@@ -298,9 +344,13 @@ public class LlmService {
             }
         }
 
-        String ragContext = retrieveRagContext(userId, userMessage, conversationId,
+        RetrievalResult retrieval = retrieveRagContext(userId, userMessage, conversationId,
                 ignored -> {
-                }, onSources);
+                }, onSources, citationEnabled);
+        String ragContext = retrieval.context();
+        if (citationEnabled) {
+            ragContext = CitationPrompt.appendTo(ragContext, retrieval.sources().size());
+        }
 
         List<ChatMessage> promptMessages = chatMemoryService.buildPromptMessages(
                 userId, conversationId, effectivePrompt, ragContext, userMessage);
@@ -320,50 +370,47 @@ public class LlmService {
         logger.debug("Full request with history: {}", JSON.toJSONString(requestBody));
         
         String reply = executeChatRequest(requestBody);
-        chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
-        
+        if (retrieval.sources().isEmpty()) {
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply);
+        } else {
+            chatMemoryService.saveMessagePair(userId, conversationId, userMessage, reply,
+                    retrieval.sources(), retrieval.traceId());
+        }
+
         return reply;
     }
     
-    private String retrieveRagContext(String userId, String query, String conversationId) {
-        return retrieveRagContext(userId, query, conversationId, ignored -> {
-        }, ignored -> {
-        });
-    }
-
-    private String retrieveRagContext(String userId, String query, String conversationId,
-                                      Consumer<String> onRetrievalTrace) {
-        return retrieveRagContext(userId, query, conversationId, onRetrievalTrace, ignored -> {
-        });
-    }
-
-    private String retrieveRagContext(String userId, String query, String conversationId,
-                                      Consumer<String> onRetrievalTrace,
-                                      Consumer<List<RagContextService.SourceRef>> onSources) {
+    private RetrievalResult retrieveRagContext(String userId, String query, String conversationId,
+                                               Consumer<String> onRetrievalTrace,
+                                               Consumer<List<RagContextService.SourceRef>> onSources,
+                                               boolean citationEnabled) {
         if (ragContextService == null) {
             if (onSources != null) {
                 onSources.accept(List.of());
             }
-            return "";
+            return new RetrievalResult("", List.of(), null);
         }
-        RagContextService.ContextResult contextResult =
-                ragContextService.buildContextWithTrace(userId, conversationId, query);
+        RagContextService.ContextResult contextResult = citationEnabled
+                ? ragContextService.buildContextWithTrace(userId, conversationId, query, true)
+                : ragContextService.buildContextWithTrace(userId, conversationId, query);
         String ragContext;
         List<RagContextService.SourceRef> sources = List.of();
+        String traceId = null;
         if (contextResult == null) {
             // Keep compatibility with older service implementations and test doubles.
             ragContext = ragContextService.buildContext(userId, conversationId, query);
         } else {
             ragContext = contextResult.context();
-            sources = contextResult.sources();
+            sources = contextResult.sources() == null ? List.of() : contextResult.sources();
+            traceId = contextResult.traceId();
             if (onRetrievalTrace != null
-                    && contextResult.traceId() != null
-                    && !contextResult.traceId().isBlank()) {
-                onRetrievalTrace.accept(contextResult.traceId());
+                    && traceId != null
+                    && !traceId.isBlank()) {
+                onRetrievalTrace.accept(traceId);
             }
         }
         if (onSources != null) {
-            onSources.accept(sources == null ? List.of() : sources);
+            onSources.accept(sources);
         }
         if (ragContext == null) {
             ragContext = "";
@@ -371,7 +418,12 @@ public class LlmService {
         if (!ragContext.isEmpty()) {
             logger.info("RAG context retrieved, length: {} chars", ragContext.length());
         }
-        return ragContext;
+        return new RetrievalResult(ragContext, sources, traceId);
+    }
+
+    private record RetrievalResult(String context,
+                                   List<RagContextService.SourceRef> sources,
+                                   String traceId) {
     }
     
     private String parseResponse(String responseBody) {

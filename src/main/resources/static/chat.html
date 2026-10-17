@@ -79,10 +79,15 @@ capabilities.forEach(function(c) {
 });
 
 var imageBase64 = null;
+var historyLoadPromise = Promise.resolve();
 
 fetch('/api/auth/me').then(r => r.json()).then(data => {
-    if (data.code === 200) document.getElementById('greeting').textContent = data.data.userName;
-    else location.href = '/login';
+    if (data.code === 200) {
+        document.getElementById('greeting').textContent = data.data.userName;
+        historyLoadPromise = loadHistory();
+    } else {
+        location.href = '/login';
+    }
 });
 
 function addMessage(text, dir, from, time) {
@@ -202,6 +207,109 @@ function addStreamingBubble() {
     return div;
 }
 
+function formatHistoryTime(value) {
+    if (!value) return '';
+    var text = String(value).replace('T', ' ');
+    return text.length >= 16 ? text.slice(5, 16) : text;
+}
+
+function createHistoryUserMessage(message) {
+    var div = document.createElement('div');
+    div.className = 'msg user-msg';
+    var bubble = document.createElement('div');
+    bubble.className = 'msg-bubble user-bubble';
+    bubble.style.whiteSpace = 'pre-wrap';
+    var meta = document.createElement('div');
+    meta.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:3px;';
+    meta.textContent = '我' + (message.timestamp ? ' ' + formatHistoryTime(message.timestamp) : '');
+    bubble.appendChild(meta);
+    bubble.appendChild(document.createTextNode(
+        message.content == null ? '' : String(message.content)));
+    div.appendChild(bubble);
+    return div;
+}
+
+function createHistoryAssistantMessage(message) {
+    var div = document.createElement('div');
+    div.className = 'msg bot-msg';
+    var bubble = document.createElement('div');
+    bubble.className = 'msg-bubble bot-bubble';
+    var meta = document.createElement('div');
+    meta.style.cssText = 'font-size:11px;color:#4a9;margin-bottom:3px;';
+    meta.textContent = 'AI' + (message.timestamp ? ' ' + formatHistoryTime(message.timestamp) : '');
+    bubble.appendChild(meta);
+
+    var content = document.createElement('div');
+    var sources = Array.isArray(message.sources) ? message.sources : [];
+    var idPrefix = 'hist-' + message.id;
+    renderAnswerWithCitations(
+        content, message.content == null ? '' : String(message.content), sources,
+        {idPrefix: idPrefix});
+    bubble.appendChild(content);
+    div.appendChild(bubble);
+    renderSourcesBlock(div, sources, {idPrefix: idPrefix});
+    return div;
+}
+
+function createLoadEarlierButton(beforeId) {
+    var wrap = document.createElement('div');
+    wrap.className = 'load-earlier-wrap';
+    wrap.style.cssText = 'text-align:center;margin:8px 0;';
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'quick-chip';
+    button.textContent = '加载更早消息';
+    button.addEventListener('click', function () { loadEarlier(beforeId, wrap); });
+    wrap.appendChild(button);
+    return wrap;
+}
+
+async function loadEarlier(beforeId, wrap) {
+    if (!beforeId) return;
+    var box = document.getElementById('chatMessages');
+    try {
+        var res = await fetch('/api/ai/chat/history?limit=50&beforeId=' + encodeURIComponent(beforeId),
+            {cache: 'no-store'});
+        if (!res.ok) return;
+        var data = await res.json();
+        if (!data || !data.success || !Array.isArray(data.messages) || !data.messages.length) return;
+
+        var oldHeight = box.scrollHeight;
+        var oldTop = box.scrollTop;
+        var fragment = document.createDocumentFragment();
+        data.messages.forEach(function (message) {
+            if (message.role === 'user') fragment.appendChild(createHistoryUserMessage(message));
+            else if (message.role === 'assistant') fragment.appendChild(createHistoryAssistantMessage(message));
+        });
+        if (data.hasMore) fragment.appendChild(createLoadEarlierButton(data.nextBeforeId));
+        if (wrap && wrap.parentNode === box) box.removeChild(wrap);
+        box.insertBefore(fragment, box.firstChild);
+        box.scrollTop = oldTop + (box.scrollHeight - oldHeight);
+    } catch (e) {
+        // 加载更早消息失败时保持当前视图
+    }
+}
+
+async function loadHistory() {
+    try {
+        var res = await fetch('/api/ai/chat/history?limit=50', {cache: 'no-store'});
+        if (!res.ok) return;
+        var data = await res.json();
+        if (!data || !data.success || !Array.isArray(data.messages) || !data.messages.length) return;
+
+        var box = document.getElementById('chatMessages');
+        box.innerHTML = '';
+        data.messages.forEach(function (message) {
+            if (message.role === 'user') box.appendChild(createHistoryUserMessage(message));
+            else if (message.role === 'assistant') box.appendChild(createHistoryAssistantMessage(message));
+        });
+        if (data.hasMore) box.insertBefore(createLoadEarlierButton(data.nextBeforeId), box.firstChild);
+        box.scrollTop = box.scrollHeight;
+    } catch (e) {
+        // 历史接口不可用时静默降级，不阻塞聊天
+    }
+}
+
 function addBotText(text, small) {
     var div = document.createElement('div');
     div.className = 'msg bot-msg';
@@ -258,6 +366,7 @@ async function sendTextWithTools(text) {
 }
 
 async function sendText() {
+    await historyLoadPromise;
     var text = document.getElementById('msgInput').value.trim();
     if (!text && !imageBase64) { showToast('请输入消息或选择图片'); return; }
 
@@ -282,10 +391,15 @@ async function sendText() {
             var liveMsg = addStreamingBubble();
             var liveBubble = liveMsg.querySelector('.msg-bubble');
             var sources = [];
+            var liveId = 'live-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
             var res = await fetch('/api/ai/chat/stream', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ message: text, includeSources: 'true' })
+                body: JSON.stringify({
+                    message: text,
+                    includeSources: 'true',
+                    includeCitations: 'true'
+                })
             });
             if (!res.ok || !res.body) {
                 liveBubble.textContent = '连接失败，请稍后再试';
@@ -296,6 +410,17 @@ async function sendText() {
             var decoder = new TextDecoder();
             var buf = '';
             var acc = '';
+            var renderPending = false;
+            var scheduleLiveRender = function () {
+                if (renderPending) return;
+                renderPending = true;
+                requestAnimationFrame(function () {
+                    renderPending = false;
+                    renderAnswerWithCitations(liveBubble, acc, sources, {idPrefix: liveId});
+                    document.getElementById('chatMessages').scrollTop =
+                        document.getElementById('chatMessages').scrollHeight;
+                });
+            };
             while (true) {
                 var r = await reader.read();
                 if (r.done) break;
@@ -333,23 +458,34 @@ async function sendText() {
                     } catch (e2) {
                         acc += data;
                     }
-                    liveBubble.textContent = acc;
-                    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+                    scheduleLiveRender();
                 }
             }
-            if (!acc) liveBubble.textContent = 'AI 没有回复，请稍后再试';
-            else renderSourcesBlock(liveMsg, sources);
+            if (!acc) {
+                liveBubble.textContent = 'AI 没有回复，请稍后再试';
+            } else {
+                renderAnswerWithCitations(liveBubble, acc, sources, {idPrefix: liveId});
+                renderSourcesBlock(liveMsg, sources, {idPrefix: liveId});
+            }
         } else {
             var res = await fetch('/api/care/qa', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ question: '请分析这张图片' })
+                body: JSON.stringify({ question: '请分析这张图片', includeCitations: true })
             });
             var x = await res.json();
             var reply = (x.data && x.data.reply) ? x.data.reply : null;
             if (reply) {
-                var replyMsg = addMessage(reply, 'in', 'AI', new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
-                renderSourcesBlock(replyMsg, x.data && x.data.sources);
+                var replyMsg = createHistoryAssistantMessage({
+                    id: 'care-' + Date.now(),
+                    role: 'assistant',
+                    content: reply,
+                    sources: (x.data && x.data.sources) || [],
+                    timestamp: null
+                });
+                document.getElementById('chatMessages').appendChild(replyMsg);
+                document.getElementById('chatMessages').scrollTop =
+                    document.getElementById('chatMessages').scrollHeight;
             } else {
                 showToast(x.error || 'AI 没有回复，请稍后再试');
             }
@@ -487,6 +623,6 @@ async function logout() {
     }
 </style>
 <script src="/js/guard.js"></script>
-<script src="/js/common.js"></script>
+<script src="/js/common.js?v=20261017"></script>
 </body>
 </html>

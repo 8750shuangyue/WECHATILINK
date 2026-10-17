@@ -139,6 +139,7 @@ public final class EvalReportWriter {
         markdown.append("- TopK：").append(config.topK()).append('\n');
         markdown.append("- 相似度阈值：").append(config.similarityThreshold()).append('\n');
         markdown.append("- Embedding 模型：").append(config.embeddingModel()).append('\n');
+        markdown.append("- 引用指令：").append(config.includeCitations() ? "开启" : "关闭").append('\n');
         markdown.append("- 允许工具：")
                 .append(config.allowedTools().isEmpty() ? "无" : String.join(", ", config.allowedTools()))
                 .append('\n');
@@ -199,6 +200,19 @@ public final class EvalReportWriter {
                 summary.averageSourceRecall(),
                 metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.sourceRecall)
         );
+        appendMetric(
+                markdown,
+                "引用覆盖率",
+                summary.averageCitationCoverage(),
+                metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.citationCoverage)
+        );
+        appendMetric(
+                markdown,
+                "引用精确率",
+                summary.averageCitationPrecision(),
+                metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.citationPrecision)
+        );
+        markdown.append("| 无效引用标记数 | ").append(summary.citationInvalidMarkers()).append(" | - |\n");
         markdown.append("| 禁用结论命中数 | ").append(summary.forbiddenClaimHits()).append(" | ")
                 .append(summary.qualityCount()).append(" |\n");
         markdown.append("| 禁用工具命中数 | ").append(summary.forbiddenToolHits()).append(" | ")
@@ -249,6 +263,9 @@ public final class EvalReportWriter {
         markdown.append("- RAG 来源召回：评测通过 SSE `rag-trace` 事件取 `traceId`，再查受控只读接口 ")
                 .append("`/api/internal/rag/retrievals/{traceId}` 获取命中来源；仅当题库 `expectedSourceIds` 非空且检索状态为 ")
                 .append("`available` 时计算 `sourceRecall`，`path: tools` 的用例不参与。\n");
+        markdown.append("- 引用指标：通过 SSE `rag-sources` 获取本次来源列表；覆盖率 = 被回答引用的期望来源数 / 期望来源数，")
+                .append("精确率 = 被回答引用的期望来源数 / 被回答引用的来源数。只做来源匹配，无法判断编号是否真的支持该句；")
+                .append("无效编号只计数，不改变通过判定。\n");
         markdown.append("- 普通流式聊天：接口不返回 Token 用量，本报告按回答长度给出估算值，不能替代服务端账单。\n");
         markdown.append("- 成本：仅按 `AI_EVAL_PRICE_PER_MILLION_TOKENS` 和计费口径 Token 估算，币种由执行人员自行统一。\n\n");
 
@@ -304,6 +321,15 @@ public final class EvalReportWriter {
                 markdown.append("- 工具成功率：").append(decimal(result.autoScore.toolSuccessRate)).append('\n');
                 markdown.append("- 拒答得分：").append(decimal(result.autoScore.refusalScore)).append('\n');
                 markdown.append("- 来源召回：").append(decimal(result.autoScore.sourceRecall)).append('\n');
+                markdown.append("- 引用覆盖率：").append(decimal(result.autoScore.citationCoverage)).append('\n');
+                markdown.append("- 引用精确率：").append(decimal(result.autoScore.citationPrecision)).append('\n');
+                markdown.append("- 引用标记数：")
+                        .append(result.autoScore.citationMarkerCount == null
+                                ? "-" : result.autoScore.citationMarkerCount)
+                        .append("，无效：")
+                        .append(result.autoScore.citationInvalidCount == null
+                                ? "-" : result.autoScore.citationInvalidCount)
+                        .append('\n');
             }
             markdown.append("- 工具调用：").append(result.toolCalls.size()).append('\n');
             markdown.append("\n回答摘录：\n\n```text\n")
@@ -378,6 +404,19 @@ public final class EvalReportWriter {
                         qualityResults,
                         result -> result.autoScore.sourceRecall
                 ),
+                average(
+                        qualityResults,
+                        result -> result.autoScore.citationCoverage
+                ),
+                average(
+                        qualityResults,
+                        result -> result.autoScore.citationPrecision
+                ),
+                qualityResults.stream()
+                        .map(result -> result.autoScore.citationInvalidCount)
+                        .filter(Objects::nonNull)
+                        .mapToLong(Integer::longValue)
+                        .sum(),
                 qualityResults.stream()
                         .filter(result -> Boolean.TRUE.equals(result.autoScore.forbiddenClaimHit))
                         .count(),
@@ -579,6 +618,9 @@ public final class EvalReportWriter {
             Double averageToolSuccessRate,
             Double averageRefusalScore,
             Double averageSourceRecall,
+            Double averageCitationCoverage,
+            Double averageCitationPrecision,
+            long citationInvalidMarkers,
             long forbiddenClaimHits,
             long forbiddenToolHits,
             long infrastructureErrors,

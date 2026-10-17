@@ -301,6 +301,68 @@ class LlmServiceStreamingMemoryTest {
     }
 
     @Test
+    void citationModeAppendsInstructionsAndPersistsSources() throws Exception {
+        response.set(new StreamResponse(200,
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Doudou\"}}]}\n\n"
+                        + "data: {\"choices\":[{\"delta\":{\"content\":\" is 5.[1]\"}}]}\n\n"
+                        + "data: [DONE]\n\n"
+        ));
+        String baseContext = "公共知识库信息（以下编号可在回答中引用）：\n"
+                + "[1] 犬猫年龄与体型判断\n狗的正常年龄判断需要结合体型。";
+        String expectedContext = CitationPrompt.appendTo(baseContext, 1);
+        ChatMemoryService memoryService = mock(ChatMemoryService.class);
+        when(memoryService.buildPromptMessages(
+                "user-a",
+                "conversation-a",
+                null,
+                expectedContext,
+                "How old is Doudou?"
+        )).thenReturn(List.of(
+                new ChatMessage("system", "参考以下检索结果：\n" + expectedContext),
+                new ChatMessage("user", "How old is Doudou?")
+        ));
+        RagContextService ragContextService = mock(RagContextService.class);
+        RagContextService.SourceRef source =
+                new RagContextService.SourceRef("kb_pet_age", "犬猫年龄与体型判断", 1);
+        when(ragContextService.buildContextWithTrace(
+                "user-a", "conversation-a", "How old is Doudou?", true))
+                .thenReturn(new RagContextService.ContextResult(
+                        baseContext, "trace-1", List.of(source)));
+        LlmService service = new LlmService(config(), memoryService);
+        ReflectionTestUtils.setField(service, "ragContextService", ragContextService);
+        List<String> tokens = new ArrayList<>();
+
+        service.chatStream(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                null,
+                ignored -> {
+                },
+                ignored -> {
+                },
+                tokens::add,
+                () -> {
+                },
+                true
+        );
+
+        JSONObject sent = JSONObject.parseObject(requestBody.get());
+        String sentSystem = sent.getJSONArray("messages").getJSONObject(0).getString("content");
+        assertTrue(sentSystem.contains("【引用要求】"));
+        assertTrue(sentSystem.contains("1 到 1"));
+        assertEquals("Doudou is 5.[1]", String.join("", tokens));
+        verify(memoryService).saveMessagePair(
+                "user-a",
+                "conversation-a",
+                "How old is Doudou?",
+                "Doudou is 5.[1]",
+                List.of(source),
+                "trace-1"
+        );
+    }
+
+    @Test
     void emitsSourcesAfterTraceBeforeTheFirstToken() throws Exception {
         response.set(new StreamResponse(200,
                 "data: {\"choices\":[{\"delta\":{\"content\":\"Doudou\"}}]}\n\n"

@@ -33,6 +33,26 @@ class EvalScorerTest {
     }
 
     @Test
+    void negatedForbiddenClaimsRecognizeBuXuYao() {
+        EvalCase evalCase = evalCase(
+                "stream",
+                List.of(),
+                List.of("等到明天"),
+                List.of(),
+                List.of()
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResult("不需要等到明天，应立即就医。"),
+                0.75
+        );
+
+        assertFalse(result.autoScore().forbiddenClaimHit);
+        assertTrue(result.passed());
+    }
+
+    @Test
     void positiveForbiddenClaimStillFails() {
         EvalCase evalCase = evalCase(
                 "stream",
@@ -131,6 +151,132 @@ class EvalScorerTest {
     }
 
     @Test
+    void citationCoverageAndPrecisionUseExpectedSources() {
+        EvalCase evalCase = evalCase(
+                "stream",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of("kb_a", "kb_b")
+        );
+        List<EvalHttpClient.SourceRecord> sources = List.of(
+                new EvalHttpClient.SourceRecord("kb_a", "标题 A", 1),
+                new EvalHttpClient.SourceRecord("kb_b", "标题 B", 2),
+                new EvalHttpClient.SourceRecord("kb_c", "标题 C", 3)
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResult("依据 A[1] 和 C[3]。", List.of(), sources, "available"),
+                0.75
+        );
+
+        assertEquals(0.5, result.autoScore().citationCoverage, 1e-9);
+        assertEquals(0.5, result.autoScore().citationPrecision, 1e-9);
+        assertEquals(2, result.autoScore().citationMarkerCount);
+        assertEquals(0, result.autoScore().citationInvalidCount);
+    }
+
+    @Test
+    void invalidCitationMarkersAreCountedWithoutChangingPrecision() {
+        EvalCase evalCase = evalCase(
+                "stream",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of("kb_a")
+        );
+        List<EvalHttpClient.SourceRecord> sources = List.of(
+                new EvalHttpClient.SourceRecord("kb_a", "标题 A", 1)
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResult("依据 A[1]，另外 [9]。", List.of(), sources, "available"),
+                0.75
+        );
+
+        assertEquals(1.0, result.autoScore().citationCoverage, 1e-9);
+        assertEquals(1.0, result.autoScore().citationPrecision, 1e-9);
+        assertEquals(2, result.autoScore().citationMarkerCount);
+        assertEquals(1, result.autoScore().citationInvalidCount);
+    }
+
+    @Test
+    void noMarkersMeansZeroCoverageAndNullPrecision() {
+        EvalCase evalCase = evalCase(
+                "stream",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of("kb_a")
+        );
+        List<EvalHttpClient.SourceRecord> sources = List.of(
+                new EvalHttpClient.SourceRecord("kb_a", "标题 A", 1)
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResult("没有标注来源的回答。", List.of(), sources, "available"),
+                0.75
+        );
+
+        assertEquals(0.0, result.autoScore().citationCoverage, 1e-9);
+        assertNull(result.autoScore().citationPrecision);
+        assertEquals(0, result.autoScore().citationMarkerCount);
+    }
+
+    @Test
+    void unavailableSourcesLeaveCitationMetricsNull() {
+        EvalCase evalCase = evalCase(
+                "stream",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of("kb_a")
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResult("依据 [1]。", List.of(), List.of(), "unavailable"),
+                0.75
+        );
+
+        assertNull(result.autoScore().citationCoverage);
+        assertNull(result.autoScore().citationPrecision);
+        assertNull(result.autoScore().citationMarkerCount);
+        assertNull(result.autoScore().citationInvalidCount);
+    }
+
+    @Test
+    void citationMarkersDoNotBreakForbiddenPhraseMatching() {
+        EvalCase evalCase = evalCase(
+                "stream",
+                List.of("不要继续浇水"),
+                List.of("继续浇水"),
+                List.of(),
+                List.of()
+        );
+        List<EvalHttpClient.SourceRecord> sources = List.of(
+                new EvalHttpClient.SourceRecord("kb_watering", "浇水", 1)
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResult("不要[1]继续浇水。", List.of(), sources, "available"),
+                0.75
+        );
+
+        assertEquals(1.0, result.autoScore().factScore, 1e-9);
+        assertFalse(result.autoScore().forbiddenClaimHit);
+        assertTrue(result.passed());
+    }
+
+    @Test
     void forbiddenOnlyToolCaseRequiresNoForbiddenCall() {
         EvalCase evalCase = evalCase(
                 "tools",
@@ -176,6 +322,17 @@ class EvalScorerTest {
             List<String> expectedTools,
             List<String> forbiddenTools
     ) {
+        return evalCase(path, expectedFacts, forbiddenClaims, expectedTools, forbiddenTools, List.of());
+    }
+
+    private EvalCase evalCase(
+            String path,
+            List<String> expectedFacts,
+            List<String> forbiddenClaims,
+            List<String> expectedTools,
+            List<String> forbiddenTools,
+            List<String> expectedSourceIds
+    ) {
         return new EvalCase(
                 "test-case",
                 1,
@@ -184,7 +341,7 @@ class EvalScorerTest {
                 "测试问题",
                 expectedFacts,
                 forbiddenClaims,
-                List.of(),
+                expectedSourceIds,
                 expectedTools,
                 forbiddenTools,
                 List.of(),
@@ -203,6 +360,15 @@ class EvalScorerTest {
             String response,
             List<EvalHttpClient.ToolCallRecord> toolCalls
     ) {
+        return httpResult(response, toolCalls, List.of(), "not_applicable");
+    }
+
+    private EvalHttpClient.HttpResult httpResult(
+            String response,
+            List<EvalHttpClient.ToolCallRecord> toolCalls,
+            List<EvalHttpClient.SourceRecord> sources,
+            String sourcesStatus
+    ) {
         return new EvalHttpClient.HttpResult(
                 200,
                 response,
@@ -215,7 +381,9 @@ class EvalScorerTest {
                 List.of(),
                 "not_applicable",
                 null,
-                0
+                0,
+                sources,
+                sourcesStatus
         );
     }
 }

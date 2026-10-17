@@ -66,6 +66,20 @@ public class ChatMemoryService {
         return repository.getMessages(userId, conversationId);
     }
 
+    /**
+     * 读取一页可回放的历史消息（仅 user/assistant）。
+     * 没有当前会话时返回空页，不创建新会话。
+     */
+    public HistoryPage getHistory(String userId, String conversationId, Long beforeId, int limit) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return new HistoryPage(null, List.of(), false, null);
+        }
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId must not be blank");
+        }
+        return repository.getHistory(userId, conversationId, beforeId, limit);
+    }
+
     public List<ChatMessage> buildPromptMessages(String userId, String conversationId,
                                                  String systemPrompt, String userMessage) {
         return buildPromptMessages(userId, conversationId, systemPrompt, null, userMessage);
@@ -80,7 +94,7 @@ public class ChatMemoryService {
 
         for (ChatMessage msg : history) {
             if (!SYSTEM_ROLE.equals(msg.getRole())) {
-                promptMessages.add(msg);
+                promptMessages.add(sanitizeCitationMarkers(msg));
             } else if (isSummaryMessage(msg)) {
                 // 持久化摘要只作为历史事实补充，旧系统消息不再逐条透传。
                 summary = msg.getContent();
@@ -196,7 +210,10 @@ public class ChatMemoryService {
         StringBuilder sb = new StringBuilder();
         for (ChatMessage msg : messages) {
             String rolePrefix = USER_ROLE.equals(msg.getRole()) ? "用户: " : "助手: ";
-            sb.append(rolePrefix).append(msg.getContent()).append("\n");
+            String content = ASSISTANT_ROLE.equals(msg.getRole())
+                    ? CitationMarkers.strip(msg.getContent())
+                    : msg.getContent();
+            sb.append(rolePrefix).append(content).append("\n");
         }
 
         String prompt = "请将以下对话历史浓缩为一段简短的摘要，保留核心事实和用户意图：\n\n" + sb.toString();
@@ -211,12 +228,38 @@ public class ChatMemoryService {
     }
 
     public void saveMessagePair(String userId, String conversationId, String userMessage, String assistantReply) {
+        saveMessagePair(userId, conversationId, userMessage, assistantReply, List.of(), null);
+    }
+
+    /**
+     * 保存一轮对话，并把本次回答的来源快照写到 assistant 消息上。
+     * user 消息与摘要消息的 sources_json 始终为 NULL。
+     */
+    public void saveMessagePair(String userId, String conversationId, String userMessage,
+                                String assistantReply,
+                                List<RagContextService.SourceRef> sources, String traceId) {
         repository.addMessage(userId, conversationId, new ChatMessage(USER_ROLE, userMessage));
-        repository.addMessage(userId, conversationId, new ChatMessage(ASSISTANT_ROLE, assistantReply));
-        logger.debug("Saved message pair for user: {}, conversation: {}", userId, conversationId);
-        
-        eventPublisher.publishEvent(new VectorSaveEvent(userId, conversationId, userMessage, assistantReply));
+        String sourcesJson = SourceRefCodec.toJson(sources, traceId);
+        repository.addMessage(userId, conversationId,
+                new ChatMessage(ASSISTANT_ROLE, assistantReply), sourcesJson);
+        logger.debug("Saved message pair for user: {}, conversation: {}, sources: {}",
+                userId, conversationId, sources == null ? 0 : sources.size());
+
+        // 引用标记只用于界面展示，不进入对话向量，避免 embedding 噪声。
+        eventPublisher.publishEvent(new VectorSaveEvent(userId, conversationId, userMessage,
+                CitationMarkers.strip(assistantReply)));
         eventPublisher.publishEvent(new SummaryUpdateEvent(userId, conversationId));
+    }
+
+    private ChatMessage sanitizeCitationMarkers(ChatMessage message) {
+        if (message == null || !ASSISTANT_ROLE.equals(message.getRole())) {
+            return message;
+        }
+        String stripped = CitationMarkers.strip(message.getContent());
+        if (stripped == null || stripped.equals(message.getContent())) {
+            return message;
+        }
+        return new ChatMessage(message.getRole(), stripped, message.getTimestamp());
     }
 
     public void checkAndUpdateSummary(String userId, String conversationId) {

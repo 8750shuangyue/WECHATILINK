@@ -170,7 +170,9 @@ class EvalReportRegeneratorTest {
                         .toList(),
                 result.retrievalStatus,
                 result.error,
-                result.retryCount
+                result.retryCount,
+                result.sources == null ? List.of() : result.sources,
+                result.sourcesStatus
         );
     }
 }

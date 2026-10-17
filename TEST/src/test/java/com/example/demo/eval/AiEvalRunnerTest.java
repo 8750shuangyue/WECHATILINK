@@ -178,6 +178,8 @@ class AiEvalRunnerTest {
                 config.pricePerMillionTokens()
         );
         result.toolCalls = httpResult.toolCalls();
+        result.sources = httpResult.sources();
+        result.sourcesStatus = httpResult.sourcesStatus();
         result.retrieval = httpResult.retrieval().stream()
                 .map(item -> new EvalResult.RetrievalRecord(
                         item.documentId(),
@@ -229,7 +231,9 @@ class AiEvalRunnerTest {
                 List.of(),
                 "unavailable",
                 safeMessage,
-                retryCount
+                retryCount,
+                List.of(),
+                "unavailable"
         );
     }
 

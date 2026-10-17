@@ -69,6 +69,39 @@ class CareControllerMemoryContractTest {
     }
 
     @Test
+    void qaPassesIncludeCitationsToMemoryAwareChat() throws Exception {
+        LlmService llmService = mock(LlmService.class);
+        when(llmService.chatWithMemory(
+                eq("user-a"),
+                eq("conversation-a"),
+                eq("How often should I water it?"),
+                anyString(),
+                any(),
+                eq(true)
+        )).thenReturn("Water when the topsoil is dry.");
+        CareController controller = createController(llmService);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("user", "user-a");
+        session.setAttribute("conversationId", "conversation-a");
+
+        Result<Map<String, Object>> result = controller.qa(
+                Map.of("question", "How often should I water it?", "includeCitations", true),
+                session
+        );
+
+        assertEquals(200, result.getCode());
+        assertEquals("Water when the topsoil is dry.", result.getData().get("reply"));
+        verify(llmService).chatWithMemory(
+                eq("user-a"),
+                eq("conversation-a"),
+                eq("How often should I water it?"),
+                anyString(),
+                any(),
+                eq(true)
+        );
+    }
+
+    @Test
     void qaCreatesConversationWhenSessionHasNone() throws Exception {
         LlmService llmService = mock(LlmService.class);
         when(llmService.chatWithMemory(

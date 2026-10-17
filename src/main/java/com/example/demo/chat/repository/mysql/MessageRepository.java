@@ -2,17 +2,26 @@ package com.example.demo.chat.repository.mysql;
 
 import com.example.demo.chat.entity.Message;
 import com.example.demo.chat.entity.MessageProjection;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
 public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findByConversationIdOrderByTimestampAsc(String conversationId);
+
+    List<Message> findByConversationIdAndRoleInOrderByIdDesc(
+            String conversationId, Collection<String> roles, Pageable pageable);
+
+    List<Message> findByConversationIdAndRoleInAndIdLessThanOrderByIdDesc(
+            String conversationId, Collection<String> roles, Long beforeId, Pageable pageable);
+
     void deleteByConversationId(String conversationId);
     long countByConversationId(String conversationId);
     

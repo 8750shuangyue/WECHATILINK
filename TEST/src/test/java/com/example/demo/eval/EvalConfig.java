@@ -30,7 +30,8 @@ public record EvalConfig(
         double similarityThreshold,
         String embeddingModel,
         String commit,
-        double pricePerMillionTokens
+        double pricePerMillionTokens,
+        boolean includeCitations
 ) {
     private static final List<String> DEFAULT_ALLOWED_TOOLS = List.of(
             "getWeather",
@@ -91,7 +92,8 @@ public record EvalConfig(
                         "ai.eval.price-per-million-tokens",
                         "AI_EVAL_PRICE_PER_MILLION_TOKENS",
                         0.0
-                )
+                ),
+                boolValue("ai.eval.include-citations", "AI_EVAL_INCLUDE_CITATIONS", true)
         );
     }
 
@@ -116,7 +118,8 @@ public record EvalConfig(
                 similarityThreshold,
                 embeddingModel,
                 commit,
-                pricePerMillionTokens
+                pricePerMillionTokens,
+                includeCitations
         );
     }
 
