@@ -31,7 +31,12 @@ public record EvalConfig(
         String embeddingModel,
         String commit,
         double pricePerMillionTokens,
-        boolean includeCitations
+        boolean includeCitations,
+        int rankK,
+        double recallFloor,
+        double ndcgFloor,
+        double mrrFloor,
+        double compressionPreservationFloor
 ) {
     private static final List<String> DEFAULT_ALLOWED_TOOLS = List.of(
             "getWeather",
@@ -93,7 +98,16 @@ public record EvalConfig(
                         "AI_EVAL_PRICE_PER_MILLION_TOKENS",
                         0.0
                 ),
-                boolValue("ai.eval.include-citations", "AI_EVAL_INCLUDE_CITATIONS", true)
+                boolValue("ai.eval.include-citations", "AI_EVAL_INCLUDE_CITATIONS", true),
+                intValue("ai.eval.rank-k", "AI_EVAL_RANK_K", 5),
+                doubleValue("ai.eval.recall-floor", "AI_EVAL_RECALL_FLOOR", 0.0),
+                doubleValue("ai.eval.ndcg-floor", "AI_EVAL_NDCG_FLOOR", 0.0),
+                doubleValue("ai.eval.mrr-floor", "AI_EVAL_MRR_FLOOR", 0.0),
+                doubleValue(
+                        "ai.eval.compression-preservation-floor",
+                        "AI_EVAL_COMPRESSION_PRESERVATION_FLOOR",
+                        0.0
+                )
         );
     }
 
@@ -119,7 +133,12 @@ public record EvalConfig(
                 embeddingModel,
                 commit,
                 pricePerMillionTokens,
-                includeCitations
+                includeCitations,
+                rankK,
+                recallFloor,
+                ndcgFloor,
+                mrrFloor,
+                compressionPreservationFloor
         );
     }
 
@@ -156,6 +175,16 @@ public record EvalConfig(
         }
         if (requestTimeout.isZero() || requestTimeout.isNegative()) {
             throw new IllegalStateException("AI_EVAL_REQUEST_TIMEOUT_SECONDS must be positive");
+        }
+        if (rankK <= 0) {
+            throw new IllegalStateException("AI_EVAL_RANK_K must be positive");
+        }
+        for (double floor : new double[]{recallFloor, ndcgFloor, mrrFloor,
+                compressionPreservationFloor}) {
+            if (floor < 0 || floor > 1) {
+                throw new IllegalStateException(
+                        "Evaluation floors must be between 0 and 1");
+            }
         }
     }
 

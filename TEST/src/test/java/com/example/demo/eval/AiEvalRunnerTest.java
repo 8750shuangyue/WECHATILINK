@@ -17,10 +17,14 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiEvalRunnerTest {
     private static final DateTimeFormatter RUN_ID_TIME =
@@ -91,6 +95,7 @@ class AiEvalRunnerTest {
                 results,
                 stoppedByBudget
         );
+        assertOptionalFloors(config, results);
 
         long qualitySamples = results.stream()
                 .filter(result -> result.autoScore != null)
@@ -186,9 +191,15 @@ class AiEvalRunnerTest {
                         item.sourceId(),
                         item.similarity(),
                         null,
-                        item.origin()
+                        item.origin(),
+                        item.rank(),
+                        item.cosineRank(),
+                        item.rerankScore(),
+                        item.keywordScore(),
+                        item.channel()
                 ))
                 .toList();
+        result.retrievalStats = httpResult.stats();
         if (evalCase.expectedSourceIds().isEmpty()) {
             result.retrievalStatus = "not_applicable";
         } else if ("available".equals(httpResult.retrievalStatus())) {
@@ -205,7 +216,8 @@ class AiEvalRunnerTest {
             EvalScorer.ScoreResult score = new EvalScorer().score(
                     evalCase,
                     httpResult,
-                    config.factPassThreshold()
+                    config.factPassThreshold(),
+                    config.rankK()
             );
             result.autoScore = score.autoScore();
             result.passed = score.passed();
@@ -233,8 +245,48 @@ class AiEvalRunnerTest {
                 safeMessage,
                 retryCount,
                 List.of(),
-                "unavailable"
+                "unavailable",
+                null
         );
+    }
+
+    /**
+     * 可选门槛：只有显式设置为 >0 时才启用，默认不改变既有运行行为。
+     * 启用的门槛同时要求指标有样本，避免 observability 关闭时“无样本=通过”。
+     */
+    private void assertOptionalFloors(EvalConfig config, List<EvalResult> results) {
+        assertFloor("Recall@K", config.recallFloor(), averageMetric(
+                results, result -> result.autoScore == null ? null : result.autoScore.sourceRecall));
+        assertFloor("nDCG@K", config.ndcgFloor(), averageMetric(
+                results, result -> result.autoScore == null ? null : result.autoScore.ndcgAtK));
+        assertFloor("MRR@K", config.mrrFloor(), averageMetric(
+                results, result -> result.autoScore == null ? null : result.autoScore.mrrAtK));
+        assertFloor("保护事实保留率", config.compressionPreservationFloor(), averageMetric(
+                results, result -> result.autoScore == null
+                        ? null : result.autoScore.compressionProtectedFactPreservation));
+    }
+
+    private void assertFloor(String name, double floor, Double actual) {
+        if (floor <= 0) {
+            return;
+        }
+        assertNotNull(actual, name + " 没有可用样本，无法判定期望门槛");
+        assertTrue(actual >= floor,
+                name + " 回退：" + actual + " < " + floor);
+    }
+
+    private Double averageMetric(
+            List<EvalResult> results,
+            Function<EvalResult, Double> extractor
+    ) {
+        List<Double> values = results.stream()
+                .map(extractor)
+                .filter(Objects::nonNull)
+                .toList();
+        if (values.isEmpty()) {
+            return null;
+        }
+        return values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
     }
 
     private boolean isInfrastructureFailure(EvalResult result) {

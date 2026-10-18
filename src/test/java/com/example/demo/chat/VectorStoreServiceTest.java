@@ -2,6 +2,7 @@ package com.example.demo.chat;
 
 import com.example.demo.chat.entity.sqlite.VectorStore;
 import com.example.demo.chat.repository.sqlite.VectorStoreRepository;
+import com.example.demo.config.DashScopeConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -108,6 +110,7 @@ class VectorStoreServiceTest {
 
         ArgumentCaptor<String> queryHash = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> resultsJson = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> statsJson = ArgumentCaptor.forClass(String.class);
         verify(retrievalLogService).record(
                 anyString(),
                 eq("user-a"),
@@ -118,8 +121,11 @@ class VectorStoreServiceTest {
                 eq(0.5),
                 eq(2),
                 anyLong(),
-                resultsJson.capture()
+                resultsJson.capture(),
+                statsJson.capture()
         );
+
+        assertTrue(statsJson.getValue().contains("\"topK\":5"));
 
         assertNotEquals("query", queryHash.getValue());
         assertEquals(64, queryHash.getValue().length());
@@ -445,11 +451,184 @@ class VectorStoreServiceTest {
         ArgumentCaptor<String> resultsJson = ArgumentCaptor.forClass(String.class);
         verify(retrievalLogService).record(
                 anyString(), eq("user-a"), eq("conversation-a"), anyString(), eq("public_only"),
-                eq(5), eq(0.45), eq(1), anyLong(), resultsJson.capture());
+                eq(5), eq(0.45), eq(1), anyLong(), resultsJson.capture(), anyString());
 
         assertTrue(resultsJson.getValue().contains("\"channel\":\"keyword\""));
         assertTrue(resultsJson.getValue().contains("keywordScore"));
         assertFalse(resultsJson.getValue().contains("仓鼠"), "命中正文不得进入审计日志");
+    }
+
+    @Test
+    void rerankPromotesLowCosinePublicChunk() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.5);
+        service.addToIndex(0, "high cosine content", vectorAtCosine(0.9),
+                "doc-high", null, null, "kb_high", null);
+        service.addToIndex(1, "low cosine content", vectorAtCosine(0.6),
+                "doc-low", null, null, "kb_low", null);
+        enableRerank((query, documents) -> documents.stream()
+                .map(document -> "low cosine content".equals(document) ? 0.9 : 0.1)
+                .toList());
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(List.of("low cosine content", "high cosine content"),
+                contents(outcome));
+        assertEquals(1, outcome.results().get(0).getRank());
+        assertEquals(2, outcome.results().get(0).getCosineRank());
+        assertEquals(0.9, outcome.results().get(0).getRerankScore(), 1e-9);
+        assertEquals(2, outcome.results().get(1).getRank());
+        assertTrue(Boolean.TRUE.equals(outcome.stats().toJson().getBoolean("rerankApplied")));
+    }
+
+    @Test
+    void rerankSeesOnlyPublicKnowledgeAndKeepsMemoryAfterPublic() {
+        service.addToIndex(0, "memory text", vectorAtCosine(0.95),
+                "doc-memory", "user-a", "conversation-a", null, null);
+        service.addToIndex(1, "public text", vectorAtCosine(0.8),
+                "doc-public", null, null, "kb_public", null);
+        AtomicReference<List<String>> seen = new AtomicReference<>();
+        enableRerank((query, documents) -> {
+            seen.set(documents);
+            return documents.stream().map(document -> 1.0).toList();
+        });
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(List.of("public text"), seen.get());
+        assertEquals(List.of("public text", "memory text"), contents(outcome));
+        assertEquals(1, outcome.results().get(0).getRank());
+        assertEquals(2, outcome.results().get(1).getRank());
+        assertEquals(-1.0, outcome.results().get(1).getRerankScore(), 1e-9);
+    }
+
+    @Test
+    void rerankFailureFallsBackToExactCosineOrder() {
+        ReflectionTestUtils.setField(service, "similarityThreshold", 0.5);
+        service.addToIndex(0, "high cosine content", vectorAtCosine(0.9),
+                "doc-high", null, null, "kb_high", null);
+        service.addToIndex(1, "low cosine content", vectorAtCosine(0.6),
+                "doc-low", null, null, "kb_low", null);
+        enableRerank((query, documents) -> {
+            throw new IllegalStateException("rerank unavailable");
+        });
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(List.of("high cosine content", "low cosine content"), contents(outcome));
+        assertEquals(1, outcome.results().get(0).getRank());
+        assertEquals(1, outcome.results().get(0).getCosineRank());
+        assertFalse(Boolean.TRUE.equals(outcome.stats().toJson().getBoolean("rerankApplied")));
+        assertEquals("api_error",
+                outcome.stats().toJson().getString("rerankFallbackReason"));
+    }
+
+    @Test
+    void disabledRerankDoesNotCallClient() {
+        service.addToIndex(0, "public text", vectorAtCosine(0.8),
+                "doc-public", null, null, "kb_public", null);
+        AtomicInteger calls = new AtomicInteger();
+        enableRerank((query, documents) -> {
+            calls.incrementAndGet();
+            return documents.stream().map(document -> 1.0).toList();
+        });
+        ReflectionTestUtils.setField(service, "rerankEnabled", false);
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(0, calls.get());
+        assertEquals(List.of("public text"), contents(outcome));
+        assertFalse(Boolean.TRUE.equals(outcome.stats().toJson().getBoolean("rerankApplied")));
+    }
+
+    @Test
+    void canaryExcludedUserSkipsRerank() {
+        service.addToIndex(0, "public text", vectorAtCosine(0.8),
+                "doc-public", null, null, "kb_public", null);
+        AtomicInteger calls = new AtomicInteger();
+        enableRerank((query, documents) -> {
+            calls.incrementAndGet();
+            return documents.stream().map(document -> 1.0).toList();
+        });
+        ReflectionTestUtils.setField(service, "rerankCanaryUsers", "someone-else");
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(0, calls.get());
+        assertEquals("canary_excluded",
+                outcome.stats().toJson().getString("rerankFallbackReason"));
+    }
+
+    @Test
+    void rerankCapsMemoryAndPlacesItAfterPublic() {
+        for (int i = 0; i < 5; i++) {
+            service.addToIndex(i, "public " + i, vectorAtCosine(0.9 - i * 0.05),
+                    "doc-public-" + i, null, null, "kb_" + i, null);
+        }
+        for (int i = 0; i < 3; i++) {
+            service.addToIndex(10 + i, "memory " + i, vectorAtCosine(0.95 - i * 0.05),
+                    "doc-memory-" + i, "user-a", "conversation-a", null, null);
+        }
+        enableRerank((query, documents) -> documents.stream().map(document -> 1.0).toList());
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(7, outcome.results().size());
+        assertEquals(5, outcome.results().stream()
+                .filter(result -> "public_kb".equals(result.getOrigin()))
+                .count());
+        assertEquals(List.of("memory 0", "memory 1"),
+                outcome.results().subList(5, 7).stream()
+                        .map(VectorStoreService.SearchResult::getContent)
+                        .toList());
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7),
+                outcome.results().stream()
+                        .map(VectorStoreService.SearchResult::getRank)
+                        .toList());
+    }
+
+    @Test
+    void rerankSkipsWhenCandidatePoolTooSmall() {
+        service.addToIndex(0, "public text", vectorAtCosine(0.8),
+                "doc-public", null, null, "kb_public", null);
+        AtomicInteger calls = new AtomicInteger();
+        enableRerank((query, documents) -> {
+            calls.incrementAndGet();
+            return documents.stream().map(document -> 1.0).toList();
+        });
+        ReflectionTestUtils.setField(service, "rerankMinCandidates", 3);
+
+        VectorStoreService.SearchOutcome outcome =
+                service.searchSimilarWithMetadataAndTrace("query", "user-a", "conversation-a");
+
+        assertEquals(0, calls.get());
+        assertEquals("pool_too_small",
+                outcome.stats().toJson().getString("rerankFallbackReason"));
+    }
+
+    private void enableRerank(RerankService.RerankClient client) {
+        DashScopeConfig config = new DashScopeConfig();
+        DashScopeConfig.Rerank rerank = new DashScopeConfig.Rerank();
+        rerank.setApiKey("test-key");
+        rerank.setModel("gte-rerank-v2");
+        config.setRerank(rerank);
+        service.setRerankService(new RerankService(config, 200, 2000, 2, 8, client));
+        ReflectionTestUtils.setField(service, "rerankEnabled", true);
+        ReflectionTestUtils.setField(service, "rerankCandidatePoolSize", 20);
+        ReflectionTestUtils.setField(service, "rerankMinCandidates", 1);
+        ReflectionTestUtils.setField(service, "rerankCanaryUsers", "");
+        ReflectionTestUtils.setField(service, "memoryTopK", 2);
+    }
+
+    private List<String> contents(VectorStoreService.SearchOutcome outcome) {
+        return outcome.results().stream()
+                .map(VectorStoreService.SearchResult::getContent)
+                .toList();
     }
 
     private void assertSqliteTransaction(String methodName, Class<?>... parameterTypes) throws Exception {

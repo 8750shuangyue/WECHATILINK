@@ -438,6 +438,7 @@ async function sendText() {
                         }
                     });
                     if (eventName === 'rag-trace') continue;
+                    if (eventName === 'rag-stats') continue;
                     if (eventName === 'rag-sources') {
                         var sourceData = dataLines.join('\n').trim();
                         if (sourceData) {

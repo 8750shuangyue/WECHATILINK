@@ -8,6 +8,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -81,6 +83,82 @@ class RagContextServiceTest {
         assertTrue(result.sources().isEmpty());
         verify(vectorStoreService).searchSimilarWithMetadataAndTrace(
                 "question", "user-a", "conversation-a");
+    }
+
+    @Test
+    void sourceRanksFollowFinalRankOrderInsteadOfCosine() {
+        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "question", "user-a", "conversation-a"))
+                .thenReturn(new VectorStoreService.SearchOutcome(
+                        "trace-rerank",
+                        List.of(
+                                new VectorStoreService.SearchResult(
+                                        "doc-high", "kb_high", "高余弦内容", 0.9,
+                                        metadata("高余弦", "kb_high.md"),
+                                        VectorStoreService.ORIGIN_PUBLIC_KB,
+                                        0.0, "vector", 2, 1, 0.1),
+                                new VectorStoreService.SearchResult(
+                                        "doc-low", "kb_low", "低余弦内容", 0.6,
+                                        metadata("低余弦", "kb_low.md"),
+                                        VectorStoreService.ORIGIN_PUBLIC_KB,
+                                        0.0, "vector", 1, 2, 0.9)
+                        )
+                ));
+        RagContextService service = new RagContextService(vectorStoreService);
+
+        RagContextService.ContextResult result = service.buildContextWithTrace(
+                "user-a", "conversation-a", "question", true);
+
+        assertEquals(List.of("kb_low", "kb_high"),
+                result.sources().stream().map(RagContextService.SourceRef::sourceId).toList());
+        assertEquals(1, result.sources().get(0).rank());
+        assertEquals(2, result.sources().get(1).rank());
+        assertTrue(result.context().indexOf("[1] 低余弦") < result.context().indexOf("[2] 高余弦"));
+    }
+
+    @Test
+    void compressionKeepsCitationRanksAndUpdatesRetrievalStats() {
+        String content = "这是首句，介绍浇水的基本原则。\n"
+                + "每次浇水约200毫升，每3天一次。\n"
+                + "如果发现烂根要立即停水并通风。\n"
+                + "另外可以适当松土帮助透气。\n"
+                + "花盆选择透气性好的陶盆。";
+        VectorStoreService vectorStoreService = mock(VectorStoreService.class);
+        when(vectorStoreService.searchSimilarWithMetadataAndTrace(
+                "浇水", "user-a", "conversation-a"))
+                .thenReturn(new VectorStoreService.SearchOutcome(
+                        "trace-compress",
+                        List.of(
+                                new VectorStoreService.SearchResult(
+                                        "doc-a", "kb_a", content, 0.9,
+                                        metadata("浇水指南", "kb_a.md"),
+                                        VectorStoreService.ORIGIN_PUBLIC_KB,
+                                        0.0, "vector", 1, 1, 0.9),
+                                new VectorStoreService.SearchResult(
+                                        "doc-b", "kb_b", content, 0.8,
+                                        metadata("松土指南", "kb_b.md"),
+                                        VectorStoreService.ORIGIN_PUBLIC_KB,
+                                        0.0, "vector", 2, 2, 0.8)
+                        )
+                ));
+        ContextCompressionService compressionService = new ContextCompressionService(
+                true, "extractive", 70, 10, 8, true, "");
+        RagRetrievalLogService retrievalLogService = mock(RagRetrievalLogService.class);
+        RagContextService service = new RagContextService(
+                vectorStoreService, compressionService, retrievalLogService);
+
+        RagContextService.ContextResult result = service.buildContextWithTrace(
+                "user-a", "conversation-a", "浇水", true);
+
+        assertEquals(List.of("kb_a", "kb_b"),
+                result.sources().stream().map(RagContextService.SourceRef::sourceId).toList());
+        assertTrue(result.context().contains("[1] 浇水指南"));
+        assertTrue(result.context().contains("[2] 松土指南"));
+        assertTrue(result.context().contains("每次浇水约200毫升"));
+        assertTrue(result.context().contains("立即停水并通风"));
+        assertEquals(true, result.stats().toJson().getBoolean("compressionApplied"));
+        verify(retrievalLogService).updateCompressionStats(eq("trace-compress"), any());
     }
 
     @Test

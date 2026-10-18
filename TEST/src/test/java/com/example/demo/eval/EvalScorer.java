@@ -1,7 +1,10 @@
 package com.example.demo.eval;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -12,6 +15,8 @@ import java.util.stream.Collectors;
 
 public class EvalScorer {
     private static final Pattern CITATION_MARKER = Pattern.compile("\\[(\\d{1,2})\\]");
+    private static final int DEFAULT_RANK_K = 5;
+    private static final String PUBLIC_KB_ORIGIN = "public_kb";
     private static final String REFUSAL_PATTERN =
             "无法|不能|不建议|需要就医|建议就医|联系兽医|咨询兽医|请咨询|医生|兽医|急诊|安全边界";
     private static final List<String> NEGATION_MARKERS = List.of(
@@ -49,6 +54,15 @@ public class EvalScorer {
             EvalHttpClient.HttpResult result,
             double factPassThreshold
     ) {
+        return score(evalCase, result, factPassThreshold, DEFAULT_RANK_K);
+    }
+
+    public ScoreResult score(
+            EvalCase evalCase,
+            EvalHttpClient.HttpResult result,
+            double factPassThreshold,
+            int rankK
+    ) {
         String response = result.response() == null ? "" : result.response();
         // 引用标记只用于来源匹配，不参与事实/禁用短语/拒答判定，
         // 避免 [n] 插入短语或否定窗口造成假阳性/假阴性。
@@ -77,6 +91,19 @@ public class EvalScorer {
         score.citationPrecision = citationStats.precision();
         score.citationMarkerCount = citationStats.markerCount();
         score.citationInvalidCount = citationStats.invalidCount();
+
+        RankStats rankStats = rankStats(evalCase, result, rankK);
+        if (rankStats != null) {
+            score.hitAt1 = rankStats.hitAt1();
+            score.mrrAtK = rankStats.mrr();
+            score.ndcgAtK = rankStats.ndcg();
+        }
+        CompressionStats compressionStats = compressionStats(result.stats());
+        if (compressionStats != null) {
+            score.compressionApplied = compressionStats.applied();
+            score.compressionCharReduction = compressionStats.charReduction();
+            score.compressionProtectedFactPreservation = compressionStats.protectedFactPreservation();
+        }
 
         boolean transportOk = result.error() == null && result.status() >= 200 && result.status() < 300;
         boolean factsOk = score.factScore >= factPassThreshold;
@@ -148,6 +175,117 @@ public class EvalScorer {
                 .distinct()
                 .count();
         return (double) hitCount / expected.size();
+    }
+
+    /**
+     * 排名指标只看公共知识块，按服务端最终 rank 排序（旧日志无 rank 时沿用数组顺序）。
+     * 同一个 sourceId 多块时保留第一次出现的位置。没有任何期望来源时返回 null。
+     */
+    private RankStats rankStats(EvalCase evalCase, EvalHttpClient.HttpResult result, int rankK) {
+        if (evalCase.expectedSourceIds().isEmpty()
+                || !"available".equals(result.retrievalStatus())) {
+            return null;
+        }
+        Set<String> expected = new HashSet<>();
+        for (String sourceId : evalCase.expectedSourceIds()) {
+            if (sourceId != null && !sourceId.isBlank()) {
+                expected.add(sourceId.trim());
+            }
+        }
+        if (expected.isEmpty()) {
+            return null;
+        }
+
+        List<EvalHttpClient.RetrievalRecord> ordered = new ArrayList<>();
+        for (EvalHttpClient.RetrievalRecord record : result.retrieval()) {
+            if (record != null) {
+                ordered.add(record);
+            }
+        }
+        boolean hasRank = ordered.stream()
+                .anyMatch(record -> record.rank() != null && record.rank() > 0);
+        if (hasRank) {
+            ordered.sort(Comparator.comparingInt(record ->
+                    record.rank() != null && record.rank() > 0
+                            ? record.rank() : Integer.MAX_VALUE));
+        }
+
+        LinkedHashSet<String> distinct = new LinkedHashSet<>();
+        for (EvalHttpClient.RetrievalRecord record : ordered) {
+            if (record.sourceId() == null || record.sourceId().isBlank()) {
+                continue;
+            }
+            if (record.origin() != null && !PUBLIC_KB_ORIGIN.equals(record.origin())) {
+                continue;
+            }
+            distinct.add(record.sourceId().trim());
+            if (distinct.size() >= rankK) {
+                break;
+            }
+        }
+        if (distinct.isEmpty()) {
+            return new RankStats(0.0, 0.0, 0.0);
+        }
+
+        List<String> ranked = new ArrayList<>(distinct);
+        int firstRelevant = 0;
+        double dcg = 0.0;
+        for (int i = 0; i < ranked.size(); i++) {
+            boolean relevant = expected.contains(ranked.get(i));
+            if (relevant && firstRelevant == 0) {
+                firstRelevant = i + 1;
+            }
+            if (relevant) {
+                dcg += 1.0 / (Math.log(i + 2) / Math.log(2));
+            }
+        }
+        double hitAt1 = expected.contains(ranked.get(0)) ? 1.0 : 0.0;
+        double mrr = firstRelevant > 0 ? 1.0 / firstRelevant : 0.0;
+        int idealHits = Math.min(expected.size(), rankK);
+        double idcg = 0.0;
+        for (int i = 0; i < idealHits; i++) {
+            idcg += 1.0 / (Math.log(i + 2) / Math.log(2));
+        }
+        double ndcg = idcg == 0.0 ? 0.0 : dcg / idcg;
+        return new RankStats(hitAt1, mrr, ndcg);
+    }
+
+    private CompressionStats compressionStats(Map<String, Object> stats) {
+        if (stats == null) {
+            return null;
+        }
+        Boolean applied = booleanValue(stats.get("compressionApplied"));
+        Double before = numberValue(stats.get("compressionBeforeChars"));
+        Double after = numberValue(stats.get("compressionAfterChars"));
+        Double charReduction = null;
+        if (Boolean.TRUE.equals(applied) && before != null && before > 0 && after != null) {
+            charReduction = Math.max(0.0, 1.0 - (after / before));
+        }
+        Double protectedFacts = numberValue(stats.get("compressionProtectedFacts"));
+        Double preserved = numberValue(stats.get("compressionPreservedProtectedFacts"));
+        Double preservation = null;
+        if (protectedFacts != null && protectedFacts > 0 && preserved != null) {
+            preservation = Math.min(1.0, preserved / protectedFacts);
+        }
+        if (applied == null && charReduction == null && preservation == null) {
+            return null;
+        }
+        return new CompressionStats(applied, charReduction, preservation);
+    }
+
+    private Double numberValue(Object value) {
+        return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private Boolean booleanValue(Object value) {
+        return value instanceof Boolean bool ? bool : null;
+    }
+
+    private record RankStats(double hitAt1, double mrr, double ndcg) {
+    }
+
+    private record CompressionStats(Boolean applied, Double charReduction,
+                                    Double protectedFactPreservation) {
     }
 
     private String stripCitationMarkers(String text) {

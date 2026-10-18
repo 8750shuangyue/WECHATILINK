@@ -12,6 +12,7 @@ public class DashScopeConfig {
     private String model;
     private String embeddingModel = "text-embedding-v2";
     private Embedding embedding = new Embedding();
+    private Rerank rerank = new Rerank();
 
     private Vision vision = new Vision();
     private Image image = new Image();
@@ -147,6 +148,47 @@ public class DashScopeConfig {
 
         public void setApiKey(String apiKey) {
             this.apiKey = apiKey;
+        }
+    }
+
+    public Rerank getRerank() {
+        return rerank;
+    }
+
+    public void setRerank(Rerank rerank) {
+        this.rerank = rerank;
+    }
+
+    /**
+     * 文本重排服务（DashScope gte-rerank）。api-key 默认回落到 embedding 的 key。
+     */
+    public static class Rerank {
+        private String apiKey;
+        private String baseUrl = "https://dashscope.aliyuncs.com/api/v1";
+        private String model = "gte-rerank-v2";
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
         }
     }
 

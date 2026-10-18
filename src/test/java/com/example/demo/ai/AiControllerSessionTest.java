@@ -9,6 +9,7 @@ import com.example.demo.chat.ChatMemoryService;
 import com.example.demo.chat.HistoryPage;
 import com.example.demo.chat.LlmService;
 import com.example.demo.chat.RagContextService;
+import com.example.demo.chat.RetrievalTraceStats;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
@@ -330,6 +332,47 @@ class AiControllerSessionTest {
         assertTrue(body.contains("event:rag-sources"));
         assertTrue(body.contains("\"rank\":1"));
         assertTrue(body.contains("hello[1]"));
+    }
+
+    @Test
+    void emitsRagStatsOnlyWhenRequested() throws Exception {
+        LlmService llmService = mock(LlmService.class);
+        doAnswer(invocation -> {
+            Consumer<String> trace = invocation.getArgument(4);
+            Consumer<List<RagContextService.SourceRef>> sources = invocation.getArgument(5);
+            Consumer<RetrievalTraceStats> stats = invocation.getArgument(6);
+            Consumer<String> token = invocation.getArgument(7);
+            Runnable done = invocation.getArgument(8);
+            trace.accept("trace-1");
+            sources.accept(List.of());
+            stats.accept(RetrievalTraceStats.create()
+                    .topK(5)
+                    .rerankApplied(true)
+                    .rerankModel("gte-rerank-v2"));
+            token.accept("hello");
+            done.run();
+            return null;
+        }).when(llmService).chatStream(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean());
+        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("user", "user-a");
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        MvcResult result = mockMvc.perform(post("/api/ai/chat/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hello\",\"includeTraceStats\":\"true\"}")
+                        .session(session))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        result.getAsyncResult(2_000);
+        mockMvc.perform(asyncDispatch(result)).andExpect(status().isOk());
+
+        String body = result.getResponse().getContentAsString();
+        assertTrue(body.contains("event:rag-stats"));
+        assertTrue(body.contains("\"rerankApplied\":true"));
+        assertTrue(body.indexOf("event:rag-trace") < body.indexOf("event:rag-stats"));
+        assertTrue(body.indexOf("event:rag-stats") < body.indexOf("hello"));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.example.demo.eval;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
+import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class EvalResult {
@@ -33,6 +34,8 @@ public class EvalResult {
     public List<EvalHttpClient.ToolCallRecord> toolCalls = List.of();
     public List<RetrievalRecord> retrieval = List.of();
     public String retrievalStatus;
+    /** 服务端检索/重排/压缩统计快照；旧记录为 null。 */
+    public Map<String, Object> retrievalStats;
     public List<EvalHttpClient.SourceRecord> sources = List.of();
     public String sourcesStatus;
     public AutoScore autoScore;
@@ -55,6 +58,12 @@ public class EvalResult {
         public Double citationPrecision;
         public Integer citationMarkerCount;
         public Integer citationInvalidCount;
+        public Double hitAt1;
+        public Double mrrAtK;
+        public Double ndcgAtK;
+        public Boolean compressionApplied;
+        public Double compressionCharReduction;
+        public Double compressionProtectedFactPreservation;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -72,7 +81,12 @@ public class EvalResult {
             String sourceId,
             Double similarity,
             String content,
-            String origin
+            String origin,
+            Integer rank,
+            Integer cosineRank,
+            Double rerankScore,
+            Double keywordScore,
+            String channel
     ) {
     }
 }

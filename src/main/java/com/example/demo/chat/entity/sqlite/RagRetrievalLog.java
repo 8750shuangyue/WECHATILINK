@@ -49,9 +49,16 @@ public class RagRetrievalLog {
     @Column(name = "duration_ms")
     private Long durationMs;
 
-    /** JSON 数组，仅包含 documentId/sourceId/similarity/origin。 */
+    /**
+     * JSON 数组，包含 documentId/sourceId/similarity/origin/keywordScore/channel，
+     * 以及可选的 rank/cosineRank/rerankScore；不保存正文。
+     */
     @Column(name = "results_json", columnDefinition = "TEXT")
     private String resultsJson;
+
+    /** 检索/重排/压缩的结构化统计；不包含 query、正文或用户标识。 */
+    @Column(name = "stats_json", columnDefinition = "TEXT")
+    private String statsJson;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -146,6 +153,14 @@ public class RagRetrievalLog {
 
     public void setResultsJson(String resultsJson) {
         this.resultsJson = resultsJson;
+    }
+
+    public String getStatsJson() {
+        return statsJson;
+    }
+
+    public void setStatsJson(String statsJson) {
+        this.statsJson = statsJson;
     }
 
     public LocalDateTime getCreatedAt() {

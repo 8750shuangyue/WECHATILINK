@@ -165,14 +165,20 @@ class EvalReportRegeneratorTest {
                                 item.documentId(),
                                 item.sourceId(),
                                 item.similarity(),
-                                item.origin()
+                                item.origin(),
+                                item.rank(),
+                                item.cosineRank(),
+                                item.rerankScore(),
+                                item.keywordScore(),
+                                item.channel()
                         ))
                         .toList(),
                 result.retrievalStatus,
                 result.error,
                 result.retryCount,
                 result.sources == null ? List.of() : result.sources,
-                result.sourcesStatus
+                result.sourcesStatus,
+                result.retrievalStats
         );
     }
 }

@@ -202,6 +202,42 @@ public final class EvalReportWriter {
         );
         appendMetric(
                 markdown,
+                "RAG 命中率 (Hit@1)",
+                summary.averageHitAt1(),
+                metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.hitAt1)
+        );
+        appendMetric(
+                markdown,
+                "RAG 平均倒数排名 (MRR@K)",
+                summary.averageMrr(),
+                metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.mrrAtK)
+        );
+        appendMetric(
+                markdown,
+                "RAG 排序质量 (nDCG@K)",
+                summary.averageNdcg(),
+                metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.ndcgAtK)
+        );
+        markdown.append("| 上下文压缩应用率 | ")
+                .append(percent(summary.compressionAppliedRate())).append(" | ")
+                .append(metricSampleCount(results, result -> result.autoScore == null
+                        ? null : booleanAsDouble(result.autoScore.compressionApplied))).append(" |\n");
+        appendMetric(
+                markdown,
+                "上下文压缩率",
+                summary.averageCompressionCharReduction(),
+                metricSampleCount(results, result -> result.autoScore == null
+                        ? null : result.autoScore.compressionCharReduction)
+        );
+        appendMetric(
+                markdown,
+                "保护事实保留率",
+                summary.averageProtectedFactPreservation(),
+                metricSampleCount(results, result -> result.autoScore == null
+                        ? null : result.autoScore.compressionProtectedFactPreservation)
+        );
+        appendMetric(
+                markdown,
                 "引用覆盖率",
                 summary.averageCitationCoverage(),
                 metricSampleCount(results, result -> result.autoScore == null ? null : result.autoScore.citationCoverage)
@@ -259,10 +295,16 @@ public final class EvalReportWriter {
             markdown.append('\n');
         }
 
+        appendRagDiagnostics(markdown, results);
+
         markdown.append("## 能力缺口\n\n");
         markdown.append("- RAG 来源召回：评测通过 SSE `rag-trace` 事件取 `traceId`，再查受控只读接口 ")
                 .append("`/api/internal/rag/retrievals/{traceId}` 获取命中来源；仅当题库 `expectedSourceIds` 非空且检索状态为 ")
                 .append("`available` 时计算 `sourceRecall`，`path: tools` 的用例不参与。\n");
+        markdown.append("- 排名指标：`Hit@1` / `MRR@K` / `nDCG@K` 基于服务端最终 `rank` 顺序，只看公共知识块并按 ")
+                .append("`sourceId` 去重；它们衡量期望来源排得靠不靠前，不判断引用的句子是否真的支持结论。\n");
+        markdown.append("- 压缩指标：来自服务端 `stats` 的上下文前后字符数与保护事实计数；只验证可保护的数字/时间/剂量/安全句未被丢弃，")
+                .append("普通事实的语义保真仍以质量通过率和人工复核为准。\n");
         markdown.append("- 引用指标：通过 SSE `rag-sources` 获取本次来源列表；覆盖率 = 被回答引用的期望来源数 / 期望来源数，")
                 .append("精确率 = 被回答引用的期望来源数 / 被回答引用的来源数。只做来源匹配，无法判断编号是否真的支持该句；")
                 .append("无效编号只计数，不改变通过判定。\n");
@@ -437,8 +479,104 @@ public final class EvalReportWriter {
                 actualTokens + estimatedTokens,
                 estimatedCost,
                 categories,
-                failureReasons
+                failureReasons,
+                average(qualityResults, result -> result.autoScore.hitAt1),
+                average(qualityResults, result -> result.autoScore.mrrAtK),
+                average(qualityResults, result -> result.autoScore.ndcgAtK),
+                appliedRate(qualityResults, result -> result.autoScore.compressionApplied),
+                average(qualityResults, result -> result.autoScore.compressionCharReduction),
+                average(qualityResults, result -> result.autoScore.compressionProtectedFactPreservation)
         );
+    }
+
+    private Double appliedRate(
+            List<EvalResult> results,
+            Function<EvalResult, Boolean> extractor
+    ) {
+        List<Boolean> values = results.stream()
+                .map(extractor)
+                .filter(Objects::nonNull)
+                .toList();
+        if (values.isEmpty()) {
+            return null;
+        }
+        long applied = values.stream().filter(Boolean.TRUE::equals).count();
+        return (double) applied / values.size();
+    }
+
+    private Double booleanAsDouble(Boolean value) {
+        return value == null ? null : (value ? 1.0 : 0.0);
+    }
+
+    private void appendRagDiagnostics(StringBuilder markdown, List<EvalResult> results) {
+        markdown.append("## RAG 诊断\n\n");
+        List<EvalResult> withStats = results.stream()
+                .filter(result -> result.retrievalStats != null && !result.retrievalStats.isEmpty())
+                .toList();
+        if (withStats.isEmpty()) {
+            markdown.append("本批次没有服务端检索统计（旧版本或未开启 `includeTraceStats`）。\n\n");
+            return;
+        }
+
+        Map<String, Object> sample = withStats.getFirst().retrievalStats;
+        markdown.append("| 服务端配置 | 值 |\n");
+        markdown.append("| --- | --- |\n");
+        appendStatsRow(markdown, "topK", sample.get("topK"));
+        appendStatsRow(markdown, "similarityThreshold", sample.get("similarityThreshold"));
+        appendStatsRow(markdown, "keywordFloor", sample.get("keywordFloor"));
+        appendStatsRow(markdown, "keywordEnabled", sample.get("keywordEnabled"));
+        appendStatsRow(markdown, "memoryTopK", sample.get("memoryTopK"));
+        appendStatsRow(markdown, "rerankPoolSize", sample.get("rerankPoolSize"));
+        appendStatsRow(markdown, "rerankTimeoutMs", sample.get("rerankTimeoutMs"));
+        appendStatsRow(markdown, "compressionMaxCharsPerChunk",
+                sample.get("compressionMaxCharsPerChunk"));
+        markdown.append('\n');
+
+        long statsCount = withStats.size();
+        long rerankApplied = withStats.stream()
+                .filter(result -> Boolean.TRUE.equals(
+                        result.retrievalStats.get("rerankApplied")))
+                .count();
+        long compressionApplied = withStats.stream()
+                .filter(result -> Boolean.TRUE.equals(
+                        result.retrievalStats.get("compressionApplied")))
+                .count();
+        Map<String, Integer> fallbackReasons = new LinkedHashMap<>();
+        List<Long> rerankDurations = new ArrayList<>();
+        for (EvalResult result : withStats) {
+            Object reason = result.retrievalStats.get("rerankFallbackReason");
+            if (reason != null && !reason.toString().isBlank()) {
+                fallbackReasons.merge(reason.toString(), 1, Integer::sum);
+            }
+            Object duration = result.retrievalStats.get("rerankDurationMs");
+            if (duration instanceof Number number) {
+                rerankDurations.add(number.longValue());
+            }
+        }
+
+        markdown.append("| 运行期诊断 | 值 |\n");
+        markdown.append("| --- | --- |\n");
+        markdown.append("| 计入统计记录数 | ").append(statsCount).append(" |\n");
+        markdown.append("| 重排应用率 | ")
+                .append(percent((double) rerankApplied / statsCount)).append(" |\n");
+        markdown.append("| 重排回退次数 | ")
+                .append(fallbackReasons.values().stream().mapToInt(Integer::intValue).sum())
+                .append(" |\n");
+        markdown.append("| 重排回退原因 | ")
+                .append(fallbackReasons.isEmpty() ? "-" : fallbackReasons.entrySet().stream()
+                        .map(entry -> entry.getKey() + "=" + entry.getValue())
+                        .collect(Collectors.joining(", ")))
+                .append(" |\n");
+        markdown.append("| 重排耗时均值 / P95 | ")
+                .append(millis(averageLong(rerankDurations))).append(" / ")
+                .append(millis(percentile95(rerankDurations))).append(" |\n");
+        markdown.append("| 压缩应用率 | ")
+                .append(percent((double) compressionApplied / statsCount)).append(" |\n\n");
+    }
+
+    private void appendStatsRow(StringBuilder markdown, String key, Object value) {
+        markdown.append("| ").append(key).append(" | ")
+                .append(value == null ? "N/A" : value).append(" |\n");
     }
 
     private CategorySummary summarizeCategory(String name, List<EvalResult> results) {
@@ -632,7 +770,13 @@ public final class EvalReportWriter {
             long billableTokens,
             double estimatedCost,
             Map<String, CategorySummary> categories,
-            Map<String, Integer> failureReasons
+            Map<String, Integer> failureReasons,
+            Double averageHitAt1,
+            Double averageMrr,
+            Double averageNdcg,
+            Double compressionAppliedRate,
+            Double averageCompressionCharReduction,
+            Double averageProtectedFactPreservation
     ) {
         double passRate() {
             return qualityCount == 0 ? 0.0 : (double) passed / qualityCount;

@@ -121,6 +121,60 @@ class RagObservabilityServiceTest {
     }
 
     @Test
+    void exposesRankAndStatsWithoutContent() {
+        RagRetrievalLog stored = retrievalLog(
+                "trace-stats",
+                "conversation-1",
+                """
+                [{"documentId":"doc-1","sourceId":"kb-a","similarity":0.8,
+                  "origin":"public_kb","rank":1,"cosineRank":2,"rerankScore":0.97,
+                  "keywordScore":0.3,"channel":"both"}]
+                """);
+        stored.setStatsJson("""
+                {"topK":5,"rerankApplied":true,"rerankFallbackReason":null,
+                 "compressionApplied":false,"compressionBeforeChars":100}
+                """);
+        when(retrievalLogRepository.findByTraceId("trace-stats"))
+                .thenReturn(Optional.of(stored));
+        RagObservabilityService service = new RagObservabilityService(
+                retrievalLogRepository, accessLogRepository, true, "alice");
+
+        RagObservabilityService.LookupResult<RagObservabilityService.RagRetrievalObservation>
+                result = service.findByTraceId("alice", "trace-stats");
+
+        assertEquals(200, result.status());
+        RagObservabilityService.RagRetrievalResult first = result.data().results().getFirst();
+        assertEquals(1, first.rank());
+        assertEquals(2, first.cosineRank());
+        assertEquals(0.97, first.rerankScore(), 1e-9);
+        assertEquals(0.3, first.keywordScore(), 1e-9);
+        assertEquals("both", first.channel());
+        assertEquals(true, result.data().stats().get("rerankApplied"));
+        assertEquals(5, result.data().stats().get("topK"));
+
+        String json = JSON.toJSONString(result.data());
+        assertFalse(json.contains("SECRET"));
+        assertFalse(json.contains("queryHash"));
+    }
+
+    @Test
+    void malformedStatsJsonDoesNotBreakLookup() {
+        RagRetrievalLog stored = retrievalLog("trace-bad-stats", "conversation-1", "[]");
+        stored.setStatsJson("{not-json");
+        when(retrievalLogRepository.findByTraceId("trace-bad-stats"))
+                .thenReturn(Optional.of(stored));
+        RagObservabilityService service = new RagObservabilityService(
+                retrievalLogRepository, accessLogRepository, true, "alice");
+
+        RagObservabilityService.LookupResult<RagObservabilityService.RagRetrievalObservation>
+                result = service.findByTraceId("alice", "trace-bad-stats");
+
+        assertEquals(200, result.status());
+        assertNull(result.data().stats());
+        assertTrue(result.data().results().isEmpty());
+    }
+
+    @Test
     void conversationLookupCapsLimitAndAuditsResultCount() {
         RagRetrievalLog first = retrievalLog("trace-2", "conversation-2", "[]");
         RagRetrievalLog second = retrievalLog("trace-3", "conversation-2", "[]");

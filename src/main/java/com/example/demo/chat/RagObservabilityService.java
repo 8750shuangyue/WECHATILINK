@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -133,7 +135,8 @@ public class RagObservabilityService {
                 record.getRetrievedCount(),
                 record.getDurationMs(),
                 record.getCreatedAt(),
-                parseResults(record.getResultsJson())
+                parseResults(record.getResultsJson()),
+                parseStats(record.getStatsJson())
         );
     }
 
@@ -154,7 +157,10 @@ public class RagObservabilityService {
                         item.getDouble("similarity"),
                         item.getString("origin"),
                         item.getDouble("keywordScore"),
-                        item.getString("channel")
+                        item.getString("channel"),
+                        item.getInteger("rank"),
+                        item.getInteger("cosineRank"),
+                        item.getDouble("rerankScore")
                 ));
             }
             return results;
@@ -162,6 +168,23 @@ public class RagObservabilityService {
             logger.warn("[RAG] Failed to parse retrieval observation results: {}",
                     e.getMessage());
             return List.of();
+        }
+    }
+
+    /**
+     * stats_json 只含数量/耗时/开关；解析失败按 null 处理，兼容旧日志。
+     */
+    private Map<String, Object> parseStats(String statsJson) {
+        if (statsJson == null || statsJson.isBlank()) {
+            return null;
+        }
+        try {
+            JSONObject parsed = JSON.parseObject(statsJson);
+            return parsed == null ? null : new LinkedHashMap<>(parsed);
+        } catch (Exception e) {
+            logger.warn("[RAG] Failed to parse retrieval observation stats: {}",
+                    e.getMessage());
+            return null;
         }
     }
 
@@ -218,7 +241,8 @@ public class RagObservabilityService {
             Integer retrievedCount,
             Long durationMs,
             LocalDateTime createdAt,
-            List<RagRetrievalResult> results) {
+            List<RagRetrievalResult> results,
+            Map<String, Object> stats) {
     }
 
     public record RagRetrievalResult(
@@ -227,6 +251,9 @@ public class RagObservabilityService {
             Double similarity,
             String origin,
             Double keywordScore,
-            String channel) {
+            String channel,
+            Integer rank,
+            Integer cosineRank,
+            Double rerankScore) {
     }
 }

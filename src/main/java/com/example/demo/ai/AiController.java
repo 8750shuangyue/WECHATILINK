@@ -9,6 +9,7 @@ import com.example.demo.care.service.SpringAiCareWorkflowService;
 import com.example.demo.chat.ChatMemoryService;
 import com.example.demo.chat.LlmService;
 import com.example.demo.chat.RagContextService;
+import com.example.demo.chat.RetrievalTraceStats;
 import com.example.demo.chat.exception.ConversationAccessDeniedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,16 +68,35 @@ public class AiController {
         String systemPrompt = request.get("systemPrompt");
         boolean includeCitations = Boolean.parseBoolean(request.get("includeCitations"));
         boolean includeSources = Boolean.parseBoolean(request.get("includeSources")) || includeCitations;
+        boolean includeTraceStats = Boolean.parseBoolean(request.get("includeTraceStats"));
         String conversationId = getOrCreateConversationId(session);
         String userId = (String) session.getAttribute("user");
         SseEmitter emitter = new SseEmitter(120000L);
         CompletableFuture.runAsync(() -> {
             try {
+                java.util.concurrent.atomic.AtomicReference<String> traceRef =
+                        new java.util.concurrent.atomic.AtomicReference<>();
                 Consumer<String> onTrace = traceId -> {
+                    traceRef.set(traceId);
                     try {
                         emitter.send(SseEmitter.event()
                                 .name("rag-trace")
                                 .data(Map.of("traceId", traceId)));
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                };
+                Consumer<RetrievalTraceStats> onStats = stats -> {
+                    if (!includeTraceStats || stats == null) {
+                        return;
+                    }
+                    try {
+                        Map<String, Object> payload = new LinkedHashMap<>();
+                        payload.put("traceId", traceRef.get() == null ? "" : traceRef.get());
+                        payload.put("stats", stats.toJson());
+                        emitter.send(SseEmitter.event()
+                                .name("rag-stats")
+                                .data(payload));
                     } catch (Exception e) {
                         emitter.completeWithError(e);
                     }
@@ -100,7 +120,11 @@ public class AiController {
                         emitter.completeWithError(e);
                     }
                 };
-                if (includeCitations) {
+                if (includeTraceStats) {
+                    llmService.chatStream(userId, conversationId, message, systemPrompt,
+                            onTrace, onSources, onStats, onToken, emitter::complete,
+                            includeCitations);
+                } else if (includeCitations) {
                     llmService.chatStream(userId, conversationId, message, systemPrompt,
                             onTrace, onSources, onToken, emitter::complete, true);
                 } else {

@@ -3,6 +3,8 @@
 
 dashscope.api-key=
 dashscope.embedding.api-key=
+# Optional: defaults to dashscope.embedding.api-key when empty.
+dashscope.rerank.api-key=
 spring.ai.openai.api-key=
 spring.datasource.password=
 weather.api.api-key=

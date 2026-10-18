@@ -55,9 +55,16 @@ public class VectorStoreService {
     private final EmbeddingService embeddingService;
     private final RagRetrievalLogService ragRetrievalLogService;
     private final PlatformTransactionManager sqliteTransactionManager;
+    private RerankService rerankService;
 
     @Value("${chat.vectorstore.top-k:5}")
     private int topK;
+
+    /**
+     * 重排开启时对话记忆单独预留的名额上限；重排关闭时仍沿用旧的混合 topK 行为。
+     */
+    @Value("${chat.vectorstore.memory-top-k:2}")
+    private int memoryTopK;
 
     /**
      * 向量通道的准入下限。注意它不再是唯一门槛：公共知识还可以经关键词通道准入，
@@ -78,6 +85,19 @@ public class VectorStoreService {
     @Value("${chat.vectorstore.keyword.enabled:true}")
     private boolean keywordEnabled;
 
+    /** 重排总开关（回滚开关）；默认关闭，灰度名单为空时开启即全量。 */
+    @Value("${chat.vectorstore.rerank.enabled:false}")
+    private boolean rerankEnabled;
+
+    @Value("${chat.vectorstore.rerank.candidate-pool-size:20}")
+    private int rerankCandidatePoolSize;
+
+    @Value("${chat.vectorstore.rerank.min-candidates:3}")
+    private int rerankMinCandidates;
+
+    @Value("${chat.vectorstore.rerank.canary-users:}")
+    private String rerankCanaryUsers;
+
     private final List<float[]> vectorIndex = new ArrayList<>();
     private final Map<Integer, IndexEntry> indexEntries = new ConcurrentHashMap<>();
     private final Set<String> clearedConversationKeys = ConcurrentHashMap.newKeySet();
@@ -85,11 +105,19 @@ public class VectorStoreService {
     private final AtomicBoolean indexReady = new AtomicBoolean(false);
     private final ReadWriteLock indexLock = new ReentrantReadWriteLock();
 
-    /** 测试/旧装配兼容：没有事务模板时直接写库。 */
+    /** 测试/旧装配兼容：没有事务模板与重排服务。 */
     public VectorStoreService(VectorStoreRepository vectorStoreRepository,
                               EmbeddingService embeddingService,
                               RagRetrievalLogService ragRetrievalLogService) {
-        this(vectorStoreRepository, embeddingService, ragRetrievalLogService, null);
+        this(vectorStoreRepository, embeddingService, ragRetrievalLogService, null, null);
+    }
+
+    public VectorStoreService(VectorStoreRepository vectorStoreRepository,
+                              EmbeddingService embeddingService,
+                              RagRetrievalLogService ragRetrievalLogService,
+                              PlatformTransactionManager sqliteTransactionManager) {
+        this(vectorStoreRepository, embeddingService, ragRetrievalLogService,
+                sqliteTransactionManager, null);
     }
 
     @Autowired
@@ -97,11 +125,18 @@ public class VectorStoreService {
                               EmbeddingService embeddingService,
                               RagRetrievalLogService ragRetrievalLogService,
                               @Qualifier("sqliteTransactionManager")
-                              PlatformTransactionManager sqliteTransactionManager) {
+                              PlatformTransactionManager sqliteTransactionManager,
+                              RerankService rerankService) {
         this.vectorStoreRepository = vectorStoreRepository;
         this.embeddingService = embeddingService;
         this.ragRetrievalLogService = ragRetrievalLogService;
         this.sqliteTransactionManager = sqliteTransactionManager;
+        this.rerankService = rerankService;
+    }
+
+    /** 测试注入用。 */
+    void setRerankService(RerankService rerankService) {
+        this.rerankService = rerankService;
     }
 
     @PostConstruct
@@ -536,6 +571,8 @@ public class VectorStoreService {
         long startNanos = System.nanoTime();
         String traceId = UUID.randomUUID().toString().replace("-", "");
         List<SearchResult> results = new ArrayList<>();
+        int admittedCount = 0;
+        RetrievalTraceStats stats = baseStats(0, 0);
         try {
             indexLock.readLock().lock();
             try {
@@ -555,20 +592,154 @@ public class VectorStoreService {
                 indexLock.readLock().unlock();
             }
 
-            results.sort((a, b) -> Double.compare(b.getSimilarity(), a.getSimilarity()));
-            if (results.size() > topK) {
-                results = new ArrayList<>(results.subList(0, topK));
-            }
-            logger.info("[RAG] traceId={}, userId={}, conversationId={}, retrieved={}, topK={}",
-                    traceId, userId, conversationId, results.size(), topK);
+            results = sortByCosine(results);
+            admittedCount = results.size();
+            stats.admittedCount(admittedCount);
+            results = selectResults(query, userId, results, stats);
+            stats.returnedCount(results.size());
+            logger.info("[RAG] traceId={}, userId={}, conversationId={}, admitted={}, retrieved={}, topK={}, reranked={}",
+                    traceId, userId, conversationId, admittedCount, results.size(), topK,
+                    Boolean.TRUE.equals(stats.toJson().getBoolean("rerankApplied")));
         } catch (Exception e) {
             logger.error("[RAG] Vector search failed, traceId: {}", traceId, e);
             results = new ArrayList<>();
         } finally {
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
-            recordRetrievalLog(traceId, userId, conversationId, query, results, durationMs);
+            stats.returnedCount(results.size());
+            recordRetrievalLog(traceId, userId, conversationId, query, results, stats, durationMs);
         }
-        return new SearchOutcome(traceId, List.copyOf(results));
+        return new SearchOutcome(traceId, List.copyOf(results), stats);
+    }
+
+    /**
+     * 选择最终返回结果：
+     * <ul>
+     *   <li>重排关闭/未装配/灰度未命中 —— 与旧行为完全一致的混合余弦 topK；</li>
+     *   <li>重排开启 —— 公共知识池重排取 topK，对话记忆单独预留最多 memoryTopK 条；</li>
+     *   <li>任何重排失败 —— 回退到旧的混合余弦 topK。</li>
+     * </ul>
+     */
+    private List<SearchResult> selectResults(String query, String userId,
+                                             List<SearchResult> admitted,
+                                             RetrievalTraceStats stats) {
+        stats.rerankEnabled(rerankEnabled);
+        if (rerankService == null || !rerankEnabled) {
+            stats.rerankApplied(false);
+            return cosineTopK(admitted);
+        }
+        if (!FeatureRollout.includes(userId, rerankCanaryUsers)) {
+            stats.rerankApplied(false).rerankFallbackReason("canary_excluded");
+            return cosineTopK(admitted);
+        }
+        return rerankAndSelect(query, admitted, stats);
+    }
+
+    private List<SearchResult> rerankAndSelect(String query, List<SearchResult> admitted,
+                                               RetrievalTraceStats stats) {
+        Map<SearchResult, Integer> cosineRankByResult = new java.util.IdentityHashMap<>();
+        List<SearchResult> publicCandidates = new ArrayList<>();
+        List<SearchResult> memoryCandidates = new ArrayList<>();
+        for (int i = 0; i < admitted.size(); i++) {
+            SearchResult result = admitted.get(i);
+            cosineRankByResult.put(result, i + 1);
+            if (ORIGIN_PUBLIC_KB.equals(result.getOrigin())) {
+                publicCandidates.add(result);
+            } else {
+                memoryCandidates.add(result);
+            }
+        }
+
+        int poolSize = Math.min(Math.max(0, rerankCandidatePoolSize), publicCandidates.size());
+        List<SearchResult> pool = new ArrayList<>(publicCandidates.subList(0, poolSize));
+        stats.rerankPoolSize(rerankCandidatePoolSize)
+                .rerankCandidateCount(pool.size())
+                .rerankTimeoutMs(rerankService.getTimeoutMs());
+
+        if (pool.size() < rerankMinCandidates) {
+            stats.rerankApplied(false).rerankFallbackReason("pool_too_small");
+            return cosineTopK(admitted);
+        }
+
+        List<String> documents = new ArrayList<>(pool.size());
+        for (SearchResult candidate : pool) {
+            documents.add(candidate.getContent());
+        }
+        RerankService.RerankOutcome outcome = rerankService.rerank(query, documents);
+        stats.rerankModel(outcome.model()).rerankDurationMs(outcome.durationMs());
+        if (!outcome.applied()) {
+            stats.rerankApplied(false).rerankFallbackReason(outcome.fallbackReason());
+            return cosineTopK(admitted);
+        }
+
+        List<Double> scores = outcome.scoresByIndex();
+        List<Integer> order = new ArrayList<>(pool.size());
+        for (int i = 0; i < pool.size(); i++) {
+            order.add(i);
+        }
+        order.sort(Comparator.comparingDouble((Integer index) -> scores.get(index)).reversed());
+
+        int publicLimit = Math.max(0, topK);
+        List<SearchResult> selectedPublic = new ArrayList<>(Math.min(publicLimit, order.size()));
+        for (int i = 0; i < order.size() && selectedPublic.size() < publicLimit; i++) {
+            int index = order.get(i);
+            SearchResult candidate = pool.get(index);
+            selectedPublic.add(candidate.withRanking(
+                    0,
+                    cosineRankByResult.getOrDefault(candidate, 0),
+                    scores.get(index)));
+        }
+
+        int memoryLimit = selectedPublic.isEmpty()
+                ? Math.min(Math.max(0, topK), memoryCandidates.size())
+                : Math.min(Math.max(0, memoryTopK), memoryCandidates.size());
+        List<SearchResult> finalResults = new ArrayList<>(selectedPublic);
+        if (memoryLimit > 0) {
+            finalResults.addAll(memoryCandidates.subList(0, memoryLimit));
+        }
+
+        List<SearchResult> ranked = new ArrayList<>(finalResults.size());
+        for (int i = 0; i < finalResults.size(); i++) {
+            SearchResult result = finalResults.get(i);
+            ranked.add(result.withRanking(i + 1, result.getCosineRank(), result.getRerankScore()));
+        }
+        stats.rerankApplied(true);
+        return ranked;
+    }
+
+    /** 与旧行为完全一致：混合余弦排序后截断 topK。 */
+    private List<SearchResult> cosineTopK(List<SearchResult> admitted) {
+        List<SearchResult> truncated = admitted.size() > topK
+                ? new ArrayList<>(admitted.subList(0, topK))
+                : new ArrayList<>(admitted);
+        List<SearchResult> ranked = new ArrayList<>(truncated.size());
+        for (int i = 0; i < truncated.size(); i++) {
+            ranked.add(truncated.get(i).withRanking(i + 1, i + 1, -1));
+        }
+        return ranked;
+    }
+
+    /**
+     * 余弦降序；documentId 作为稳定的次级键，避免 Map 遍历顺序导致同分结果漂移。
+     * 重排关闭时这就是最终顺序。
+     */
+    private static List<SearchResult> sortByCosine(List<SearchResult> results) {
+        List<SearchResult> sorted = new ArrayList<>(results);
+        sorted.sort(Comparator
+                .comparingDouble(SearchResult::getSimilarity).reversed()
+                .thenComparing(SearchResult::getDocumentId,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        return sorted;
+    }
+
+    private RetrievalTraceStats baseStats(int admittedCount, int returnedCount) {
+        return RetrievalTraceStats.create()
+                .admittedCount(admittedCount)
+                .returnedCount(returnedCount)
+                .topK(topK)
+                .memoryTopK(memoryTopK)
+                .similarityThreshold(similarityThreshold)
+                .keywordFloor(keywordFloor)
+                .keywordEnabled(keywordEnabled);
     }
 
     /**
@@ -682,7 +853,8 @@ public class VectorStoreService {
     }
 
     private void recordRetrievalLog(String traceId, String userId, String conversationId,
-                                    String query, List<SearchResult> results, long durationMs) {
+                                    String query, List<SearchResult> results,
+                                    RetrievalTraceStats stats, long durationMs) {
         try {
             JSONArray array = new JSONArray();
             for (SearchResult result : results) {
@@ -693,6 +865,11 @@ public class VectorStoreService {
                 item.put("origin", result.getOrigin());
                 item.put("keywordScore", Math.round(result.getKeywordScore() * 10000.0) / 10000.0);
                 item.put("channel", result.getChannel());
+                item.put("rank", result.getRank());
+                item.put("cosineRank", result.getCosineRank());
+                if (result.getRerankScore() >= 0) {
+                    item.put("rerankScore", Math.round(result.getRerankScore() * 10000.0) / 10000.0);
+                }
                 array.add(item);
             }
             ragRetrievalLogService.record(
@@ -705,7 +882,8 @@ public class VectorStoreService {
                     similarityThreshold,
                     results.size(),
                     durationMs,
-                    array.toJSONString()
+                    array.toJSONString(),
+                    stats == null ? null : stats.toJson().toJSONString()
             );
         } catch (Exception e) {
             logger.warn("[RAG] Failed to build retrieval log, traceId: {}, cause: {}", traceId, e.getMessage());
@@ -995,18 +1173,30 @@ public class VectorStoreService {
         private final String origin;
         private final double keywordScore;
         private final String channel;
+        /** 最终返回顺序（1 开始）。 */
+        private final int rank;
+        /** 重排前的余弦顺序（1 开始）。 */
+        private final int cosineRank;
+        /** 重排分数；未重排时为 -1，落盘时省略。 */
+        private final double rerankScore;
 
         public SearchResult(String documentId, String sourceId, String content, double similarity, JSONObject metadata) {
-            this(documentId, sourceId, content, similarity, metadata, null, 0.0, null);
+            this(documentId, sourceId, content, similarity, metadata, null, 0.0, null, 0, 0, -1);
         }
 
         public SearchResult(String documentId, String sourceId, String content, double similarity,
                             JSONObject metadata, String origin) {
-            this(documentId, sourceId, content, similarity, metadata, origin, 0.0, null);
+            this(documentId, sourceId, content, similarity, metadata, origin, 0.0, null, 0, 0, -1);
         }
 
         public SearchResult(String documentId, String sourceId, String content, double similarity,
                             JSONObject metadata, String origin, double keywordScore, String channel) {
+            this(documentId, sourceId, content, similarity, metadata, origin, keywordScore, channel, 0, 0, -1);
+        }
+
+        public SearchResult(String documentId, String sourceId, String content, double similarity,
+                            JSONObject metadata, String origin, double keywordScore, String channel,
+                            int rank, int cosineRank, double rerankScore) {
             this.documentId = documentId;
             this.sourceId = sourceId;
             this.content = content;
@@ -1015,6 +1205,9 @@ public class VectorStoreService {
             this.origin = origin;
             this.keywordScore = keywordScore;
             this.channel = channel;
+            this.rank = rank;
+            this.cosineRank = cosineRank;
+            this.rerankScore = rerankScore;
         }
 
         public String getDocumentId() {
@@ -1048,11 +1241,38 @@ public class VectorStoreService {
         public String getChannel() {
             return channel;
         }
+
+        public int getRank() {
+            return rank;
+        }
+
+        public int getCosineRank() {
+            return cosineRank;
+        }
+
+        public double getRerankScore() {
+            return rerankScore;
+        }
+
+        public SearchResult withRanking(int newRank, int newCosineRank, double newRerankScore) {
+            return new SearchResult(documentId, sourceId, content, similarity, metadata, origin,
+                    keywordScore, channel, newRank, newCosineRank, newRerankScore);
+        }
+
+        public SearchResult withContent(String newContent) {
+            return new SearchResult(documentId, sourceId, newContent, similarity, metadata, origin,
+                    keywordScore, channel, rank, cosineRank, rerankScore);
+        }
     }
 
-    public record SearchOutcome(String traceId, List<SearchResult> results) {
+    public record SearchOutcome(String traceId, List<SearchResult> results,
+                                RetrievalTraceStats stats) {
         public SearchOutcome {
             results = results == null ? List.of() : List.copyOf(results);
+        }
+
+        public SearchOutcome(String traceId, List<SearchResult> results) {
+            this(traceId, results, null);
         }
     }
 }

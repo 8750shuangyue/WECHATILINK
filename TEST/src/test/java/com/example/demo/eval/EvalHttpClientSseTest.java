@@ -119,7 +119,12 @@ class EvalHttpClientSseTest {
                 "test-embedding",
                 "test-commit",
                 0.0,
-                includeCitations
+                includeCitations,
+                5,
+                0.0,
+                0.0,
+                0.0,
+                0.0
         );
     }
 }

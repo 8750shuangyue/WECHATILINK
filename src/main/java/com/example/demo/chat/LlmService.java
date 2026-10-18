@@ -171,6 +171,20 @@ public class LlmService {
                            Consumer<List<RagContextService.SourceRef>> onSources,
                            Consumer<String> onToken, Runnable onDone,
                            boolean includeCitations) throws Exception {
+        chatStream(userId, conversationId, userMessage, systemPrompt,
+                onRetrievalTrace, onSources, ignored -> {
+                }, onToken, onDone, includeCitations);
+    }
+
+    /**
+     * @param onRetrievalStats 检索/重排/压缩统计回调，先于首个 token；不需要时传 null。
+     */
+    public void chatStream(String userId, String conversationId, String userMessage, String systemPrompt,
+                           Consumer<String> onRetrievalTrace,
+                           Consumer<List<RagContextService.SourceRef>> onSources,
+                           Consumer<RetrievalTraceStats> onRetrievalStats,
+                           Consumer<String> onToken, Runnable onDone,
+                           boolean includeCitations) throws Exception {
         boolean citationEnabled = includeCitations && citationsEnabled;
         String effectivePrompt = systemPrompt;
 
@@ -196,7 +210,8 @@ public class LlmService {
         String retrievalTraceId = null;
         if (conversationId != null && !conversationId.isBlank()) {
             RetrievalResult retrieval = retrieveRagContext(
-                    userId, userMessage, conversationId, onRetrievalTrace, onSources, citationEnabled);
+                    userId, userMessage, conversationId, onRetrievalTrace, onSources,
+                    onRetrievalStats, citationEnabled);
             String ragContext = retrieval.context();
             retrievedSources = retrieval.sources();
             retrievalTraceId = retrieval.traceId();
@@ -346,7 +361,7 @@ public class LlmService {
 
         RetrievalResult retrieval = retrieveRagContext(userId, userMessage, conversationId,
                 ignored -> {
-                }, onSources, citationEnabled);
+                }, onSources, null, citationEnabled);
         String ragContext = retrieval.context();
         if (citationEnabled) {
             ragContext = CitationPrompt.appendTo(ragContext, retrieval.sources().size());
@@ -383,6 +398,7 @@ public class LlmService {
     private RetrievalResult retrieveRagContext(String userId, String query, String conversationId,
                                                Consumer<String> onRetrievalTrace,
                                                Consumer<List<RagContextService.SourceRef>> onSources,
+                                               Consumer<RetrievalTraceStats> onRetrievalStats,
                                                boolean citationEnabled) {
         if (ragContextService == null) {
             if (onSources != null) {
@@ -411,6 +427,9 @@ public class LlmService {
         }
         if (onSources != null) {
             onSources.accept(sources);
+        }
+        if (onRetrievalStats != null && contextResult != null && contextResult.stats() != null) {
+            onRetrievalStats.accept(contextResult.stats());
         }
         if (ragContext == null) {
             ragContext = "";

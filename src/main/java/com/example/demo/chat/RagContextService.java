@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.chat.VectorStoreService.SearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -19,9 +20,21 @@ public class RagContextService {
     private static final Logger logger = LoggerFactory.getLogger(RagContextService.class);
 
     private final VectorStoreService vectorStoreService;
+    private final ContextCompressionService compressionService;
+    private final RagRetrievalLogService retrievalLogService;
 
+    /** 测试/旧装配兼容：不做压缩，也不回写压缩统计。 */
     public RagContextService(VectorStoreService vectorStoreService) {
+        this(vectorStoreService, null, null);
+    }
+
+    @Autowired
+    public RagContextService(VectorStoreService vectorStoreService,
+                             ContextCompressionService compressionService,
+                             RagRetrievalLogService retrievalLogService) {
         this.vectorStoreService = vectorStoreService;
+        this.compressionService = compressionService;
+        this.retrievalLogService = retrievalLogService;
     }
 
     public String buildContext(String userId, String conversationId, String query) {
@@ -47,16 +60,57 @@ public class RagContextService {
                     vectorStoreService.searchSimilarWithMetadataAndTrace(
                             query, userId, conversationId);
             List<SearchResult> results = outcome == null ? null : outcome.results();
+            RetrievalTraceStats stats = outcome == null ? null : outcome.stats();
             if (results == null || results.isEmpty()) {
-                return new ContextResult("", outcome == null ? null : outcome.traceId(), List.of());
+                return new ContextResult("", outcome == null ? null : outcome.traceId(),
+                        List.of(), stats);
             }
-            List<SourceRef> sources = buildSourceRefs(results);
-            return new ContextResult(formatResults(results, citationEnabled, sources),
-                    outcome.traceId(), sources);
+            List<SearchResult> ordered = orderResults(results);
+            RetrievalTraceStats mergedStats = stats == null
+                    ? RetrievalTraceStats.create() : stats;
+            if (compressionService != null) {
+                ContextCompressionService.CompressionResult compressed =
+                        compressionService.compress(userId, query, ordered);
+                ordered = compressed.results();
+                mergedStats.merge(compressed.stats());
+                boolean compressionEnabled = Boolean.TRUE.equals(
+                        compressed.stats().toJson().getBoolean("compressionEnabled"));
+                if (compressionEnabled && retrievalLogService != null
+                        && outcome.traceId() != null && !outcome.traceId().isBlank()) {
+                    retrievalLogService.updateCompressionStats(
+                            outcome.traceId(), compressed.stats());
+                }
+            }
+            List<SourceRef> sources = buildSourceRefs(ordered);
+            return new ContextResult(formatResults(ordered, citationEnabled, sources),
+                    outcome.traceId(), sources, mergedStats);
         } catch (Exception e) {
             logger.warn("Failed to build RAG context: {}", e.getMessage());
             return new ContextResult("", null, List.of());
         }
+    }
+
+    /**
+     * 信任检索层给出的最终顺序：有 rank 时按 rank 升序（0 视为未排序，排最后），
+     * 否则退回余弦降序，兼容旧调用与测试替身。
+     */
+    private List<SearchResult> orderResults(List<SearchResult> results) {
+        List<SearchResult> ordered = new ArrayList<>(results);
+        boolean hasRank = ordered.stream()
+                .anyMatch(result -> result != null && result.getRank() > 0);
+        if (hasRank) {
+            ordered.sort(Comparator
+                    .comparingInt((SearchResult result) -> result.getRank() > 0
+                            ? result.getRank() : Integer.MAX_VALUE)
+                    .thenComparing(Comparator
+                            .comparingDouble(SearchResult::getSimilarity).reversed()));
+        } else {
+            ordered.sort(Comparator
+                    .comparingDouble(SearchResult::getSimilarity).reversed()
+                    .thenComparing(SearchResult::getDocumentId,
+                            Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+        return ordered;
     }
 
     /**
@@ -69,19 +123,28 @@ public class RagContextService {
         }
     }
 
-    public record ContextResult(String context, String traceId, List<SourceRef> sources) {
+    public record ContextResult(String context, String traceId, List<SourceRef> sources,
+                                RetrievalTraceStats stats) {
         public ContextResult {
             context = context == null ? "" : context;
             sources = sources == null ? List.of() : List.copyOf(sources);
         }
 
+        public ContextResult(String context, String traceId, List<SourceRef> sources) {
+            this(context, traceId, sources, null);
+        }
+
         public ContextResult(String context, String traceId) {
-            this(context, traceId, List.of());
+            this(context, traceId, List.of(), null);
         }
     }
 
+    /**
+     * 来源编号严格跟随检索层的最终顺序（重排后即重排顺序），
+     * 按 sourceId 去重并保留第一次出现的那条。
+     */
     private List<SourceRef> buildSourceRefs(List<SearchResult> results) {
-        List<SearchResult> candidates = new ArrayList<>();
+        Map<String, SourceRef> bySourceId = new LinkedHashMap<>();
         for (SearchResult result : results) {
             if (result == null || result.getContent() == null || result.getContent().isBlank()) {
                 continue;
@@ -92,12 +155,6 @@ public class RagContextService {
             if (result.getSourceId() == null || result.getSourceId().isBlank()) {
                 continue;
             }
-            candidates.add(result);
-        }
-
-        candidates.sort(Comparator.comparingDouble(SearchResult::getSimilarity).reversed());
-        Map<String, SourceRef> bySourceId = new LinkedHashMap<>();
-        for (SearchResult result : candidates) {
             if (!bySourceId.containsKey(result.getSourceId())) {
                 int rank = bySourceId.size() + 1;
                 bySourceId.put(result.getSourceId(),

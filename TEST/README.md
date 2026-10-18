@@ -10,6 +10,7 @@
 - 不记录 Cookie、密码、API Key、Authorization 或真实用户隐私。
 - 阶段 2.2 起，普通流式聊天会推送 SSE `rag-trace` 事件，评测侧可据此调用受控只读接口 `/api/internal/rag/retrievals/{traceId}` 取回该次问答命中的 `sourceId`；当题库 `expectedSourceIds` 非空且该次检索状态为 `available` 时，`sourceRecall` 可计算，否则保持为空。
 - 引用追溯第二阶段起，流式评测请求会带 `includeSources=true`，并默认带 `includeCitations=true`；评测侧从 SSE `rag-sources` 采集本次来源列表，用于计算引用覆盖率/精确率。`AI_EVAL_INCLUDE_CITATIONS=false` 可关闭引用指令与正文 `[n]`，用于 A/B 对照。
+- 阶段 3.4 起，流式评测请求还会带 `includeTraceStats=true`，服务端在首 token 前补发 SSE `rag-stats`（服务端配置快照、重排/压缩状态与耗时）。评测优先使用受控观测接口里落盘的 `stats_json`，SSE 事件作为兜底；老客户端不传该参数时不会收到新事件。
 
 ## 运行前准备
 
@@ -107,6 +108,18 @@ mvn -B -f TEST\pom.xml "-Dtest=EvalReportRegeneratorTest" test
 - 引用精确率：被回答引用的期望来源数 / 被回答引用的来源数；回答没有引用时为 null。
 - 引用标记数 / 无效标记数：分别统计正文中全部 `[n]` 和无法映射到本次来源的编号；无效标记只计数，不改变用例通过判定。
 - 为了不让 `[n]` 干扰短语规则，事实分、禁用结论和拒答匹配前会先剥离引用标记；引用指标本身仍使用原始正文。覆盖率/精确率只做来源匹配，不能判断编号是否真的支持该句。
+- 排名指标（阶段 3.4）：`Hit@1` / `MRR@K` / `nDCG@K` 基于受控观测接口返回的最终 `rank` 顺序（旧日志没有 rank 时按数组顺序），只看 `origin=public_kb` 的来源并按 `sourceId` 去重保留首次出现位置；`K` 由 `AI_EVAL_RANK_K` 控制，默认 5。它们衡量期望来源排得靠不靠前，不判断引用句子是否真的支持结论。
+- 压缩指标（阶段 3.4）：从服务端 `stats` 读取 `compressionApplied`、前后字符数与保护事实计数，计算压缩率与保护事实保留率；只验证可保护的数字/时间/剂量/安全句未被丢弃，普通事实的语义保真仍以质量通过率和人工复核为准。
+
+可选门槛默认全部为 0（不启用），只有显式设置 >0 时才会在评测结束时断言；启用的门槛同时要求指标有样本，避免观测关闭时「无样本 = 通过」：
+
+```powershell
+$env:AI_EVAL_RANK_K = "5"
+$env:AI_EVAL_RECALL_FLOOR = "0.9615"
+$env:AI_EVAL_NDCG_FLOOR = "0.8"
+$env:AI_EVAL_MRR_FLOOR = "0.8"
+$env:AI_EVAL_COMPRESSION_PRESERVATION_FLOOR = "1.0"
+```
 
 `critical=true` 的用例会执行三次。达到 `AI_EVAL_MAX_TOKENS` 预算时会停止后续执行，但仍会生成已经完成部分的结果和报告。
 

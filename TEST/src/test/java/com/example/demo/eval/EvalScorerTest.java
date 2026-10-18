@@ -2,7 +2,9 @@ package com.example.demo.eval;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -315,6 +317,156 @@ class EvalScorerTest {
         assertFalse(unsafe.passed());
     }
 
+    @Test
+    void rankMetricsUseServerRankOrderNotArrayOrder() {
+        EvalCase evalCase = evalCase(
+                "stream", List.of(), List.of(), List.of(), List.of(), List.of("kb_a"));
+        List<EvalHttpClient.RetrievalRecord> retrieval = List.of(
+                retrieval("kb_a", 2, "public_kb"),
+                retrieval("kb_x", 1, "public_kb")
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResultWithRetrieval("回答", retrieval, Map.of()),
+                0.75
+        );
+
+        assertEquals(0.0, result.autoScore().hitAt1, 1e-9);
+        assertEquals(0.5, result.autoScore().mrrAtK, 1e-9);
+        assertEquals(1.0 / (Math.log(3) / Math.log(2)),
+                result.autoScore().ndcgAtK, 1e-9);
+    }
+
+    @Test
+    void rankMetricsFallBackToArrayOrderForOldLogs() {
+        EvalCase evalCase = evalCase(
+                "stream", List.of(), List.of(), List.of(), List.of(), List.of("kb_a"));
+        List<EvalHttpClient.RetrievalRecord> retrieval = List.of(
+                retrieval("kb_a", null, "public_kb"),
+                retrieval("kb_x", null, "public_kb")
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResultWithRetrieval("回答", retrieval, Map.of()),
+                0.75
+        );
+
+        assertEquals(1.0, result.autoScore().hitAt1, 1e-9);
+        assertEquals(1.0, result.autoScore().mrrAtK, 1e-9);
+        assertEquals(1.0, result.autoScore().ndcgAtK, 1e-9);
+    }
+
+    @Test
+    void rankMetricsDedupeSourceIdsKeepingFirstOccurrence() {
+        EvalCase evalCase = evalCase(
+                "stream", List.of(), List.of(), List.of(), List.of(), List.of("kb_a"));
+        List<EvalHttpClient.RetrievalRecord> retrieval = List.of(
+                retrieval("kb_x", 1, "public_kb"),
+                retrieval("kb_a", 2, "public_kb"),
+                retrieval("kb_a", 3, "public_kb")
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResultWithRetrieval("回答", retrieval, Map.of()),
+                0.75
+        );
+
+        assertEquals(0.0, result.autoScore().hitAt1, 1e-9);
+        assertEquals(0.5, result.autoScore().mrrAtK, 1e-9);
+    }
+
+    @Test
+    void rankMetricsIgnoreConversationMemory() {
+        EvalCase evalCase = evalCase(
+                "stream", List.of(), List.of(), List.of(), List.of(), List.of("kb_a"));
+        List<EvalHttpClient.RetrievalRecord> retrieval = List.of(
+                retrieval("kb_a", 1, "conversation_memory"),
+                retrieval("kb_x", 2, "public_kb")
+        );
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResultWithRetrieval("回答", retrieval, Map.of()),
+                0.75
+        );
+
+        assertEquals(0.0, result.autoScore().hitAt1, 1e-9);
+        assertEquals(0.0, result.autoScore().mrrAtK, 1e-9);
+        assertEquals(0.0, result.autoScore().ndcgAtK, 1e-9);
+    }
+
+    @Test
+    void rankMetricsNullWithoutExpectedSources() {
+        EvalCase evalCase = evalCase(
+                "stream", List.of(), List.of(), List.of(), List.of());
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResultWithRetrieval("回答",
+                        List.of(retrieval("kb_a", 1, "public_kb")), Map.of()),
+                0.75
+        );
+
+        assertNull(result.autoScore().hitAt1);
+        assertNull(result.autoScore().mrrAtK);
+        assertNull(result.autoScore().ndcgAtK);
+    }
+
+    @Test
+    void compressionMetricsComeFromServerStats() {
+        EvalCase evalCase = evalCase(
+                "stream", List.of(), List.of(), List.of(), List.of());
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("compressionApplied", true);
+        stats.put("compressionBeforeChars", 1000);
+        stats.put("compressionAfterChars", 700);
+        stats.put("compressionProtectedFacts", 4);
+        stats.put("compressionPreservedProtectedFacts", 4);
+
+        EvalScorer.ScoreResult result = scorer.score(
+                evalCase,
+                httpResultWithRetrieval("回答", List.of(), stats),
+                0.75
+        );
+
+        assertEquals(Boolean.TRUE, result.autoScore().compressionApplied);
+        assertEquals(0.3, result.autoScore().compressionCharReduction, 1e-9);
+        assertEquals(1.0, result.autoScore().compressionProtectedFactPreservation, 1e-9);
+    }
+
+    private EvalHttpClient.RetrievalRecord retrieval(
+            String sourceId, Integer rank, String origin) {
+        return new EvalHttpClient.RetrievalRecord(
+                "doc-" + sourceId, sourceId, 0.5, origin,
+                rank, rank, rank == null ? null : 0.9, 0.0, "vector");
+    }
+
+    private EvalHttpClient.HttpResult httpResultWithRetrieval(
+            String response,
+            List<EvalHttpClient.RetrievalRecord> retrieval,
+            Map<String, Object> stats
+    ) {
+        return new EvalHttpClient.HttpResult(
+                200,
+                response,
+                1L,
+                1L,
+                null,
+                null,
+                null,
+                List.of(),
+                retrieval,
+                "available",
+                null,
+                0,
+                List.of(),
+                "unavailable",
+                stats.isEmpty() ? null : stats
+        );
+    }
+
     private EvalCase evalCase(
             String path,
             List<String> expectedFacts,
@@ -383,7 +535,8 @@ class EvalScorerTest {
                 null,
                 0,
                 sources,
-                sourcesStatus
+                sourcesStatus,
+                null
         );
     }
 }

@@ -1,5 +1,6 @@
 package com.example.demo.eval;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -100,6 +101,8 @@ public final class EvalHttpClient implements AutoCloseable {
         body.put("message", message);
         body.put("includeSources", "true");
         body.put("includeCitations", Boolean.toString(config.includeCitations()));
+        // 服务端仅在显式请求时下发 rag-stats；旧客户端不受影响。
+        body.put("includeTraceStats", "true");
 
         HttpResult result = executeWithRetry(() -> streamOnce(message, body.toString()));
         if (result.status() == 401) {
@@ -152,7 +155,8 @@ public final class EvalHttpClient implements AutoCloseable {
                     "Stream request failed with HTTP " + response.statusCode(),
                     0,
                     List.of(),
-                    "unavailable"
+                    "unavailable",
+                    null
             );
         }
 
@@ -194,6 +198,8 @@ public final class EvalHttpClient implements AutoCloseable {
         }
 
         RetrievalLookup retrieval = fetchRetrieval(state.traceId);
+        // 观测接口的 stats 是落盘真值；SSE rag-stats 作为兜底。
+        Map<String, Object> stats = retrieval.stats() != null ? retrieval.stats() : state.stats;
 
         return new HttpResult(
                 response.statusCode(),
@@ -209,7 +215,8 @@ public final class EvalHttpClient implements AutoCloseable {
                 streamError,
                 0,
                 state.sources,
-                state.sourcesSeen ? "available" : "unavailable"
+                state.sourcesSeen ? "available" : "unavailable",
+                stats
         );
     }
 
@@ -230,6 +237,13 @@ public final class EvalHttpClient implements AutoCloseable {
             if (parsed != null) {
                 state.sources = parsed;
                 state.sourcesSeen = true;
+            }
+            return;
+        }
+        if ("rag-stats".equals(eventName)) {
+            Map<String, Object> parsed = parseStats(payload);
+            if (parsed != null) {
+                state.stats = parsed;
             }
             return;
         }
@@ -278,6 +292,24 @@ public final class EvalHttpClient implements AutoCloseable {
         private long firstTokenMs = -1;
         private boolean sourcesSeen;
         private List<SourceRecord> sources = List.of();
+        private Map<String, Object> stats;
+    }
+
+    private Map<String, Object> parseStats(String payload) {
+        try {
+            JsonNode json = objectMapper.readTree(payload);
+            JsonNode stats = json.path("stats");
+            if (!stats.isObject()) {
+                return null;
+            }
+            return objectMapper.convertValue(
+                    stats,
+                    new TypeReference<Map<String, Object>>() {
+                    }
+            );
+        } catch (IOException | IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private HttpResult toolsOnce(String requestBody) throws IOException, InterruptedException {
@@ -304,7 +336,8 @@ public final class EvalHttpClient implements AutoCloseable {
                     "Tool request failed with HTTP " + response.statusCode(),
                     0,
                     List.of(),
-                    "not_applicable"
+                    "not_applicable",
+                    null
             );
         }
 
@@ -333,7 +366,8 @@ public final class EvalHttpClient implements AutoCloseable {
                 error,
                 0,
                 List.of(),
-                "not_applicable"
+                "not_applicable",
+                null
         );
     }
 
@@ -376,13 +410,23 @@ public final class EvalHttpClient implements AutoCloseable {
                 records.add(new RetrievalRecord(
                         textOrNull(item, "documentId"),
                         textOrNull(item, "sourceId"),
-                        item.hasNonNull("similarity") && item.path("similarity").isNumber()
-                                ? item.path("similarity").doubleValue()
-                                : null,
-                        textOrNull(item, "origin")
+                        numberOrNull(item, "similarity"),
+                        textOrNull(item, "origin"),
+                        integerOrNull(item, "rank"),
+                        integerOrNull(item, "cosineRank"),
+                        numberOrNull(item, "rerankScore"),
+                        numberOrNull(item, "keywordScore"),
+                        textOrNull(item, "channel")
                 ));
             }
-            return new RetrievalLookup(List.copyOf(records), "available");
+            JsonNode statsNode = body.path("data").path("stats");
+            Map<String, Object> stats = statsNode.isObject()
+                    ? objectMapper.convertValue(
+                            statsNode,
+                            new TypeReference<Map<String, Object>>() {
+                            })
+                    : null;
+            return new RetrievalLookup(List.copyOf(records), "available", stats);
         } catch (IOException | InterruptedException exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -502,6 +546,20 @@ public final class EvalHttpClient implements AutoCloseable {
         return value == null || value.isBlank() ? null : value;
     }
 
+    private Double numberOrNull(JsonNode node, String fieldName) {
+        if (node == null || !node.hasNonNull(fieldName) || !node.path(fieldName).isNumber()) {
+            return null;
+        }
+        return node.path(fieldName).doubleValue();
+    }
+
+    private Integer integerOrNull(JsonNode node, String fieldName) {
+        if (node == null || !node.hasNonNull(fieldName) || !node.path(fieldName).isNumber()) {
+            return null;
+        }
+        return node.path(fieldName).intValue();
+    }
+
     private String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
             return value;
@@ -533,13 +591,19 @@ public final class EvalHttpClient implements AutoCloseable {
             String documentId,
             String sourceId,
             Double similarity,
-            String origin
+            String origin,
+            Integer rank,
+            Integer cosineRank,
+            Double rerankScore,
+            Double keywordScore,
+            String channel
     ) {
     }
 
-    private record RetrievalLookup(List<RetrievalRecord> records, String status) {
+    private record RetrievalLookup(List<RetrievalRecord> records, String status,
+                                   Map<String, Object> stats) {
         private static RetrievalLookup unavailable() {
-            return new RetrievalLookup(List.of(), "unavailable");
+            return new RetrievalLookup(List.of(), "unavailable", null);
         }
     }
 
@@ -564,7 +628,8 @@ public final class EvalHttpClient implements AutoCloseable {
             String error,
             int retryCount,
             List<SourceRecord> sources,
-            String sourcesStatus
+            String sourcesStatus,
+            Map<String, Object> stats
     ) {
         public HttpResult {
             response = response == null ? "" : response;
@@ -590,7 +655,8 @@ public final class EvalHttpClient implements AutoCloseable {
                     error,
                     value,
                     sources,
-                    sourcesStatus
+                    sourcesStatus,
+                    stats
             );
         }
     }
