@@ -60,7 +60,7 @@ class AiEvalRunnerTest {
         }
 
         topK = Integer.getInteger("ai.eval.topK", 5);
-        similarityThreshold = Double.parseDouble(System.getProperty("ai.eval.similarity-threshold", "0.5"));
+        similarityThreshold = Double.parseDouble(System.getProperty("ai.eval.similarity-threshold", "0.35"));
         model = System.getProperty("ai.eval.model", "configured-model");
         temperature = Double.parseDouble(System.getProperty("ai.eval.temperature", "0.3"));
         costPer1kTokens = Double.parseDouble(System.getProperty("ai.eval.cost-per-1k-tokens", "0.002"));

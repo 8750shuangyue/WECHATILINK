@@ -156,6 +156,15 @@ public class LlmService {
             }
         }
 
+        String ragContext = retrieveRagContext(userMessage, conversationId);
+        if (ragContext != null && !ragContext.isEmpty()) {
+            String ragSystemMessage = "参考以下知识库资料，帮助回答用户当前问题：\n\n" + ragContext;
+            effectivePrompt = (effectivePrompt == null || effectivePrompt.isEmpty())
+                    ? ragSystemMessage
+                    : effectivePrompt + "\n\n" + ragSystemMessage;
+            logger.info("RAG context injected into chatStream, length: {} chars", ragContext.length());
+        }
+
         JSONArray messages = new JSONArray();
         StringBuilder replyBuilder = new StringBuilder();
 
@@ -249,7 +258,7 @@ public class LlmService {
         
         String ragContext = retrieveRagContext(userMessage, conversationId);
         if (ragContext != null && !ragContext.isEmpty()) {
-            String ragSystemMessage = "参考以下历史对话信息，帮助回答用户当前问题：\n\n" + ragContext;
+            String ragSystemMessage = "参考以下知识库资料，帮助回答用户当前问题：\n\n" + ragContext;
             if (systemPrompt == null) {
                 systemPrompt = ragSystemMessage;
             } else {
@@ -320,7 +329,7 @@ public class LlmService {
             }
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < similarMessages.size(); i++) {
-                sb.append("相关对话 ").append(i + 1).append(":\n");
+                sb.append("知识库资料 ").append(i + 1).append(":\n");
                 sb.append(similarMessages.get(i)).append("\n\n");
             }
             return sb.toString().trim();
