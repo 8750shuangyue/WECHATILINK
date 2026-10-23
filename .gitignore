@@ -54,4 +54,17 @@ TEST/eval/archive/*.zip
 
 ### Local secrets & config ###
 .env
+.env.*
+!.env.example
+!**/.env.example
 application-local.properties
+application-local*.properties
+!application-local.properties.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
