@@ -48,6 +48,16 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
+			<dependency>
+				<groupId>org.asynchttpclient</groupId>
+				<artifactId>async-http-client</artifactId>
+				<version>2.16.1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bitbucket.b_c</groupId>
+				<artifactId>jose4j</artifactId>
+				<version>0.9.7</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
@@ -76,19 +86,31 @@
 		<dependency>
 			<groupId>com.alibaba.fastjson2</groupId>
 			<artifactId>fastjson2</artifactId>
-			<version>2.0.55</version>
+			<version>2.0.66</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.apache.httpcomponents.client5</groupId>
 			<artifactId>httpclient5</artifactId>
-			<version>5.4.1</version>
+			<version>5.6.5</version>
+		</dependency>
+
+		<!-- web-push 的 send() 签名需要编译期可见 -->
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpcore</artifactId>
+			<version>4.4.16</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bitbucket.b_c</groupId>
+			<artifactId>jose4j</artifactId>
+			<version>0.9.7</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.18.32</version>
+			<version>1.18.48</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -103,13 +125,13 @@
 		<dependency>
 			<groupId>com.alibaba</groupId>
 			<artifactId>dashscope-sdk-java</artifactId>
-			<version>2.22.25</version>
+			<version>2.23.3</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.xerial</groupId>
 			<artifactId>sqlite-jdbc</artifactId>
-			<version>3.45.3.0</version>
+			<version>3.53.4.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.hibernate.orm</groupId>
@@ -119,7 +141,7 @@
 		<dependency>
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
-			<version>3.0.2</version>
+			<version>3.0.8</version>
 		</dependency>
 
 		<dependency>
@@ -163,14 +185,20 @@
 		<dependency>
 			<groupId>nl.martijndwars</groupId>
 			<artifactId>web-push</artifactId>
-			<version>5.1.1</version>
+			<version>5.1.2</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.bouncycastle</groupId>
+					<artifactId>bcprov-jdk15on</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<!-- BouncyCastle (required by web-push for ECC keys) -->
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk18on</artifactId>
-			<version>1.78.1</version>
+			<version>1.86</version>
 		</dependency>
 
 	</dependencies>
@@ -191,7 +219,7 @@
 						<path>
 							<groupId>org.projectlombok</groupId>
 							<artifactId>lombok</artifactId>
-							<version>1.18.32</version>
+							<version>1.18.48</version>
 						</path>
 					</annotationProcessorPaths>
 				</configuration>
