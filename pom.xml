@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.14</version>
+		<version>3.5.16</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
@@ -29,6 +29,9 @@
 	<properties>
 		<java.version>21</java.version>
 		<spring-ai.version>1.0.9</spring-ai.version>
+		<tomcat.version>10.1.61</tomcat.version>
+		<netty.version>4.1.139.Final</netty.version>
+		<jackson-bom.version>2.21.8</jackson-bom.version>
 	</properties>
 
 	<repositories>
@@ -57,6 +60,16 @@
 				<groupId>org.bitbucket.b_c</groupId>
 				<artifactId>jose4j</artifactId>
 				<version>0.9.7</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.httpcomponents.core5</groupId>
+				<artifactId>httpcore5</artifactId>
+				<version>5.4.4</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.httpcomponents.core5</groupId>
+				<artifactId>httpcore5-h2</artifactId>
+				<version>5.4.4</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
