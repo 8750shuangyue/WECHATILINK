@@ -1,0 +1,49 @@
+name: Dependency Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  osv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build dependency lists
+        run: |
+          mvn -B -ntp dependency:list -DincludeScope=test -DoutputFile=target/dependency-list.txt
+          mvn -B -ntp -f TEST/pom.xml dependency:list -DincludeScope=test -DoutputFile=target/dependency-list.txt
+
+      - name: Scan with OSV
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/osv_scan.py \
+            --dependency-file target/dependency-list.txt \
+            --dependency-file TEST/target/dependency-list.txt \
+            --baseline .osv-baseline.json \
+            --fail-on high | tee osv-report.txt
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-report
+          path: osv-report.txt
