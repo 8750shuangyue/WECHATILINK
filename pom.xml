@@ -49,11 +49,6 @@
 				<scope>import</scope>
 			</dependency>
 			<dependency>
-				<groupId>org.asynchttpclient</groupId>
-				<artifactId>async-http-client</artifactId>
-				<version>2.16.1</version>
-			</dependency>
-			<dependency>
 				<groupId>org.bitbucket.b_c</groupId>
 				<artifactId>jose4j</artifactId>
 				<version>0.9.7</version>
@@ -190,6 +185,11 @@
 				<exclusion>
 					<groupId>org.bouncycastle</groupId>
 					<artifactId>bcprov-jdk15on</artifactId>
+				</exclusion>
+				<!-- 仅 web-push 的 PushAsyncService 使用；本项目只用 PushService.send()（内部走 Apache HttpAsyncClient）。排除以消除 AHC 2.x 的 4 条已披露漏洞；若将来要用 PushAsyncService，须改用 AHC 3.x。 -->
+				<exclusion>
+					<groupId>org.asynchttpclient</groupId>
+					<artifactId>async-http-client</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>

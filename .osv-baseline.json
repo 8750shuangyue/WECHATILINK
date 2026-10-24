@@ -1,9 +1,4 @@
 {
-  "generated_at": "2026-10-24T01:39:30Z",
-  "findings": [
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-2jwh-9rmr-j4xf",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-p2jm-6hj6-9rjg",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-v2j5-22fr-j62r",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-x8v2-478q-2hvg"
-  ]
+  "generated_at": "2026-10-24T02:17:10Z",
+  "findings": []
 }
