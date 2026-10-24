@@ -113,8 +113,7 @@ public class SpringAiChatService {
         
         try {
             ChatResponse response = chatModel.call(prompt);
-            Object output = response.getResult().getOutput();
-            String content = output != null ? output.toString() : null;
+            String content = ChatResponseText.extract(response);
             log.info("Spring AI chat completed, response length: {}", content != null ? content.length() : 0);
             return content;
         } catch (Exception e) {
@@ -159,8 +158,7 @@ public class SpringAiChatService {
         
         try {
             ChatResponse response = chatModel.call(prompt);
-            Object output = response.getResult().getOutput();
-            return output != null ? output.toString() : null;
+            return ChatResponseText.extract(response);
         } catch (Exception e) {
             log.error("Spring AI chat with template failed", e);
             throw new RuntimeException("AI服务调用失败: " + e.getMessage(), e);
