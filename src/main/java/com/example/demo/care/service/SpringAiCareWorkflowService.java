@@ -1,5 +1,6 @@
 package com.example.demo.care.service;
 
+import com.example.demo.ai.ChatResponseText;
 import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.model.CareTarget;
 import com.example.demo.weather.model.WeatherResponse;
@@ -132,8 +133,7 @@ public class SpringAiCareWorkflowService {
             new UserMessage(userPrompt.toString())
         ));
 
-        Object output = chatModel.call(prompt).getResult().getOutput();
-        return output != null ? output.toString() : "无法生成护理建议";
+        return ChatResponseText.extract(chatModel.call(prompt), "无法生成护理建议");
     }
 
     public WorkflowResult createMedicationReminder(String userId, String targetId, 

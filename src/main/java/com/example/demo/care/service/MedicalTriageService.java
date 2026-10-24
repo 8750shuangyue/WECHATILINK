@@ -1,6 +1,7 @@
 package com.example.demo.care.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.example.demo.ai.ChatResponseText;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -92,14 +93,28 @@ public class MedicalTriageService {
         ));
 
         try {
-            Object output = chatModel.call(prompt).getResult().getOutput();
-            String response = output != null ? output.toString() : "{}";
-            
-            return parseTriageResponse(response);
+            String response = ChatResponseText.extract(chatModel.call(prompt), "{}");
+            return parseTriageResponse(stripCodeFence(response));
         } catch (Exception e) {
             log.error("AI triage failed", e);
             return TriageResult.medium("AI分析失败，建议谨慎对待");
         }
+    }
+
+    private String stripCodeFence(String response) {
+        String trimmed = response.trim();
+        if (!trimmed.startsWith("```")) {
+            return trimmed;
+        }
+        int firstNewline = trimmed.indexOf('\n');
+        if (firstNewline >= 0) {
+            trimmed = trimmed.substring(firstNewline + 1);
+        }
+        int closingFence = trimmed.lastIndexOf("```");
+        if (closingFence >= 0) {
+            trimmed = trimmed.substring(0, closingFence);
+        }
+        return trimmed.trim();
     }
 
     private TriageResult parseTriageResponse(String response) {
