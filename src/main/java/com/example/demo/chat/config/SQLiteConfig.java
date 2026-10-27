@@ -123,16 +123,24 @@ public class SQLiteConfig {
             logger.info("SQLite URL: {}", sqliteUrl);
             
             HikariDataSource dataSource = new HikariDataSource();
-            dataSource.setJdbcUrl(sqliteUrl);
+            dataSource.setJdbcUrl(withSqlitePragmas(sqliteUrl));
             dataSource.setDriverClassName("org.sqlite.JDBC");
             dataSource.setMaximumPoolSize(1);
             dataSource.setMinimumIdle(1);
             dataSource.setIdleTimeout(60000);
             dataSource.setConnectionTimeout(3000);
             dataSource.setMaxLifetime(1800000);
-            dataSource.setConnectionInitSql("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
             
             return dataSource;
+        }
+
+        /**
+         * sqlite-jdbc 会把 URL 查询参数作为 PRAGMA 在每次建连时应用。
+         * Hikari 7 的 connectionInitSql 只能可靠执行单条语句，因此不要再用多语句 init SQL。
+         */
+        private String withSqlitePragmas(String url) {
+            String pragmas = "busy_timeout=5000&journal_mode=WAL&synchronous=NORMAL";
+            return url + (url.contains("?") ? "&" : "?") + pragmas;
         }
 
         @Bean(name = "sqliteEntityManagerFactory")

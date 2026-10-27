@@ -1,21 +1,4 @@
 {
-  "generated_at": "2026-10-23T12:32:55Z",
-  "findings": [
-    "org.apache.commons:commons-compress|1.25.0|GHSA-4265-ccf5-phj5",
-    "org.apache.commons:commons-compress|1.25.0|GHSA-4g9r-vxhx-9pgx",
-    "org.apache.logging.log4j:log4j-api|2.24.3|GHSA-qv9r-c865-cp47",
-    "org.apache.logging.log4j:log4j-core|2.24.3|GHSA-3pxv-7cmr-fjr4",
-    "org.apache.logging.log4j:log4j-core|2.24.3|GHSA-445c-vh5m-36rj",
-    "org.apache.logging.log4j:log4j-core|2.24.3|GHSA-6hg6-v5c8-fphq",
-    "org.apache.logging.log4j:log4j-core|2.24.3|GHSA-vc5p-v9hr-52mj",
-    "org.apache.poi:poi-ooxml|5.2.5|GHSA-gmg8-593g-7mv3",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-2jwh-9rmr-j4xf",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-p2jm-6hj6-9rjg",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-v2j5-22fr-j62r",
-    "org.asynchttpclient:async-http-client|2.16.1|GHSA-x8v2-478q-2hvg",
-    "org.springframework:spring-webflux|6.2.19|GHSA-9qf2-26p9-2q2q",
-    "org.springframework:spring-webflux|6.2.19|GHSA-j9f9-w8pj-32f8",
-    "org.springframework:spring-webmvc|6.2.19|GHSA-j9f9-w8pj-32f8",
-    "org.springframework:spring-webmvc|6.2.19|GHSA-pc63-qcmh-9cmg"
-  ]
+  "generated_at": "2026-10-24T02:17:10Z",
+  "findings": []
 }
