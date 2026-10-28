@@ -1,6 +1,7 @@
 package com.example.demo.kb;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -88,5 +89,29 @@ class KnowledgeImportServiceTest {
                 service.plan("guide-1", "doc.md", "# " + title + "\n正文");
 
         assertEquals(200, plan.title().length());
+    }
+
+    @Test
+    void splitsSingleLongParagraphIntoBoundedChunks() {
+        String paragraph = "a".repeat(1200);
+
+        KnowledgeImportService.ImportPlan plan =
+                service.plan("kb_test", "long.txt", paragraph);
+
+        assertEquals(3, plan.chunks().size());
+        for (String chunk : plan.chunks()) {
+            assertTrue(chunk.length() <= KnowledgeImportService.CHUNK_LENGTH,
+                    "chunk length " + chunk.length() + " exceeds limit");
+        }
+    }
+
+    @Test
+    void rejectsWhenChunkCountExceedsLimit() {
+        KnowledgeImportService limited = new KnowledgeImportService();
+        ReflectionTestUtils.setField(limited, "maxChunks", 1);
+        String text = "a".repeat(600) + "\n\n" + "b".repeat(600);
+
+        assertThrows(KnowledgeImportException.class,
+                () -> limited.plan("kb_test", "long.txt", text));
     }
 }

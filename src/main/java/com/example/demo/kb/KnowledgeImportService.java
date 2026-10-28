@@ -1,5 +1,6 @@
 package com.example.demo.kb;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,9 @@ public class KnowledgeImportService {
     private static final Pattern H1_PATTERN =
             Pattern.compile("^#\\s+(.+?)\\s*#*\\s*$");
 
+    @Value("${app.kb.max-chunks:2000}")
+    private int maxChunks = 2000;
+
     public ImportPlan plan(String requestedSourceId, String originalFilename, String text) {
         String fileName = normalizeFileName(originalFilename);
         String normalizedText = normalizeText(text);
@@ -31,6 +35,9 @@ public class KnowledgeImportService {
         List<String> chunks = chunk(normalizedText);
         if (chunks.isEmpty()) {
             throw new KnowledgeImportException("文档解析后没有可入库片段");
+        }
+        if (maxChunks > 0 && chunks.size() > maxChunks) {
+            throw new KnowledgeImportException("文档分块数超过上限（" + maxChunks + "），请拆分后再导入");
         }
 
         return new ImportPlan(
@@ -116,16 +123,30 @@ public class KnowledgeImportService {
             if (trimmed.isEmpty()) {
                 continue;
             }
-            if (buffer.length() + trimmed.length() > CHUNK_LENGTH && buffer.length() > 0) {
-                out.add(buffer.toString().trim());
-                buffer.setLength(0);
+            // 单个超长段落必须切开，否则会生成一个远超 CHUNK_LENGTH 的块
+            for (String piece : splitLongParagraph(trimmed)) {
+                if (buffer.length() + piece.length() > CHUNK_LENGTH && buffer.length() > 0) {
+                    out.add(buffer.toString().trim());
+                    buffer.setLength(0);
+                }
+                buffer.append(piece).append('\n');
             }
-            buffer.append(trimmed).append('\n');
         }
         if (buffer.length() > 0) {
             out.add(buffer.toString().trim());
         }
         return out;
+    }
+
+    private List<String> splitLongParagraph(String paragraph) {
+        if (paragraph.length() <= CHUNK_LENGTH) {
+            return List.of(paragraph);
+        }
+        List<String> parts = new ArrayList<>();
+        for (int start = 0; start < paragraph.length(); start += CHUNK_LENGTH) {
+            parts.add(paragraph.substring(start, Math.min(paragraph.length(), start + CHUNK_LENGTH)));
+        }
+        return parts;
     }
 
     private String sha256(String value) {

@@ -92,6 +92,22 @@ class FileUploadValidatorTest {
         assertThrows(FileValidationException.class, () -> validator.validateAudio(file));
     }
 
+    @Test
+    void validateImageBytesAcceptsPngMagic() {
+        assertEquals("png", validator.validateImageBytes(pngHeader()));
+    }
+
+    @Test
+    void validateImageBytesRejectsNonImage() {
+        assertThrows(FileValidationException.class,
+                () -> validator.validateImageBytes("not an image".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void validateImageBytesRejectsEmpty() {
+        assertThrows(FileValidationException.class, () -> validator.validateImageBytes(new byte[0]));
+    }
+
     private byte[] pngHeader() {
         return new byte[]{(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00};
     }

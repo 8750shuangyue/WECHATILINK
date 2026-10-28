@@ -6,7 +6,9 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.config.DashScopeConfig;
 import com.example.demo.utils.JsonUtils;
 import com.example.demo.weather.tool.WeatherTool;
+import jakarta.annotation.PreDestroy;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -14,6 +16,7 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,8 +38,18 @@ public class LlmService {
 
     private final DashScopeConfig config;
     private final ChatMemoryService chatMemoryService;
-    private final CloseableHttpClient httpClient;
-    
+
+    @Value("${app.http.llm.connect-timeout-ms:5000}")
+    private long connectTimeoutMs = 5000;
+
+    @Value("${app.http.llm.connection-request-timeout-ms:2000}")
+    private long connectionRequestTimeoutMs = 2000;
+
+    @Value("${app.http.llm.response-timeout-ms:90000}")
+    private long responseTimeoutMs = 90_000;
+
+    private volatile CloseableHttpClient httpClient;
+
     @Autowired
     @Lazy
     private RagContextService ragContextService;
@@ -55,7 +68,38 @@ public class LlmService {
     public LlmService(DashScopeConfig config, ChatMemoryService chatMemoryService) {
         this.config = config;
         this.chatMemoryService = chatMemoryService;
-        this.httpClient = HttpClients.createDefault();
+    }
+
+    private CloseableHttpClient client() {
+        CloseableHttpClient current = httpClient;
+        if (current == null) {
+            synchronized (this) {
+                if (httpClient == null) {
+                    RequestConfig requestConfig = RequestConfig.custom()
+                            .setConnectTimeout(Timeout.ofMilliseconds(Math.max(1, connectTimeoutMs)))
+                            .setConnectionRequestTimeout(Timeout.ofMilliseconds(Math.max(1, connectionRequestTimeoutMs)))
+                            .setResponseTimeout(Timeout.ofMilliseconds(Math.max(1, responseTimeoutMs)))
+                            .build();
+                    httpClient = HttpClients.custom()
+                            .setDefaultRequestConfig(requestConfig)
+                            .build();
+                }
+                current = httpClient;
+            }
+        }
+        return current;
+    }
+
+    @PreDestroy
+    public void closeClient() {
+        CloseableHttpClient current = httpClient;
+        if (current != null) {
+            try {
+                current.close();
+            } catch (IOException e) {
+                logger.debug("Failed to close LLM http client", e);
+            }
+        }
     }
 
     public String chat(String userMessage) throws IOException {
@@ -98,7 +142,7 @@ public class LlmService {
         httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
         httpPost.setEntity(new StringEntity(jsonRequest, ContentType.APPLICATION_JSON));
         
-        try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+        try (CloseableHttpResponse response = client().execute(httpPost)) {
             HttpEntity entity = response.getEntity();
             String responseBody = "";
             if (entity != null) {
@@ -261,7 +305,7 @@ public class LlmService {
         httpPost.setEntity(new StringEntity(JSON.toJSONString(requestBody), ContentType.APPLICATION_JSON));
 
         StringBuilder fullReply = new StringBuilder();
-        httpClient.execute(httpPost, response -> {
+        client().execute(httpPost, response -> {
             if (response.getCode() != 200) {
                 throw new IOException("Streaming LLM request failed with status: " + response.getCode());
             }

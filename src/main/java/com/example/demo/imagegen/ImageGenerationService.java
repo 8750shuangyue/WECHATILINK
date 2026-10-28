@@ -5,12 +5,15 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.ai.UserContextHolder;
 import com.example.demo.config.DashScopeConfig;
+import com.example.demo.core.UploadPathProvider;
 import com.example.demo.gallery.MediaAssetService;
 import com.example.demo.vision.ImageAnalysisResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -19,10 +22,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class ImageGenerationService {
@@ -31,11 +35,60 @@ public class ImageGenerationService {
 
     private final DashScopeConfig config;
     private final MediaAssetService mediaAssetService;
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final UploadPathProvider uploadPathProvider;
 
-    public ImageGenerationService(DashScopeConfig config, MediaAssetService mediaAssetService) {
+    @Value("${app.http.image.connect-timeout-ms:5000}")
+    private long connectTimeoutMs = 5000;
+
+    @Value("${app.http.image.read-timeout-ms:120000}")
+    private long readTimeoutMs = 120_000;
+
+    @Value("${app.http.image.max-download-bytes:20971520}")
+    private long maxDownloadBytes = 20L * 1024 * 1024;
+
+    @Value("${app.guard.image.max-concurrent:2}")
+    private int maxConcurrent = 2;
+
+    @Value("${app.guard.acquire-timeout-ms:200}")
+    private long acquireTimeoutMs = 200;
+
+    private volatile HttpClient httpClient;
+    private volatile Semaphore slots;
+
+    public ImageGenerationService(DashScopeConfig config, MediaAssetService mediaAssetService,
+                                  UploadPathProvider uploadPathProvider) {
         this.config = config;
         this.mediaAssetService = mediaAssetService;
+        this.uploadPathProvider = uploadPathProvider;
+    }
+
+    private HttpClient client() {
+        HttpClient current = httpClient;
+        if (current == null) {
+            synchronized (this) {
+                if (httpClient == null) {
+                    httpClient = HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofMillis(Math.max(1, connectTimeoutMs)))
+                            .followRedirects(HttpClient.Redirect.NEVER)
+                            .build();
+                }
+                current = httpClient;
+            }
+        }
+        return current;
+    }
+
+    private Semaphore slots() {
+        Semaphore current = slots;
+        if (current == null) {
+            synchronized (this) {
+                if (slots == null) {
+                    slots = new Semaphore(Math.max(1, maxConcurrent));
+                }
+                current = slots;
+            }
+        }
+        return current;
     }
 
     private String imageApiKey() {
@@ -79,12 +132,13 @@ public class ImageGenerationService {
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(config.getImage().getBaseUrl()))
+            .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
             .header("Authorization", "Bearer " + imageApiKey())
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonStr))
             .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = sendWithGuard(request, HttpResponse.BodyHandlers.ofString());
         String responseBody = response.body();
 
         logger.info("{} response status: {}, body: {}",
@@ -136,21 +190,26 @@ public class ImageGenerationService {
             logger.info("Downloading generated image from: {}", url);
             HttpRequest downloadReq = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-            .header("Authorization", "Bearer " + imageApiKey())
+                .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
+                .header("Authorization", "Bearer " + imageApiKey())
                 .GET()
                 .build();
-            HttpResponse<InputStream> downloadResp = httpClient.send(downloadReq, HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<InputStream> downloadResp = sendWithGuard(downloadReq, HttpResponse.BodyHandlers.ofInputStream());
             if (downloadResp.statusCode() != 200) {
                 // Retry without auth (public OSS signed URL)
                 logger.info("Auth download returned {}, retrying without auth", downloadResp.statusCode());
-                HttpRequest retryReq = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
-                downloadResp = httpClient.send(retryReq, HttpResponse.BodyHandlers.ofInputStream());
+                HttpRequest retryReq = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
+                        .GET()
+                        .build();
+                downloadResp = sendWithGuard(retryReq, HttpResponse.BodyHandlers.ofInputStream());
                 if (downloadResp.statusCode() != 200) {
                     throw new IOException("Failed to download generated image, status: " + downloadResp.statusCode());
                 }
             }
             try (InputStream is = downloadResp.body()) {
-                imageBytes = is.readAllBytes();
+                imageBytes = readLimited(is, maxDownloadBytes);
             }
             // Detect format from URL or magic bytes
             extension = extractExtensionFromUrl(url);
@@ -173,19 +232,43 @@ public class ImageGenerationService {
             extension = detectedExt;
         }
 
-        Path uploadsPath = Paths.get("./uploads");
-        if (!Files.exists(uploadsPath)) {
-            Files.createDirectories(uploadsPath);
-        }
-
         // Keep original PNG — JPEG conversion may produce incompatible format with WeChat
 
         String filename = "gen_" + UUID.randomUUID() + extension;
-        Path targetPath = uploadsPath.resolve(filename);
+        Path targetPath = uploadPathProvider.resolve(filename);
         Files.write(targetPath, imageBytes);
-        logger.info("Saved generated image to: {} ({} bytes)", targetPath.toAbsolutePath(), imageBytes.length);
+        logger.info("Saved generated image to: {} ({} bytes)", targetPath, imageBytes.length);
         mediaAssetService.record(UserContextHolder.getUserId(), filename, "image", "generated");
-        return targetPath.toAbsolutePath().toString();
+        return targetPath.toString();
+    }
+
+    private <T> HttpResponse<T> sendWithGuard(HttpRequest request,
+                                              HttpResponse.BodyHandler<T> handler)
+            throws IOException, InterruptedException {
+        Semaphore permit = slots();
+        if (!permit.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new IOException("图片服务繁忙，请稍后再试");
+        }
+        try {
+            return client().send(request, handler);
+        } finally {
+            permit.release();
+        }
+    }
+
+    private static byte[] readLimited(InputStream input, long limit) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        long total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            total += read;
+            if (total > limit) {
+                throw new IOException("下载内容超过上限（" + limit + " 字节）");
+            }
+            out.write(buffer, 0, read);
+        }
+        return out.toByteArray();
     }
 
     private byte[] convertPngToJpeg(byte[] pngData) throws IOException {

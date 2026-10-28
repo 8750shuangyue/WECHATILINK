@@ -29,7 +29,7 @@ public class FileUploadValidator {
             Set.of("wav", "webm", "ogg", "oga", "opus", "mp3", "m4a", "mp4", "aac", "flac");
 
     private static final int MAX_DOCX_ENTRIES = 4096;
-    private static final long MAX_DOCX_UNCOMPRESSED_BYTES = 50L * 1024 * 1024;
+    private static final long MAX_DOCX_UNCOMPRESSED_BYTES = 25L * 1024 * 1024;
 
     public String validateText(MultipartFile file) {
         String extension = validateBasicAndExtension(file);
@@ -196,6 +196,23 @@ public class FileUploadValidator {
         if (!hasContentTypes || !hasDocumentXml) {
             throw new FileValidationException("DOCX 文件结构无效");
         }
+    }
+
+    /**
+     * 校验裸图片字节（用于 base64 内联图片），不依赖扩展名，按 magic bytes 判定格式。
+     */
+    public String validateImageBytes(byte[] content) {
+        if (content == null || content.length == 0) {
+            throw new FileValidationException("图片内容不能为空");
+        }
+        if (content.length > MAX_UPLOAD_BYTES) {
+            throw new FileValidationException("图片不能超过 10MB");
+        }
+        String detected = detectImageExtension(content);
+        if (detected == null) {
+            throw new FileValidationException("不支持的图片格式，仅支持 jpg、png、gif、bmp、webp、tiff");
+        }
+        return detected;
     }
 
     private String validateImageBytes(byte[] content, String extension) {

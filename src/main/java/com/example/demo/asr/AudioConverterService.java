@@ -7,7 +7,12 @@ import org.springframework.stereotype.Service;
 
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class AudioConverterService {
@@ -21,7 +26,97 @@ public class AudioConverterService {
     @Value("${audio.converter.ffmpeg-path:ffmpeg}")
     private String ffmpegPath;
 
+    @Value("${app.guard.ffmpeg-timeout-seconds:30}")
+    private int ffmpegTimeoutSeconds = 30;
+
+    @Value("${app.guard.ffmpeg-max-audio-seconds:300}")
+    private int ffmpegMaxAudioSeconds = 300;
+
+    @Value("${app.guard.ffmpeg.max-concurrent:1}")
+    private int ffmpegMaxConcurrent = 1;
+
+    private volatile Semaphore ffmpegSlots;
+
     private boolean ffmpegAvailable = false;
+
+    private Semaphore slots() {
+        Semaphore current = ffmpegSlots;
+        if (current == null) {
+            synchronized (this) {
+                if (ffmpegSlots == null) {
+                    ffmpegSlots = new Semaphore(Math.max(1, ffmpegMaxConcurrent));
+                }
+                current = ffmpegSlots;
+            }
+        }
+        return current;
+    }
+
+    /**
+     * 统一的 ffmpeg 调用：禁止交互、限制时长与线程数，stderr 落到临时文件避免管道死锁，
+     * 超时强制结束进程。
+     */
+    private void runFfmpeg(List<String> extraArgs, String operationName) throws Exception {
+        Semaphore permit = slots();
+        if (!permit.tryAcquire(ffmpegTimeoutSeconds, TimeUnit.SECONDS)) {
+            throw new IOException("音频处理繁忙，请稍后再试");
+        }
+        File logFile = null;
+        Process process = null;
+        try {
+            List<String> command = new ArrayList<>();
+            command.add(ffmpegPath);
+            command.add("-nostdin");
+            command.add("-y");
+            command.add("-loglevel");
+            command.add("error");
+            command.add("-t");
+            command.add(String.valueOf(Math.max(1, ffmpegMaxAudioSeconds)));
+            command.add("-threads");
+            command.add("1");
+            command.addAll(extraArgs);
+
+            logFile = File.createTempFile("ffmpeg_log_", ".log");
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            pb.redirectOutput(logFile);
+
+            process = pb.start();
+            boolean finished = process.waitFor(Math.max(1, ffmpegTimeoutSeconds), TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                process.waitFor(5, TimeUnit.SECONDS);
+                throw new IOException("音频转换超时（" + ffmpegTimeoutSeconds + "s）");
+            }
+
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                logger.error("{} failed with exit code: {}, log: {}", operationName, exitCode, readLog(logFile));
+                throw new RuntimeException(operationName + " failed, exit code: " + exitCode);
+            }
+            logger.debug("{} output: {}", operationName, readLog(logFile));
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+            if (logFile != null && logFile.exists()) {
+                logFile.delete();
+            }
+            permit.release();
+        }
+    }
+
+    private String readLog(File logFile) {
+        if (logFile == null || !logFile.exists()) {
+            return "";
+        }
+        try (InputStream in = Files.newInputStream(logFile.toPath())) {
+            byte[] bytes = in.readNBytes(8192);
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
+        }
+    }
 
     public byte[] convertToWav16k16bitMono(byte[] inputData, String inputExtension) throws Exception {
         logger.info("Starting audio conversion to WAV, input size: {} bytes, extension: {}", inputData.length, inputExtension);
@@ -119,10 +214,7 @@ public class AudioConverterService {
 
             outputFile = File.createTempFile("audio_output", ".wav");
 
-            ProcessBuilder pb = new ProcessBuilder(
-                ffmpegPath,
-                "-y",
-                "-loglevel", "info",
+            runFfmpeg(List.of(
                 "-i", inputFile.getAbsolutePath(),
                 "-acodec", "pcm_s16le",
                 "-ar", "16000",
@@ -131,24 +223,7 @@ public class AudioConverterService {
                 "-map_metadata", "-1",
                 "-bitexact",
                 outputFile.getAbsolutePath()
-            );
-
-            Process process = pb.start();
-
-            BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            StringBuilder errorOutput = new StringBuilder();
-            String line;
-            while ((line = errorReader.readLine()) != null) {
-                errorOutput.append(line).append("\n");
-            }
-
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0) {
-                logger.error("ffmpeg WAV conversion failed with exit code: {}", exitCode);
-                logger.error("ffmpeg stderr: {}", errorOutput);
-                throw new RuntimeException("ffmpeg conversion failed, exit code: " + exitCode);
-            }
+            ), "ffmpeg WAV conversion");
 
             byte[] wavData = Files.readAllBytes(outputFile.toPath());
             logger.info("Audio converted with ffmpeg to WAV, size: {} bytes", wavData.length);
@@ -191,28 +266,14 @@ public class AudioConverterService {
 
             outputFile = File.createTempFile("audio_output_", ".wav");
 
-            ProcessBuilder pb = new ProcessBuilder(
-                    ffmpegPath,
-                    "-y",
-                    "-loglevel", "error",
+            runFfmpeg(List.of(
                     "-i", inputFile.getAbsolutePath(),
                     "-acodec", "pcm_s16le",
                     "-ar", "16000",
                     "-ac", "1",
                     "-f", "wav",
                     outputFile.getAbsolutePath()
-            );
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-            byte[] errorOutput = process.getInputStream().readAllBytes();
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0) {
-                logger.error("ffmpeg generic conversion failed, exit code: {}, stderr: {}",
-                        exitCode, new String(errorOutput, java.nio.charset.StandardCharsets.UTF_8));
-                throw new RuntimeException("ffmpeg conversion failed, exit code: " + exitCode);
-            }
+            ), "ffmpeg generic conversion");
 
             byte[] wavData = Files.readAllBytes(outputFile.toPath());
             logger.info("Generic audio converted to WAV, size: {} bytes", wavData.length);
@@ -293,10 +354,7 @@ public class AudioConverterService {
             logger.info("Input file: {}, size: {} bytes, format: {}",
                 inputFile.getAbsolutePath(), inputData.length, detectedFormat);
 
-            ProcessBuilder pb = new ProcessBuilder(
-                ffmpegPath,
-                "-y",
-                "-loglevel", "info",
+            runFfmpeg(List.of(
                 "-i", inputFile.getAbsolutePath(),
                 "-acodec", "pcm_s16le",
                 "-ar", "16000",
@@ -305,34 +363,9 @@ public class AudioConverterService {
                 "-map_metadata", "-1",
                 "-bitexact",
                 outputFile.getAbsolutePath()
-            );
-
-            Process process = pb.start();
-
-            BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            StringBuilder errorOutput = new StringBuilder();
-            String line;
-            while ((line = errorReader.readLine()) != null) {
-                errorOutput.append(line).append("\n");
-            }
-
-            BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder inputOutput = new StringBuilder();
-            while ((line = inputReader.readLine()) != null) {
-                inputOutput.append(line).append("\n");
-            }
-
-            int exitCode = process.waitFor();
-
-            if (exitCode != 0) {
-                logger.error("ffmpeg conversion failed with exit code: {}", exitCode);
-                logger.error("ffmpeg stderr: {}", errorOutput);
-                logger.error("ffmpeg stdout: {}", inputOutput);
-                throw new RuntimeException("ffmpeg conversion failed, exit code: " + exitCode);
-            }
+            ), "ffmpeg conversion");
 
             logger.info("ffmpeg conversion successful");
-            logger.info("ffmpeg output: {}", errorOutput);
 
             byte[] wavData = Files.readAllBytes(outputFile.toPath());
             logger.info("Audio converted with ffmpeg to WAV, size: {} bytes", wavData.length);
@@ -481,17 +514,30 @@ public class AudioConverterService {
 
     public boolean isFfmpegAvailable() {
         if (!ffmpegAvailable) {
+            Process process = null;
             try {
-                ProcessBuilder pb = new ProcessBuilder(ffmpegPath, "-version");
-                Process process = pb.start();
-                process.waitFor();
-                ffmpegAvailable = process.exitValue() == 0;
-                if (ffmpegAvailable) {
-                    logger.info("ffmpeg is available at: {}", ffmpegPath);
+                ProcessBuilder pb = new ProcessBuilder(ffmpegPath, "-nostdin", "-version");
+                pb.redirectErrorStream(true);
+                pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+                process = pb.start();
+                boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+                if (!finished) {
+                    process.destroyForcibly();
+                    ffmpegAvailable = false;
+                    logger.warn("ffmpeg availability check timed out at path: {}", ffmpegPath);
+                } else {
+                    ffmpegAvailable = process.exitValue() == 0;
+                    if (ffmpegAvailable) {
+                        logger.info("ffmpeg is available at: {}", ffmpegPath);
+                    }
                 }
             } catch (Exception e) {
                 logger.warn("ffmpeg not available at path: {}", ffmpegPath, e);
                 ffmpegAvailable = false;
+            } finally {
+                if (process != null && process.isAlive()) {
+                    process.destroyForcibly();
+                }
             }
         }
         return ffmpegAvailable;

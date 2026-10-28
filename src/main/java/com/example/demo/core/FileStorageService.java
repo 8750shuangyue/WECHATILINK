@@ -2,7 +2,6 @@ package com.example.demo.core;
 
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,30 +12,20 @@ import java.util.UUID;
 public class FileStorageService {
 
     private final FileUploadValidator fileUploadValidator;
+    private final UploadPathProvider uploadPathProvider;
 
-    private Path uploadPath;
-
-    public FileStorageService(FileUploadValidator fileUploadValidator) {
+    public FileStorageService(FileUploadValidator fileUploadValidator,
+                              UploadPathProvider uploadPathProvider) {
         this.fileUploadValidator = fileUploadValidator;
-    }
-
-    @PostConstruct
-    public void init() throws IOException {
-        uploadPath = Paths.get("./uploads").toAbsolutePath().normalize();
-        if (!Files.exists(uploadPath)) {
-            Files.createDirectories(uploadPath);
-        }
+        this.uploadPathProvider = uploadPathProvider;
     }
 
     public String storeImage(byte[] imageBytes, String extension) throws IOException {
         String canonicalExtension = fileUploadValidator.canonicalImageExtension(imageBytes, extension);
         String filename = UUID.randomUUID() + "." + canonicalExtension;
-        Path targetPath = uploadPath.resolve(filename).normalize();
-        if (!targetPath.startsWith(uploadPath)) {
-            throw new IllegalArgumentException("Invalid upload path");
-        }
+        Path targetPath = uploadPathProvider.resolve(filename);
         Files.write(targetPath, imageBytes);
-        return "/uploads/" + filename;
+        return uploadPathProvider.urlOf(filename);
     }
 
     public void deleteFile(String fileName) throws IOException {
@@ -47,10 +36,7 @@ public class FileStorageService {
         if (safeName == null) {
             return;
         }
-        Path path = uploadPath.resolve(safeName).normalize();
-        if (!path.startsWith(uploadPath)) {
-            throw new IllegalArgumentException("Invalid file path");
-        }
+        Path path = uploadPathProvider.resolve(safeName.toString());
         Files.deleteIfExists(path);
     }
 }

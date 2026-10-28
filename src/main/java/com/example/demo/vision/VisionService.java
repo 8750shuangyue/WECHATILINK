@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.config.DashScopeConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,7 +14,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Base64;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class VisionService {
@@ -21,10 +25,67 @@ public class VisionService {
     private static final Logger logger = LoggerFactory.getLogger(VisionService.class);
 
     private final DashScopeConfig config;
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    @Value("${app.http.vision.connect-timeout-ms:5000}")
+    private long connectTimeoutMs = 5000;
+
+    @Value("${app.http.vision.read-timeout-ms:60000}")
+    private long readTimeoutMs = 60_000;
+
+    @Value("${app.guard.vision.max-concurrent:2}")
+    private int maxConcurrent = 2;
+
+    @Value("${app.guard.acquire-timeout-ms:200}")
+    private long acquireTimeoutMs = 200;
+
+    private volatile HttpClient httpClient;
+    private volatile Semaphore slots;
 
     public VisionService(DashScopeConfig config) {
         this.config = config;
+    }
+
+    private HttpClient client() {
+        HttpClient current = httpClient;
+        if (current == null) {
+            synchronized (this) {
+                if (httpClient == null) {
+                    httpClient = HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofMillis(Math.max(1, connectTimeoutMs)))
+                            .followRedirects(HttpClient.Redirect.NEVER)
+                            .build();
+                }
+                current = httpClient;
+            }
+        }
+        return current;
+    }
+
+    private Semaphore slots() {
+        Semaphore current = slots;
+        if (current == null) {
+            synchronized (this) {
+                if (slots == null) {
+                    slots = new Semaphore(Math.max(1, maxConcurrent));
+                }
+                current = slots;
+            }
+        }
+        return current;
+    }
+
+    private <T> HttpResponse<T> sendWithGuard(HttpRequest request,
+                                              HttpResponse.BodyHandler<T> handler)
+            throws IOException, InterruptedException {
+        Semaphore permit = slots();
+        if (!permit.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new IOException("图片识别服务繁忙，请稍后再试");
+        }
+        try {
+            return client().send(request, handler);
+        } finally {
+            permit.release();
+        }
     }
 
     private String visionBaseUrl() {
@@ -44,8 +105,13 @@ public class VisionService {
     private static final String MULTIMODAL_SYSTEM_PROMPT = "你是一个智能助手。当用户发送图片后，紧接着发送文本指令时，请将这两者视为同一个任务。请结合图片内容进行理解，并直接执行文本中的提取或修改要求。如果用户只发了图片没有发指令，请礼貌地询问用户需要对图片做什么操作。";
 
     public ImageAnalysisResponse analyzeImage(byte[] imageBytes) throws IOException {
+        return analyzeImage(imageBytes, "image/jpeg");
+    }
+
+    public ImageAnalysisResponse analyzeImage(byte[] imageBytes, String mimeType) throws IOException {
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-        return analyzeImageWithUrl("data:image/jpeg;base64," + base64Image);
+        String type = (mimeType == null || mimeType.isBlank()) ? "image/jpeg" : mimeType;
+        return analyzeImageWithUrl("data:" + type + ";base64," + base64Image);
     }
 
     public ImageAnalysisResponse analyzeImageWithUrl(String imageUrl) throws IOException {
@@ -80,19 +146,20 @@ public class VisionService {
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(visionBaseUrl() + "/chat/completions"))
+            .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
             .header("Authorization", "Bearer " + visionApiKey())
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
             .build();
-        
+
         String responseBody;
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithGuard(request, HttpResponse.BodyHandlers.ofString());
             responseBody = response.body();
-            
-            logger.info("Vision API response status: {}, body length: {}", 
+
+            logger.info("Vision API response status: {}, body length: {}",
                     response.statusCode(), responseBody != null ? responseBody.length() : 0);
-            
+
             if (response.statusCode() != 200) {
                 throw new IOException("Vision API request failed with status: " + response.statusCode() + ", body: " + responseBody);
             }
@@ -100,13 +167,18 @@ public class VisionService {
             Thread.currentThread().interrupt();
             throw new IOException("Vision API request was interrupted", e);
         }
-        
+
         return parseVisionResponse(responseBody);
     }
 
     public String analyzeImageWithCustomPrompt(byte[] imageBytes, String prompt) throws IOException {
+        return analyzeImageWithCustomPrompt(imageBytes, "image/jpeg", prompt);
+    }
+
+    public String analyzeImageWithCustomPrompt(byte[] imageBytes, String mimeType, String prompt) throws IOException {
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-        return analyzeImageWithCustomPrompt("data:image/jpeg;base64," + base64Image, prompt);
+        String type = (mimeType == null || mimeType.isBlank()) ? "image/jpeg" : mimeType;
+        return analyzeImageWithCustomPrompt("data:" + type + ";base64," + base64Image, prompt);
     }
 
     public String analyzeImageWithCustomPrompt(String imageUrl, String prompt) throws IOException {
@@ -147,19 +219,20 @@ public class VisionService {
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(visionBaseUrl() + "/chat/completions"))
+            .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
             .header("Authorization", "Bearer " + visionApiKey())
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
             .build();
-        
+
         String responseBody;
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithGuard(request, HttpResponse.BodyHandlers.ofString());
             responseBody = response.body();
-            
-            logger.info("Vision API response status: {}, body length: {}", 
+
+            logger.info("Vision API response status: {}, body length: {}",
                     response.statusCode(), responseBody != null ? responseBody.length() : 0);
-            
+
             if (response.statusCode() != 200) {
                 throw new IOException("Vision API request failed with status: " + response.statusCode() + ", body: " + responseBody);
             }
@@ -167,7 +240,7 @@ public class VisionService {
             Thread.currentThread().interrupt();
             throw new IOException("Vision API request was interrupted", e);
         }
-        
+
         return parseVisionResponseToText(responseBody);
     }
 
