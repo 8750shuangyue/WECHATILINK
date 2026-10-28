@@ -1,9 +1,12 @@
 package com.example.demo.community;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.community.entity.Comment;
 import com.example.demo.community.entity.Post;
 import com.example.demo.community.repository.CommentRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +25,14 @@ public class CommunityController {
 
     private final CommunityService communityService;
     private final CommentRepository commentRepository;
+    private final OperationAuditService auditService;
 
     public CommunityController(CommunityService communityService,
-                               CommentRepository commentRepository) {
+                               CommentRepository commentRepository,
+                               OperationAuditService auditService) {
         this.communityService = communityService;
         this.commentRepository = commentRepository;
+        this.auditService = auditService;
     }
 
     @PostMapping("/posts")
@@ -95,17 +101,26 @@ public class CommunityController {
     }
 
     @DeleteMapping("/posts/{id}")
-    public Result<String> deletePost(@PathVariable Long id, HttpSession session) {
+    public Result<String> deletePost(@PathVariable Long id, HttpSession session,
+                                     HttpServletRequest request) {
         String userId = (String) session.getAttribute("user");
         if (userId == null) {
+            auditService.record(request, AuditAction.COMMUNITY_POST_DELETE, AuditAction.DENIED,
+                    "post", String.valueOf(id), "not logged in");
             return Result.error("请先登录");
         }
 
         try {
             communityService.deletePost(id, userId);
+            auditService.record(request, AuditAction.COMMUNITY_POST_DELETE, AuditAction.SUCCESS,
+                    "post", String.valueOf(id), null);
             return Result.success("删除成功");
         } catch (Exception e) {
             logger.error("Delete post failed, id: {}", id, e);
+            String outcome = e.getMessage() != null && e.getMessage().contains("无权")
+                    ? AuditAction.DENIED : AuditAction.FAILURE;
+            auditService.record(request, AuditAction.COMMUNITY_POST_DELETE, outcome,
+                    "post", String.valueOf(id), e.getMessage());
             return Result.error("删除失败：" + e.getMessage());
         }
     }

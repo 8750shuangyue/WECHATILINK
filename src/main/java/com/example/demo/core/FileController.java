@@ -1,5 +1,7 @@
 package com.example.demo.core;
 
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.chat.LlmService;
 import com.example.demo.ai.UserContextHolder;
 import com.example.demo.config.DashScopeConfig;
@@ -9,6 +11,7 @@ import com.example.demo.vision.ImageAnalysisResponse;
 import com.example.demo.vision.VisionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,12 +21,16 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
 import javax.imageio.stream.ImageInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @RestController
@@ -40,14 +47,27 @@ public class FileController {
     private final LlmService llmService;
     private final DashScopeConfig config;
     private final MediaAssetService mediaAssetService;
+    private final OperationAuditService auditService;
 
     private static final List<String> TEXT_EXTENSIONS = Arrays.asList("txt", "md", "json");
     private static final List<String> IMAGE_EXTENSIONS = Arrays.asList("jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff");
 
+    @Value("${app.file-qa.max-prompt-chars:30000}")
+    private int maxFileQaPromptChars = 30_000;
+
+    @Value("${app.file-qa.max-question-chars:1000}")
+    private int maxQuestionChars = 1000;
+
+    @Value("${app.file-process.max-prompt-chars:4000}")
+    private int maxProcessPromptChars = 4000;
+
+    @Value("${app.http.image.max-download-bytes:20971520}")
+    private long maxDownloadBytes = 20L * 1024 * 1024;
+
     public FileController(VisionService visionService, ImageGenerationService imageGenerationService,
                           FileStorageService fileStorageService, FileParserService fileParserService,
                           FileUploadValidator fileUploadValidator, LlmService llmService, DashScopeConfig config,
-                          MediaAssetService mediaAssetService) {
+                          MediaAssetService mediaAssetService, OperationAuditService auditService) {
         this.visionService = visionService;
         this.imageGenerationService = imageGenerationService;
         this.fileStorageService = fileStorageService;
@@ -56,6 +76,7 @@ public class FileController {
         this.llmService = llmService;
         this.config = config;
         this.mediaAssetService = mediaAssetService;
+        this.auditService = auditService;
     }
 
     @PostMapping("/process")
@@ -84,10 +105,16 @@ public class FileController {
 
             if (TEXT_EXTENSIONS.contains(extension)) {
                 fileUploadValidator.validateText(file);
-                return processTextFile(file, style);
+                ResponseEntity<Map<String, Object>> result = processTextFile(file, style);
+                auditService.record(servletRequest, AuditAction.UPLOAD_FILE_PROCESS, AuditAction.SUCCESS,
+                        "file", filename, "ext=" + extension + ", bytes=" + file.getSize());
+                return result;
             } else if (IMAGE_EXTENSIONS.contains(extension)) {
                 fileUploadValidator.validateImage(file);
-                return processImageFile(file, style);
+                ResponseEntity<Map<String, Object>> result = processImageFile(file, style);
+                auditService.record(servletRequest, AuditAction.UPLOAD_FILE_PROCESS, AuditAction.SUCCESS,
+                        "file", filename, "ext=" + extension + ", bytes=" + file.getSize());
+                return result;
             } else {
                 response.put("error", "不支持的文件类型");
                 response.put("supported_types", "文本文件: " + TEXT_EXTENSIONS + ", 图片文件: " + IMAGE_EXTENSIONS);
@@ -96,10 +123,14 @@ public class FileController {
 
         } catch (FileValidationException e) {
             logger.warn("Rejected file upload: {}", e.getMessage());
+            auditService.record(servletRequest, AuditAction.UPLOAD_FILE_PROCESS, AuditAction.FAILURE,
+                    "file", file.getOriginalFilename(), e.getMessage());
             response.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(response);
         } catch (Exception e) {
             logger.error("Error processing file", e);
+            auditService.record(servletRequest, AuditAction.UPLOAD_FILE_PROCESS, AuditAction.FAILURE,
+                    "file", file.getOriginalFilename(), e.getClass().getSimpleName());
             response.put("error", "处理文件时发生错误: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         } finally {
@@ -111,7 +142,11 @@ public class FileController {
         Map<String, Object> response = new HashMap<>();
         
         String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-        logger.info("Text file content length: {}", content.length());
+        boolean truncated = content.length() > maxProcessPromptChars;
+        if (truncated) {
+            content = content.substring(0, maxProcessPromptChars);
+        }
+        logger.info("Text file content length: {}, truncated: {}", content.length(), truncated);
 
         String targetStyle = style != null && !style.trim().isEmpty() ? style : config.getImage().getDefaultStyle();
         
@@ -127,6 +162,7 @@ public class FileController {
         response.put("success", true);
         response.put("type", "image_generation");
         response.put("prompt", content);
+        response.put("truncated", truncated);
         response.put("style", targetStyle);
         response.put("generatedImageUrl", imageUrl);
         response.put("imageData", "data:" + mimeType + ";base64," + base64Image);
@@ -137,8 +173,9 @@ public class FileController {
     @PostMapping("/qa")
     public ResponseEntity<Map<String, Object>> fileQA(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("question") String question) {
-        
+            @RequestParam("question") String question,
+            HttpServletRequest servletRequest) {
+
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -163,22 +200,34 @@ public class FileController {
                 response.put("error", "问题不能为空");
                 return ResponseEntity.badRequest().body(response);
             }
+            if (question.length() > maxQuestionChars) {
+                response.put("error", "问题过长（最多 " + maxQuestionChars + " 字符）");
+                return ResponseEntity.badRequest().body(response);
+            }
 
             fileUploadValidator.validateDocument(file);
-            logger.info("Processing file QA: {}, question: {}", filename, question);
+            logger.info("Processing file QA: {}, question length: {}", filename, question.length());
 
             String fileContent = fileParserService.parseFile(file);
-            logger.info("File content length: {}", fileContent.length());
+            boolean truncated = fileContent.length() > maxFileQaPromptChars;
+            String promptContent = truncated
+                    ? fileContent.substring(0, maxFileQaPromptChars)
+                    : fileContent;
+            logger.info("File content length: {}, truncated: {}", fileContent.length(), truncated);
 
             String systemPrompt = "你是一个专业的文件分析助手。请根据用户上传的文件内容，准确回答用户的问题。如果文件内容中没有相关信息，请明确说明。";
-            String prompt = "以下是文件内容：\n" + fileContent + "\n\n请根据以上内容回答问题：" + question;
+            String prompt = "以下是文件内容：\n" + promptContent + "\n\n请根据以上内容回答问题：" + question;
 
             String answer = llmService.chat(prompt, systemPrompt);
 
+            auditService.record(servletRequest, AuditAction.UPLOAD_FILE_QA, AuditAction.SUCCESS,
+                    "file", filename, "promptChars=" + promptContent.length() + ", truncated=" + truncated);
             response.put("success", true);
             response.put("type", "file_qa");
             response.put("filename", filename);
             response.put("content_length", fileContent.length());
+            response.put("prompt_chars", promptContent.length());
+            response.put("truncated", truncated);
             response.put("question", question);
             response.put("answer", answer);
 
@@ -186,10 +235,14 @@ public class FileController {
 
         } catch (FileValidationException e) {
             logger.warn("Rejected file QA upload: {}", e.getMessage());
+            auditService.record(servletRequest, AuditAction.UPLOAD_FILE_QA, AuditAction.FAILURE,
+                    "file", file.getOriginalFilename(), e.getMessage());
             response.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(response);
         } catch (Exception e) {
             logger.error("Error processing file QA", e);
+            auditService.record(servletRequest, AuditAction.UPLOAD_FILE_QA, AuditAction.FAILURE,
+                    "file", file.getOriginalFilename(), e.getClass().getSimpleName());
             response.put("error", "处理文件问答时发生错误: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
@@ -198,12 +251,14 @@ public class FileController {
     private ResponseEntity<Map<String, Object>> processImageFile(MultipartFile file, String style) throws Exception {
         Map<String, Object> response = new HashMap<>();
         
+        byte[] uploadedBytes = file.getBytes();
         String extension = getFileExtension(file.getOriginalFilename());
-        String imageUrl = fileStorageService.storeImage(file.getBytes(), extension);
+        String imageUrl = fileStorageService.storeImage(uploadedBytes, extension);
         String storedFileName = imageUrl.substring(imageUrl.lastIndexOf('/') + 1);
         mediaAssetService.record(UserContextHolder.getUserId(), storedFileName, "image", "uploaded");
-        
-        ImageAnalysisResponse analysis = visionService.analyzeImageWithUrl(imageUrl);
+
+        // 直接发送图片字节，避免把站内相对路径交给外部视觉 API
+        ImageAnalysisResponse analysis = visionService.analyzeImage(uploadedBytes, mimeForExtension(extension));
         
         response.put("success", true);
         response.put("type", "image_analysis");
@@ -227,20 +282,49 @@ public class FileController {
             java.nio.file.Path path = imageUrl.startsWith("file:/")
                 ? java.nio.file.Paths.get(java.net.URI.create(imageUrl))
                 : java.nio.file.Paths.get(imageUrl);
+            if (java.nio.file.Files.size(path) > maxDownloadBytes) {
+                throw new IOException("生成的图片超过下载上限");
+            }
             return java.nio.file.Files.readAllBytes(path);
         }
         java.net.URL url = new java.net.URL(imageUrl);
         java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
+        conn.setInstanceFollowRedirects(false);
         conn.setConnectTimeout(15000);
         conn.setReadTimeout(30000);
         int status = conn.getResponseCode();
         if (status != 200) {
             throw new java.io.IOException("Image download failed with status: " + status);
         }
-        try (java.io.InputStream is = conn.getInputStream()) {
-            return is.readAllBytes();
+        try (InputStream is = conn.getInputStream()) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = is.read(buffer)) != -1) {
+                total += read;
+                if (total > maxDownloadBytes) {
+                    throw new IOException("生成的图片超过下载上限");
+                }
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        } finally {
+            conn.disconnect();
         }
+    }
+
+    private String mimeForExtension(String extension) {
+        String ext = extension == null ? "" : extension.toLowerCase(Locale.ROOT);
+        return switch (ext) {
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "bmp" -> "image/bmp";
+            case "webp" -> "image/webp";
+            case "tif", "tiff" -> "image/tiff";
+            default -> "image/jpeg";
+        };
     }
 
     private String detectImageMimeType(byte[] imageBytes) {

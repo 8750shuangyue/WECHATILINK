@@ -31,6 +31,7 @@ public class CareSchemaInitializer {
         executeSchemaFile("db/care_schema.sql");
         executeSchemaFile("db/stats_schema.sql");
         executeSchemaFile("db/gallery_schema.sql");
+        executeSchemaFile("db/audit_schema.sql");
     }
 
     private void executeSchemaFile(String path) {

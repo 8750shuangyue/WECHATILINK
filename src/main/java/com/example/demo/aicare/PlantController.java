@@ -1,5 +1,7 @@
 package com.example.demo.aicare;
 
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.core.FileUploadValidator;
 import com.example.demo.core.FileValidationException;
 import org.slf4j.Logger;
@@ -7,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.Map;
@@ -19,27 +22,37 @@ public class PlantController {
 
     private final PlantService plantService;
     private final FileUploadValidator fileUploadValidator;
+    private final OperationAuditService auditService;
 
-    public PlantController(PlantService plantService, FileUploadValidator fileUploadValidator) {
+    public PlantController(PlantService plantService, FileUploadValidator fileUploadValidator,
+                           OperationAuditService auditService) {
         this.plantService = plantService;
         this.fileUploadValidator = fileUploadValidator;
+        this.auditService = auditService;
     }
 
     @PostMapping("/recognize")
-    public Result<Map<String, Object>> recognize(@RequestParam("file") MultipartFile file, HttpSession session) {
+    public Result<Map<String, Object>> recognize(@RequestParam("file") MultipartFile file,
+                                                 HttpSession session, HttpServletRequest request) {
         String userName = (String) session.getAttribute("user");
         if (userName == null) return Result.error("未登录");
         try {
             fileUploadValidator.validateImage(file);
-            logger.info("Plant recognize request, filename: {}, size: {}", 
+            logger.info("Plant recognize request, filename: {}, size: {}",
                     file.getOriginalFilename(), file.getSize());
             Map<String, Object> result = plantService.recognizePlant(file, userName);
+            auditService.record(request, AuditAction.VISION_PLANT, AuditAction.SUCCESS,
+                    "plant", file.getOriginalFilename(), "bytes=" + file.getSize());
             return Result.success(result);
         } catch (FileValidationException e) {
             logger.warn("Plant image upload rejected: {}", e.getMessage());
+            auditService.record(request, AuditAction.VISION_PLANT, AuditAction.FAILURE,
+                    "plant", file.getOriginalFilename(), e.getMessage());
             return Result.error(400, e.getMessage());
         } catch (IOException e) {
             logger.error("Plant recognition failed", e);
+            auditService.record(request, AuditAction.VISION_PLANT, AuditAction.FAILURE,
+                    "plant", file.getOriginalFilename(), e.getMessage());
             return Result.error("植物识别失败：" + e.getMessage());
         }
     }

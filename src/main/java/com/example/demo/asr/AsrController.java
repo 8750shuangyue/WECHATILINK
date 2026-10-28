@@ -1,7 +1,10 @@
 package com.example.demo.asr;
 
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.core.FileUploadValidator;
 import com.example.demo.core.FileValidationException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -27,20 +30,27 @@ public class AsrController {
     private final AudioConverterService audioConverterService;
     private final DashScopeAsrService asrService;
     private final FileUploadValidator fileUploadValidator;
+    private final OperationAuditService auditService;
 
     public AsrController(AudioConverterService audioConverterService,
                          DashScopeAsrService asrService,
-                         FileUploadValidator fileUploadValidator) {
+                         FileUploadValidator fileUploadValidator,
+                         OperationAuditService auditService) {
         this.audioConverterService = audioConverterService;
         this.asrService = asrService;
         this.fileUploadValidator = fileUploadValidator;
+        this.auditService = auditService;
     }
 
     @PostMapping(value = "/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, Object>> transcribe(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Map<String, Object>> transcribe(@RequestParam("file") MultipartFile file,
+                                                          HttpServletRequest request) {
         Map<String, Object> r = new HashMap<>();
+        String fileName = file == null ? null : file.getOriginalFilename();
         try {
             if (file == null || file.isEmpty()) {
+                auditService.record(request, AuditAction.UPLOAD_ASR, AuditAction.FAILURE,
+                        "audio", fileName, "empty file");
                 r.put("success", false);
                 r.put("error", "音频文件为空");
                 return ResponseEntity.badRequest().body(r);
@@ -51,15 +61,21 @@ public class AsrController {
             byte[] wav = audioConverterService.convertAnyToWav16k16bitMono(file.getBytes(), ext);
             String text = asrService.recognize(wav);
 
+            auditService.record(request, AuditAction.UPLOAD_ASR, AuditAction.SUCCESS,
+                    "audio", fileName, "ext=" + ext + ", bytes=" + file.getSize());
             r.put("success", true);
             r.put("text", text == null ? "" : text.trim());
         } catch (FileValidationException e) {
             log.warn("[ASR] Upload rejected: {}", e.getMessage());
+            auditService.record(request, AuditAction.UPLOAD_ASR, AuditAction.FAILURE,
+                    "audio", fileName, e.getMessage());
             r.put("success", false);
             r.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(r);
         } catch (Exception e) {
             log.error("[ASR] transcribe failed", e);
+            auditService.record(request, AuditAction.UPLOAD_ASR, AuditAction.FAILURE,
+                    "audio", fileName, e.getClass().getSimpleName());
             r.put("success", false);
             r.put("error", e.getMessage());
         }

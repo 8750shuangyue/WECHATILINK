@@ -1,11 +1,14 @@
 package com.example.demo.disease;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.care.model.IdentifyHistory;
 import com.example.demo.care.repository.IdentifyHistoryRepository;
 import com.example.demo.core.FileUploadValidator;
 import com.example.demo.core.FileValidationException;
 import com.example.demo.disease.model.DiseaseResult;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,19 +30,22 @@ public class DiseaseController {
     private final DiseaseRecognitionService diseaseRecognitionService;
     private final IdentifyHistoryRepository identifyHistoryRepository;
     private final FileUploadValidator fileUploadValidator;
+    private final OperationAuditService auditService;
 
     public DiseaseController(DiseaseRecognitionService diseaseRecognitionService,
                              IdentifyHistoryRepository identifyHistoryRepository,
-                             FileUploadValidator fileUploadValidator) {
+                             FileUploadValidator fileUploadValidator,
+                             OperationAuditService auditService) {
         this.diseaseRecognitionService = diseaseRecognitionService;
         this.identifyHistoryRepository = identifyHistoryRepository;
         this.fileUploadValidator = fileUploadValidator;
+        this.auditService = auditService;
     }
 
     @PostMapping("/diagnose")
     public Result<DiseaseResult> diagnose(@RequestParam("file") MultipartFile file,
                                           @RequestParam("type") String type,
-                                          HttpSession session) {
+                                          HttpSession session, HttpServletRequest request) {
         String userName = (String) session.getAttribute("user");
         if (userName == null) {
             return Result.error("未登录");
@@ -52,12 +58,18 @@ public class DiseaseController {
             fileUploadValidator.validateImage(file);
             byte[] imageBytes = file.getBytes();
             DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userName, null);
+            auditService.record(request, AuditAction.VISION_DISEASE, AuditAction.SUCCESS,
+                    "disease", type, "bytes=" + imageBytes.length);
             return Result.success(result);
         } catch (FileValidationException e) {
             logger.warn("Disease image upload rejected: {}", e.getMessage());
+            auditService.record(request, AuditAction.VISION_DISEASE, AuditAction.FAILURE,
+                    "disease", type, e.getMessage());
             return Result.error(400, e.getMessage());
         } catch (IOException e) {
             logger.error("Disease diagnosis failed", e);
+            auditService.record(request, AuditAction.VISION_DISEASE, AuditAction.FAILURE,
+                    "disease", type, e.getMessage());
             return Result.error("病害诊断失败：" + e.getMessage());
         }
     }

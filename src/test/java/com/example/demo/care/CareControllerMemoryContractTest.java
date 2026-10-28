@@ -1,8 +1,10 @@
 package com.example.demo.care;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.chat.LlmService;
 import com.example.demo.chat.RagContextService;
+import com.example.demo.core.InlineImageValidator;
 import com.example.demo.chat.repository.mysql.LegacyCareRecordRepository;
 import com.example.demo.chat.repository.mysql.PlantProfileRepository;
 import com.example.demo.chat.repository.mysql.PetProfileRepository;
@@ -136,7 +138,9 @@ class CareControllerMemoryContractTest {
                 llmService,
                 mock(PlantProfileRepository.class),
                 mock(PetProfileRepository.class),
-                mock(LegacyCareRecordRepository.class)
+                mock(LegacyCareRecordRepository.class),
+                mock(InlineImageValidator.class),
+                mock(OperationAuditService.class)
         );
     }
 }

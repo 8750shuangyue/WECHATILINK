@@ -1,8 +1,10 @@
 package com.example.demo.ebusiness;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.chat.entity.Product;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -12,11 +14,16 @@ import java.util.Map;
 @RequestMapping("/api/shop")
 public class ProductController {
 
-    @Autowired
-    private ProductService productService;
+    private final ProductService productService;
+    private final OperationAuditService auditService;
+
+    public ProductController(ProductService productService, OperationAuditService auditService) {
+        this.productService = productService;
+        this.auditService = auditService;
+    }
 
     @PostMapping("/publish")
-    public Result<Product> publish(@RequestBody Product product) {
+    public Result<Product> publish(@RequestBody Product product, HttpServletRequest request) {
         if (product.getName() == null || product.getName().trim().isEmpty()) {
             return Result.error("商品名称不能为空");
         }
@@ -27,6 +34,9 @@ public class ProductController {
             return Result.error("库存不能为空且不能小于0");
         }
         Product saved = productService.save(product);
+        auditService.record(request, AuditAction.PRODUCT_PUBLISH, AuditAction.SUCCESS,
+                "product", saved.getId() == null ? null : String.valueOf(saved.getId()),
+                "name=" + saved.getName());
         return Result.success(saved);
     }
 
@@ -53,8 +63,10 @@ public class ProductController {
     }
 
     @DeleteMapping("/delete/{id}")
-    public Result<Void> delete(@PathVariable Long id) {
+    public Result<Void> delete(@PathVariable Long id, HttpServletRequest request) {
         productService.deleteById(id);
+        auditService.record(request, AuditAction.PRODUCT_DELETE, AuditAction.SUCCESS,
+                "product", String.valueOf(id), null);
         return Result.success(null);
     }
 

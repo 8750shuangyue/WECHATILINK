@@ -1,5 +1,7 @@
 package com.example.demo.aicare;
 
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.core.FileUploadValidator;
 import com.example.demo.core.FileValidationException;
 import org.slf4j.Logger;
@@ -7,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.Map;
@@ -19,27 +22,37 @@ public class PetController {
 
     private final PetService petService;
     private final FileUploadValidator fileUploadValidator;
+    private final OperationAuditService auditService;
 
-    public PetController(PetService petService, FileUploadValidator fileUploadValidator) {
+    public PetController(PetService petService, FileUploadValidator fileUploadValidator,
+                         OperationAuditService auditService) {
         this.petService = petService;
         this.fileUploadValidator = fileUploadValidator;
+        this.auditService = auditService;
     }
 
     @PostMapping("/recognize")
-    public Result<Map<String, Object>> recognize(@RequestParam("file") MultipartFile file, HttpSession session) {
+    public Result<Map<String, Object>> recognize(@RequestParam("file") MultipartFile file,
+                                                 HttpSession session, HttpServletRequest request) {
         String userName = (String) session.getAttribute("user");
         if (userName == null) return Result.error("未登录");
         try {
             fileUploadValidator.validateImage(file);
-            logger.info("Pet recognize request, filename: {}, size: {}", 
+            logger.info("Pet recognize request, filename: {}, size: {}",
                     file.getOriginalFilename(), file.getSize());
             Map<String, Object> result = petService.recognizePet(file, userName);
+            auditService.record(request, AuditAction.VISION_PET, AuditAction.SUCCESS,
+                    "pet", file.getOriginalFilename(), "bytes=" + file.getSize());
             return Result.success(result);
         } catch (FileValidationException e) {
             logger.warn("Pet image upload rejected: {}", e.getMessage());
+            auditService.record(request, AuditAction.VISION_PET, AuditAction.FAILURE,
+                    "pet", file.getOriginalFilename(), e.getMessage());
             return Result.error(400, e.getMessage());
         } catch (IOException e) {
             logger.error("Pet recognition failed", e);
+            auditService.record(request, AuditAction.VISION_PET, AuditAction.FAILURE,
+                    "pet", file.getOriginalFilename(), e.getMessage());
             return Result.error("宠物识别失败：" + e.getMessage());
         }
     }

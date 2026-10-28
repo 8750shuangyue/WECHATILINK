@@ -1,6 +1,9 @@
 package com.example.demo.auth;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.ClientIpResolver;
+import com.example.demo.audit.OperationAuditService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -17,14 +20,18 @@ public class AuthController {
 
     private final AuthService authService;
     private final LoginAttemptService loginAttemptService;
+    private final OperationAuditService auditService;
 
-    public AuthController(AuthService authService, LoginAttemptService loginAttemptService) {
+    public AuthController(AuthService authService, LoginAttemptService loginAttemptService,
+                          OperationAuditService auditService) {
         this.authService = authService;
         this.loginAttemptService = loginAttemptService;
+        this.auditService = auditService;
     }
 
     @PostMapping("/register")
-    public Result<Map<String, Object>> register(@RequestBody Map<String, String> params) {
+    public Result<Map<String, Object>> register(@RequestBody Map<String, String> params,
+                                                HttpServletRequest request) {
         String userName = params.get("userName");
         String password = params.get("password");
         String email = params.get("email");
@@ -33,7 +40,11 @@ public class AuthController {
         logger.info("Register request received");
 
         Map<String, Object> result = authService.register(userName, password, email, phone);
-        if ((Integer) result.get("code") == 200) {
+        boolean success = (Integer) result.get("code") == 200;
+        auditService.record(request, AuditAction.AUTH_REGISTER,
+                success ? AuditAction.SUCCESS : AuditAction.FAILURE,
+                "user", userName, success ? null : (String) result.get("message"));
+        if (success) {
             return Result.success(result);
         } else {
             return Result.error((String) result.get("message"));
@@ -47,11 +58,15 @@ public class AuthController {
         String password = params.get("password");
 
         if (isBlank(userName) || isBlank(password)) {
+            auditService.record(request, AuditAction.AUTH_LOGIN, AuditAction.FAILURE,
+                    "user", userName, "empty username or password");
             return Result.error(400, "用户名和密码不能为空");
         }
 
-        String attemptKey = loginAttemptService.buildKey(userName, request.getRemoteAddr());
+        String attemptKey = loginAttemptService.buildKey(userName, ClientIpResolver.resolve(request));
         if (loginAttemptService.isBlocked(attemptKey)) {
+            auditService.record(request, AuditAction.AUTH_LOGIN, AuditAction.BLOCKED,
+                    "user", userName, "too many failures");
             return Result.error(429, "登录失败次数过多，请稍后再试");
         }
 
@@ -65,16 +80,25 @@ public class AuthController {
             }
             HttpSession session = request.getSession(true);
             session.setAttribute("user", userName);
+            request.setAttribute("userName", userName);
             loginAttemptService.recordSuccess(attemptKey);
+            auditService.record(request, AuditAction.AUTH_LOGIN, AuditAction.SUCCESS,
+                    "user", userName, null);
             return Result.success(result);
         } else {
             loginAttemptService.recordFailure(attemptKey);
+            auditService.record(request, AuditAction.AUTH_LOGIN, AuditAction.FAILURE,
+                    "user", userName, (String) result.get("message"));
             return Result.error((String) result.get("message"));
         }
     }
 
     @PostMapping("/logout")
-    public Result<String> logout(HttpSession session) {
+    public Result<String> logout(HttpSession session, HttpServletRequest request) {
+        String userName = (String) session.getAttribute("user");
+        request.setAttribute("userName", userName);
+        auditService.record(request, AuditAction.AUTH_LOGOUT, AuditAction.SUCCESS,
+                "user", userName, null);
         session.invalidate();
         logger.info("User logged out");
         return Result.success("退出成功");

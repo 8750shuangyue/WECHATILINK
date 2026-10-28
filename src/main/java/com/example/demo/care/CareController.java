@@ -1,6 +1,8 @@
 package com.example.demo.care;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.audit.AuditAction;
+import com.example.demo.audit.OperationAuditService;
 import com.example.demo.chat.ChatMessage;
 import com.example.demo.chat.RagContextService;
 import com.example.demo.chat.entity.CareRecord;
@@ -10,7 +12,10 @@ import com.example.demo.chat.repository.mysql.LegacyCareRecordRepository;
 import com.example.demo.chat.repository.mysql.PlantProfileRepository;
 import com.example.demo.chat.repository.mysql.PetProfileRepository;
 import com.example.demo.chat.LlmService;
+import com.example.demo.core.FileValidationException;
+import com.example.demo.core.InlineImageValidator;
 import com.example.demo.vision.VisionService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,40 +36,66 @@ public class CareController {
     private final PlantProfileRepository plantProfileRepository;
     private final PetProfileRepository petProfileRepository;
     private final LegacyCareRecordRepository careRecordRepository;
+    private final InlineImageValidator inlineImageValidator;
+    private final OperationAuditService auditService;
 
     public CareController(VisionService visionService, LlmService llmService,
                           PlantProfileRepository plantProfileRepository,
                           PetProfileRepository petProfileRepository,
-                          LegacyCareRecordRepository careRecordRepository) {
+                          LegacyCareRecordRepository careRecordRepository,
+                          InlineImageValidator inlineImageValidator,
+                          OperationAuditService auditService) {
         this.visionService = visionService;
         this.llmService = llmService;
         this.plantProfileRepository = plantProfileRepository;
         this.petProfileRepository = petProfileRepository;
         this.careRecordRepository = careRecordRepository;
+        this.inlineImageValidator = inlineImageValidator;
+        this.auditService = auditService;
     }
 
     @PostMapping("/identify")
-    public Result<Map<String, Object>> identify(@RequestBody Map<String, String> params) {
+    public Result<Map<String, Object>> identify(@RequestBody Map<String, String> params,
+                                                HttpServletRequest request) {
         String type = params.get("type");
         String imageBase64 = params.get("image");
 
         logger.info("Care identify request, type: {}", type);
 
+        String normalizedType = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
+        if (!"PLANT".equals(normalizedType) && !"PET".equals(normalizedType)) {
+            auditService.record(request, AuditAction.VISION_CARE_IDENTIFY, AuditAction.FAILURE,
+                    "care", type, "invalid type");
+            return Result.error(400, "type 仅支持 PLANT 或 PET");
+        }
+
         try {
-            byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
-            
-            String prompt = type.equals("PLANT") 
+            InlineImageValidator.ValidatedImage image =
+                    inlineImageValidator.decodeAndValidateWithType(imageBase64);
+
+            String prompt = "PLANT".equals(normalizedType)
                 ? "请识别图片中的植物种类，并以详细的文本描述，包括品种名称、外观特征、生长状态等信息。"
                 : "请识别图片中的宠物种类，并以详细的文本描述，包括品种名称、外观特征、健康状态观察等信息。";
 
-            String analysis = visionService.analyzeImageWithCustomPrompt(imageBytes, prompt);
+            String analysis = visionService.analyzeImageWithCustomPrompt(
+                    image.bytes(), image.mimeType(), prompt);
+
+            auditService.record(request, AuditAction.VISION_CARE_IDENTIFY, AuditAction.SUCCESS,
+                    "care", normalizedType, "bytes=" + image.bytes().length);
 
             Map<String, Object> result = new HashMap<>();
             result.put("result", analysis);
-            
+
             return Result.success(result);
+        } catch (FileValidationException e) {
+            logger.warn("Care identify rejected: {}", e.getMessage());
+            auditService.record(request, AuditAction.VISION_CARE_IDENTIFY, AuditAction.FAILURE,
+                    "care", normalizedType, e.getMessage());
+            return Result.error(400, e.getMessage());
         } catch (IOException e) {
             logger.error("Care identify failed", e);
+            auditService.record(request, AuditAction.VISION_CARE_IDENTIFY, AuditAction.FAILURE,
+                    "care", normalizedType, e.getMessage());
             return Result.error("识别失败：" + e.getMessage());
         }
     }
@@ -121,7 +152,8 @@ public class CareController {
     }
 
     @DeleteMapping("/targets/{type}/{id}")
-    public Result<String> deleteTarget(@PathVariable String type, @PathVariable Long id, HttpSession session) {
+    public Result<String> deleteTarget(@PathVariable String type, @PathVariable Long id, HttpSession session,
+                                       HttpServletRequest request) {
         String userName = (String) session.getAttribute("user");
         boolean owned = false;
         if ("PLANT".equalsIgnoreCase(type)) {
@@ -130,6 +162,8 @@ public class CareController {
             owned = petProfileRepository.findByIdAndUserId(id, userName).isPresent();
         }
         if (!owned) {
+            auditService.record(request, AuditAction.CARE_TARGET_DELETE, AuditAction.DENIED,
+                    type, String.valueOf(id), "not owner");
             return Result.error("无权删除该档案");
         }
         if ("PLANT".equalsIgnoreCase(type)) {
@@ -140,6 +174,8 @@ public class CareController {
             careRecordRepository.deleteByTargetTypeAndTargetId("PET", id);
         }
 
+        auditService.record(request, AuditAction.CARE_TARGET_DELETE, AuditAction.SUCCESS,
+                type, String.valueOf(id), null);
         return Result.success("删除成功");
     }
 
