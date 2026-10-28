@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ILink backup daily at 03:10
+
+[Timer]
+OnCalendar=*-*-* 03:10:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=ilink-backup.service
+
+[Install]
+WantedBy=timers.target

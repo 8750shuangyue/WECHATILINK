@@ -1,0 +1,12 @@
+[Unit]
+Description=ILink backup freshness check
+
+[Service]
+Type=oneshot
+User=admin
+Group=admin
+ExecStart=/usr/bin/python3 /opt/ilink/scripts/ilink_backup_check.py
+Nice=15
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true

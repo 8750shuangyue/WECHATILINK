@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ILink backup freshness check daily
+
+[Timer]
+OnCalendar=*-*-* 09:15:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=ilink-backup-check.service
+
+[Install]
+WantedBy=timers.target

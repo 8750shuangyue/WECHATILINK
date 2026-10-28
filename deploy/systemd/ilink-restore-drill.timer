@@ -1,0 +1,11 @@
+[Unit]
+Description=Run ILink restore drill weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+Persistent=true
+RandomizedDelaySec=600
+Unit=ilink-restore-drill.service
+
+[Install]
+WantedBy=timers.target

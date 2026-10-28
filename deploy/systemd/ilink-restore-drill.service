@@ -1,0 +1,18 @@
+[Unit]
+Description=ILink restore drill (temporary MySQL database)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=admin
+Group=admin
+ExecStart=/usr/bin/python3 /opt/ilink/scripts/ilink_restore_drill.py
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=45min
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/ilink/backups
+NoNewPrivileges=true

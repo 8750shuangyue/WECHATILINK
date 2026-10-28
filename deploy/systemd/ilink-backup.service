@@ -1,0 +1,19 @@
+[Unit]
+Description=ILink daily backup
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=admin
+Group=admin
+EnvironmentFile=-/etc/ilink/backup.env
+ExecStart=/usr/bin/python3 /opt/ilink/scripts/ilink_backup.py --purpose auto
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=30min
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/ilink/backups
+NoNewPrivileges=true
