@@ -1,0 +1,168 @@
+# 阶段 4 限流版站点配置示例。
+# 部署前先备份 /etc/nginx/sites-enabled/sekaipetplant.com，
+# 修改后执行 sudo nginx -t && sudo systemctl reload nginx。
+#
+# 与现有配置的差异：
+#   1. 按路径增加 limit_req / limit_conn；
+#   2. 429 统一返回 JSON，便于前端识别；
+#   3. SSE 流单独 location，保持 proxy_buffering off 与 600s 超时。
+
+server {
+    server_name sekaipetplant.com www.sekaipetplant.com;
+
+    client_max_body_size 10m;
+    client_body_timeout 60s;
+    client_header_timeout 15s;
+
+    error_page 429 = @ilink_rate_limited;
+
+    location @ilink_rate_limited {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After 60 always;
+        return 429 '{"code":429,"message":"请求过于频繁，请稍后再试","data":null}';
+    }
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        default_type text/plain;
+        try_files $uri =404;
+        access_log off;
+    }
+
+    # SSE：保留长连接与关闭缓冲，单独限额，避免被通用 AI 限流误伤
+    location = /api/ai/chat/stream {
+        limit_req zone=ilink_ai_stream burst=10 nodelay;
+        limit_conn ilink_stream_conn 4;
+
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
+    location = /api/auth/login {
+        limit_req zone=ilink_login burst=10 nodelay;
+        limit_conn ilink_api_conn 16;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /api/auth/register {
+        limit_req zone=ilink_register burst=3 nodelay;
+        limit_conn ilink_api_conn 8;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location ^~ /api/ai/ {
+        limit_req zone=ilink_ai burst=10 nodelay;
+        limit_conn ilink_ai_conn 6;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location = /api/care/qa {
+        limit_req zone=ilink_ai burst=10 nodelay;
+        limit_conn ilink_ai_conn 6;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location = /api/care/identify {
+        limit_req zone=ilink_upload burst=6 nodelay;
+        limit_conn ilink_api_conn 8;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+    }
+
+    location ~ ^/api/(file|kb|asr|plant|pet|disease)/ {
+        limit_req zone=ilink_upload burst=8 nodelay;
+        limit_conn ilink_api_conn 8;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location /api/ {
+        limit_req zone=ilink_api burst=60 nodelay;
+        limit_conn ilink_api_conn 32;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    listen [::]:443 ssl ipv6only=on;
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/sekaipetplant.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sekaipetplant.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = www.sekaipetplant.com) {
+        return 301 https://$host$request_uri;
+    }
+    if ($host = sekaipetplant.com) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    listen [::]:80;
+    server_name sekaipetplant.com www.sekaipetplant.com;
+    return 404;
+}
