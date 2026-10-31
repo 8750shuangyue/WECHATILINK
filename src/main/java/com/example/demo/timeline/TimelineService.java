@@ -97,16 +97,23 @@ public class TimelineService {
     }
 
     public List<TimelineEntry> getTimeline(String targetType, Long targetId) {
-        return timelineEntryRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(targetType, targetId);
+        return timelineEntryRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(
+                parseTargetType(targetType), targetId);
     }
 
     public List<TimelineEntry> getUserTimeline(String userId, String targetType, Long targetId) {
-        return timelineEntryRepository.findByUserIdAndTargetTypeAndTargetIdOrderByCreatedAtDesc(userId, targetType, targetId);
+        return timelineEntryRepository.findByUserIdAndTargetTypeAndTargetIdOrderByCreatedAtDesc(
+                userId, parseTargetType(targetType), targetId);
+    }
+
+    private static TargetType parseTargetType(String targetType) {
+        return TargetType.valueOf(String.valueOf(targetType).trim().toUpperCase(java.util.Locale.ROOT));
     }
 
     public void autoDetectMilestones(String userId, String targetType, Long targetId) throws IOException {
         List<TimelineEntry> photoEntries = timelineEntryRepository
-                .findByUserIdAndTargetTypeAndTargetIdAndEntryType(userId, targetType, targetId, "PHOTO");
+                .findByUserIdAndTargetTypeAndTargetIdAndEntryType(
+                        userId, parseTargetType(targetType), targetId, EntryType.PHOTO);
 
         if (photoEntries.size() < 2) {
             logger.info("Not enough PHOTO entries to auto-detect milestones for user {} target {}/{}",

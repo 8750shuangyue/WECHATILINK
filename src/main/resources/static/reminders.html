@@ -123,6 +123,17 @@
         <div class="stat-card"><div class="num" id="statDone">0</div><div class="label">已完成</div></div>
     </div>
 
+    <section class="panel" style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+                <h3 style="margin-bottom:4px">🌅 今日简报</h3>
+                <p style="color:var(--ink-2);font-size:13px">结合天气、护理待办与养护知识生成今日日报。</p>
+            </div>
+            <button class="primary" id="briefingBtn" onclick="generateBriefing()">生成简报</button>
+        </div>
+        <div id="briefingBox" style="margin-top:12px;color:var(--ink-2);line-height:1.7">还没有生成简报。</div>
+    </section>
+
     <div class="grid">
         <section class="panel">
             <h3>新建提醒</h3>
@@ -149,6 +160,8 @@
     </div>
 </main>
 
+<script src="/js/guard.js"></script>
+<script src="/js/common.js"></script>
 <script>
 var currentUser = '';
 
@@ -233,6 +246,26 @@ async function createReminder() {
     }
 }
 
+async function generateBriefing() {
+    var box = document.getElementById('briefingBox');
+    var btn = document.getElementById('briefingBtn');
+    btn.disabled = true;
+    box.innerHTML = 'AI 正在生成日报…';
+    try {
+        var res = await apiFetch('/api/briefing/generate', { method: 'POST' });
+        var x = await res.json();
+        if (x.code === 200 && x.data) {
+            box.innerHTML = esc(x.data).replace(/\n/g, '<br>');
+        } else {
+            box.innerHTML = '生成失败：' + esc(x.message || '未知错误');
+        }
+    } catch (e) {
+        box.innerHTML = '生成失败，请稍后重试';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 async function completeReminder(id) {
     try {
         var res = await apiFetch('/api/ai/care/reminder/' + id + '/complete', {
@@ -251,7 +284,5 @@ async function completeReminder(id) {
     }
 }
 </script>
-<script src="/js/guard.js"></script>
-<script src="/js/common.js"></script>
 </body>
 </html>

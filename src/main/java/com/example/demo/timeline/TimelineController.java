@@ -33,7 +33,7 @@ public class TimelineController {
         }
 
         logger.info("Get timeline for {} / {}", targetType, targetId);
-        List<TimelineEntry> entries = timelineService.getTimeline(targetType, targetId);
+        List<TimelineEntry> entries = timelineService.getUserTimeline(userName, targetType, targetId);
         return Result.success(entries);
     }
 

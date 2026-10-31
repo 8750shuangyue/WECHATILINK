@@ -910,11 +910,6 @@
             <div class="stat-num" id="pendingCount">-</div>
             <div class="stat-label">待办提醒</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-icon">📦</div>
-            <div class="stat-num" id="inventoryCount">-</div>
-            <div class="stat-label">库存用品</div>
-        </div>
     </div>
 
     <!-- System Selection -->
@@ -945,24 +940,6 @@
         <div class="line"></div>
     </div>
     <div class="feature-grid">
-        <div class="feature-card fc-purple" onclick="location.href='/disease.html'">
-            <span class="shine"></span>
-            <div class="feat-icon">🔬</div>
-            <h4>病害诊断</h4>
-            <p>AI 识别植物/宠物疾病</p>
-        </div>
-        <div class="feature-card fc-teal" onclick="location.href='/inventory.html'">
-            <span class="shine"></span>
-            <div class="feat-icon">📋</div>
-            <h4>智能库存</h4>
-            <p>用品追踪 + 补货提醒</p>
-        </div>
-        <div class="feature-card fc-orange" onclick="location.href='/timeline.html'">
-            <span class="shine"></span>
-            <div class="feat-icon">📸</div>
-            <h4>成长时间线</h4>
-            <p>拍照记录 + 成长报告</p>
-        </div>
         <div class="feature-card fc-green" onclick="location.href='/care'">
             <span class="shine"></span>
             <div class="feat-icon">🌅</div>
@@ -975,23 +952,11 @@
             <h4>养护社区</h4>
             <p>分享经验，交流心得</p>
         </div>
-        <div class="feature-card fc-blue" onclick="location.href='/shop'">
-            <span class="shine"></span>
-            <div class="feat-icon">🛒</div>
-            <h4>商城</h4>
-            <p>宠物植物用品一站购</p>
-        </div>
         <div class="feature-card fc-sky" onclick="location.href='/reminders'">
             <span class="shine"></span>
             <div class="feat-icon">⏰</div>
             <h4>护理提醒</h4>
             <p>用药浇水提醒，及时送达</p>
-        </div>
-        <div class="feature-card fc-amber" onclick="location.href='/briefing'">
-            <span class="shine"></span>
-            <div class="feat-icon">🌅</div>
-            <h4>每日简报</h4>
-            <p>天气 + 待办 + 护理知识日报</p>
         </div>
         <div class="feature-card fc-violet" onclick="location.href='/kb'">
             <span class="shine"></span>
@@ -1004,12 +969,6 @@
             <div class="feat-icon">📊</div>
             <h4>数据概览</h4>
             <p>平台统计与工具调用观测</p>
-        </div>
-        <div class="feature-card fc-rose" onclick="location.href='/gallery'">
-            <span class="shine"></span>
-            <div class="feat-icon">🖼</div>
-            <h4>图片中心</h4>
-            <p>AI 生成图与语音归档</p>
         </div>
     </div>
 
@@ -1075,16 +1034,6 @@ async function loadStats() {
         if (p.code === 200) document.getElementById('plantCount').textContent = (p.data || []).length;
         if (d.code === 200) document.getElementById('petCount').textContent = (d.data || []).length;
     } catch (e) {}
-
-    try {
-        const inv = await fetch('/api/inventory/items');
-        const invData = await inv.json();
-        if (invData.code === 200 && invData.data) {
-            document.getElementById('inventoryCount').textContent = invData.data.length;
-        }
-    } catch (e) {
-        document.getElementById('inventoryCount').textContent = '0';
-    }
 
     try {
         const pr = await fetch('/api/ai/care/reminders/pending');

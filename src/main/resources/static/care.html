@@ -233,7 +233,6 @@
     <div class="tabs">
         <button id="plantTab" class="active" onclick="switchType('PLANT')">植物护理</button>
         <button id="petTab" onclick="switchType('PET')">宠物护理</button>
-        <button id="shopTab" onclick="location.href='/shop'">电商平台</button>
     </div>
     <div class="nav"><span id="userName"></span><button onclick="location.href='/home'">切换系统</button><button onclick="logout()">退出</button></div>
 </header>
@@ -276,13 +275,22 @@
         <h3 id="archiveTitle">我的植物档案</h3>
         <div id="targets" class="cards"></div>
     </section>
+    <section class="panel" style="margin-top:22px">
+        <h3>成长记录</h3>
+        <p class="muted">来自所选档案的护理记录，按时间倒序排列。</p>
+        <div id="timelineBox" class="muted">选择一个档案后查看成长记录。</div>
+    </section>
+    <section class="panel" style="margin-top:22px">
+        <h3>我的素材</h3>
+        <div id="assetsBox" class="muted">加载中…</div>
+    </section>
 </main>
 <script>
 let type='PLANT', imageData='', diagnosis='', lastReply='', lastTargetName='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 fetch('/api/auth/me').then(r=>r.json()).then(x=>{if(x.code!==200)location.href='/login';else userName.textContent=x.data.userName});
 function toast(s){const e=document.getElementById('toast');e.textContent=s;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
-function switchType(t){type=t;plantTab.classList.toggle('active',t==='PLANT');petTab.classList.toggle('active',t==='PET');heroTitle.textContent=t==='PLANT'?'让每一株植物都被科学照顾':'让每一只宠物都获得贴心守护';heroDesc.textContent=t==='PLANT'?'上传照片进行 AI 识别和状态诊断，建立专属档案，持续记录浇水、施肥与生长情况。':'上传宠物照片识别种类和外观健康状态，建立档案，持续记录喂养、驱虫、疫苗与就医情况。';uploadText.textContent='上传'+(t==='PLANT'?'植物':'宠物')+'照片';archiveTitle.textContent='我的'+(t==='PLANT'?'植物':'宠物')+'档案';breed.style.display=t==='PET'?'block':'none';aiResult.style.display='none';emptyResult.style.display='block';loadTargets()}
+function switchType(t){type=t;plantTab.classList.toggle('active',t==='PLANT');petTab.classList.toggle('active',t==='PET');heroTitle.textContent=t==='PLANT'?'让每一株植物都被科学照顾':'让每一只宠物都获得贴心守护';heroDesc.textContent=t==='PLANT'?'上传照片进行 AI 识别和状态诊断，建立专属档案，持续记录浇水、施肥与生长情况。':'上传宠物照片识别种类和外观健康状态，建立档案，持续记录喂养、驱虫、疫苗与就医情况。';uploadText.textContent='上传'+(t==='PLANT'?'植物':'宠物')+'照片';archiveTitle.textContent='我的'+(t==='PLANT'?'植物':'宠物')+'档案';breed.style.display=t==='PET'?'block':'none';aiResult.style.display='none';emptyResult.style.display='block';loadTargets();loadTimeline(null)}
 function recognize(file){if(!file)return;uploadBox.classList.add('loading');compressImage(file).then(function(b64){imageData='data:image/webp;base64,'+b64;return fetch('/api/care/identify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,image:b64})})}).then(function(r){if(!r.ok)throw Error('识别失败');return r.json()}).then(function(x){diagnosis=x.data.result;resultText.textContent=diagnosis;emptyResult.style.display='none';aiResult.style.display='block';species.value=extractSpecies(diagnosis)}).catch(function(e){toast(e.message)}).finally(function(){uploadBox.classList.remove('loading')})}
 function extractSpecies(s){const m=s.match(/(?:品种|物种|名称)[：:]\s*([^\n，。]+)/);return m?m[1].replace(/\*\*/g,'').trim():''}
 async function saveTarget(){if(!targetName.value.trim())return toast('请填写档案名称');const body={name:targetName.value.trim(),species:species.value.trim(),breed:breed.value.trim(),imageUrl:imageData?'data:image/uploaded':''};const r=await fetch('/api/care/targets/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)return toast('保存失败');targetName.value='';toast('档案已保存');loadTargets()}
@@ -292,11 +300,14 @@ async function showRecords(id,btn){const box=document.getElementById('records-'+
 async function addRecord(id){const recordType=prompt(type==='PLANT'?'记录类型：浇水/施肥/修剪/换盆':'记录类型：喂养/洗护/驱虫/疫苗/就医');if(!recordType)return;const content=prompt('记录详情');if(content===null)return;await fetch('/api/care/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetType:type,targetId:id,recordType,content})});toast('护理记录已保存');const box=document.getElementById('records-'+id);box.style.display='none';showRecords(id)}
 async function removeTarget(id){if(!confirm('确定删除档案及其护理记录？'))return;await fetch(`/api/care/targets/${type}/${id}`,{method:'DELETE'});loadTargets()}
 function updateTargetSelect(rows){const sel=document.getElementById('targetSelect');sel.innerHTML='<option value="">选择一个档案（可选）</option>';rows.forEach(x=>{const opt=document.createElement('option');opt.value=x.id;opt.textContent=x.name+(x.species?' - '+x.species:'');sel.appendChild(opt)});qaSummary.style.display='none';summaryBtnContainer.style.display='none'}
-function onTargetChange(){qaSummary.style.display='none';summaryBtnContainer.style.display='none'}
+function onTargetChange(){qaSummary.style.display='none';summaryBtnContainer.style.display='none';loadTimeline(document.getElementById('targetSelect').value)}
+async function loadTimeline(targetId){const box=document.getElementById('timelineBox');if(!targetId){box.innerHTML='<div class="muted">选择一个档案后查看成长记录。</div>';return}box.innerHTML='<div class="muted">加载中…</div>';try{const r=await fetch('/api/care/records/'+type+'/'+targetId);if(r.status===401)return location.href='/login';const x=await r.json();const rows=x.data||[];box.innerHTML=rows.length?rows.map(e=>`<div class="record"><b>${esc(e.recordType||'护理')}</b>${e.content?' · '+esc(e.content):''}<div class="muted">${esc(e.createdAt||'')}</div></div>`).join(''):'<div class="muted">暂无护理记录</div>'}catch(e){box.innerHTML='<div class="muted">成长记录加载失败</div>'}}
+async function loadAssets(){const box=document.getElementById('assetsBox');try{const r=await fetch('/api/gallery/list');if(r.status===401)return location.href='/login';const x=await r.json();const rows=x.data||[];if(!rows.length){box.innerHTML='<div class="muted">还没有素材，去对话页让 AI 生成图片或语音吧。</div>';return}box.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:12px">'+rows.map(a=>{const url='/uploads/'+encodeURIComponent(a.fileName||'');const isImage=String(a.mediaType||'').indexOf('image')===0;const media=isImage?'<a href="'+url+'" target="_blank"><img src="'+url+'" style="width:150px;height:110px;object-fit:cover;border-radius:8px" loading="lazy"></a>':'<audio controls src="'+url+'" style="width:200px"></audio>';return '<div style="border:1px solid rgba(28,60,44,.12);border-radius:10px;padding:8px;max-width:220px">'+media+'<div class="muted" style="font-size:12px;word-break:break-all;margin-top:6px">'+esc(a.fileName||'')+'</div></div>'}).join('')+'</div>'}catch(e){box.innerHTML='<div class="muted">素材加载失败</div>'}}
 async function askAI(){const q=question.value.trim();if(!q)return toast('请输入护理问题');qaResult.style.display='block';qaResult.textContent='AI正在分析中…';qaSummary.style.display='none';summaryBtnContainer.style.display='none';const targetSelect=document.getElementById('targetSelect');const targetId=targetSelect.value?parseInt(targetSelect.value):null;const r=await fetch('/api/care/qa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,targetType:type,targetId:targetId,includeCitations:true})});const x=await r.json();const _sources=(x.data&&x.data.sources)||[];renderAnswerWithCitations(qaResult,x.data.reply||'暂时无法回答',_sources,{idPrefix:'care'});renderSourcesBlock(qaResult,_sources,{idPrefix:'care'});lastReply=x.data.reply||'';lastTargetName=x.data.targetName||'';if(lastReply){summaryBtnContainer.style.display='block';qaSummary.style.display='none'}}
 async function generateSummary(){if(!lastReply)return toast('请先提问获取护理建议');qaSummary.style.display='block';summaryText.textContent='AI正在生成摘要…';const r=await fetch('/api/care/qa/summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reply:lastReply,targetType:type,targetName:lastTargetName})});const x=await r.json();summaryText.textContent=x.data.summary||'无法生成摘要'}
 async function logout(){await fetch('/api/auth/logout',{method:'POST'});location.href='/login'}
 loadTargets();
+loadAssets();
 </script>
 <script src="/js/guard.js"></script>
 <script src="/js/common.js?v=20261017"></script>
