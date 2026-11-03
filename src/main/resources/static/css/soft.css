@@ -1,0 +1,293 @@
+/* ============================================================
+   soft.css — 护理 / 提醒 / 社区：温暖自然的浅色皮肤
+   在页面内联样式之后加载，覆盖旧渐变与重阴影。
+   ============================================================ */
+
+:root {
+    --green-50: #f5f8f3;
+    --green-100: #e6efe7;
+    --green-500: #2d7a52;
+    --green-600: #1f6a45;
+    --green-700: #14502f;
+    --teal: #3f7f68;
+    --ink: #14201a;
+    --ink-2: #5f7067;
+    --ink-3: #93a399;
+    --line: #e6e3da;
+    --grad: #1f7a4d;
+    --shadow: none;
+    --shadow-sm: none;
+    --radius: 18px;
+    --bg: #f6f4ee;
+    --card-bg: #ffffff;
+    --text: #14201a;
+    --text-secondary: #5f7067;
+    --text-muted: #93a399;
+    --border: #e6e3da;
+    --primary: #1f7a4d;
+    --primary-dark: #155c39;
+    --primary-light: #e8f2ec;
+    --radius-sm: 8px;
+    --radius-lg: 18px;
+    --radius-xl: 22px;
+}
+
+body {
+    background: #f6f4ee !important;
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* ---------- 通用顶栏 ---------- */
+header,
+.topbar {
+    background: rgba(255, 255, 255, .94);
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+    box-shadow: none;
+}
+
+header h2,
+.topbar-brand {
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.topbar-right,
+.topbar a,
+.nav span {
+    color: var(--ink-2);
+}
+
+.topbar a { color: var(--ink-2); }
+.topbar a:hover { color: var(--ink); }
+.topbar .text-btn,
+.nav button {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+}
+
+.topbar .text-btn:hover,
+.nav button:hover {
+    background: var(--bg);
+    color: var(--ink);
+}
+
+/* ---------- 护理页 ---------- */
+header {
+    height: 60px;
+    padding: 0 24px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+header h2 { font-size: 16px; }
+
+.tabs { gap: 4px; }
+
+.tabs button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-2);
+}
+
+.tabs button.active {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    box-shadow: none;
+}
+
+.tabs button:hover { background: var(--bg); color: var(--ink); }
+
+main { max-width: 1180px; margin: 26px auto 56px; }
+
+.hero {
+    padding: 32px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: linear-gradient(150deg, #eef3e8 0%, #fbf7ef 100%);
+    color: var(--ink);
+    box-shadow: none;
+}
+
+.hero h1 { color: var(--ink); font-size: 26px; font-weight: 700; }
+.hero p { color: var(--ink-2); }
+
+.upload {
+    border: 1.5px dashed #c9d3c4;
+    background: #fff;
+    border-radius: 16px;
+}
+
+.upload:hover { background: #fbfdf9; }
+.upload strong { color: var(--ink); }
+.upload .muted { color: var(--ink-2); }
+
+.panel,
+.card,
+.stat-card,
+.reminder-card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    box-shadow: none;
+}
+
+.panel { border-radius: 18px; padding: 22px; }
+.panel h3 { color: var(--ink); font-size: 16px; font-weight: 650; }
+.panel h4 { color: var(--ink); }
+
+.card { border-radius: 14px; }
+.card:hover,
+.reminder-card:hover {
+    transform: none;
+    border-color: #cfd8c9;
+    box-shadow: 0 4px 18px rgba(20, 32, 26, .05);
+}
+
+.result {
+    background: #f7f9f4;
+    border-left: 3px solid var(--primary);
+    border-radius: 8px;
+}
+
+.primary {
+    background: var(--primary);
+    color: #fff;
+    border-radius: 9px;
+    box-shadow: none;
+    font-weight: 600;
+}
+
+.primary:hover {
+    background: var(--primary-dark);
+    transform: none;
+    box-shadow: none;
+}
+
+.minor {
+    background: #f5f8f3;
+    border: 1px solid var(--line);
+    color: var(--primary-dark);
+    border-radius: 9px;
+    font-weight: 600;
+}
+
+.minor:hover { background: #eaf2ec; }
+
+.danger {
+    background: #fdf0ee;
+    color: #a44a3f;
+    border-radius: 9px;
+    font-weight: 600;
+}
+
+.danger:hover { background: #f9e2de; }
+
+input, select, textarea {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: var(--primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(31, 122, 77, .12);
+}
+
+.record { border-bottom: 1px dashed var(--line); }
+
+/* ---------- 提醒页 ---------- */
+.page-title { color: var(--ink); font-size: 26px; font-weight: 700; }
+.page-sub { color: var(--ink-2); }
+
+.stat-card { border-radius: 14px; }
+.stat-card .num { color: var(--ink); font-weight: 700; }
+
+.reminder-type {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.reminder-card { border-radius: 14px; }
+
+#briefingBtn {
+    width: auto;
+    margin-top: 0;
+    padding: 9px 16px;
+}
+
+/* ---------- 社区页 ---------- */
+.community-container { padding-top: 24px; }
+
+.com-header h2 {
+    color: var(--ink);
+    font-weight: 700;
+}
+
+.new-post-btn {
+    background: var(--primary);
+    color: #fff;
+    border-radius: 9px;
+    box-shadow: none;
+}
+
+.new-post-btn:hover { background: var(--primary-dark); transform: none; }
+
+.com-tabs { border-bottom: 1px solid var(--line); }
+
+.com-tab { color: var(--ink-2); }
+.com-tab:hover { color: var(--primary); }
+.com-tab.active {
+    color: var(--primary-dark);
+    background: var(--primary-light);
+    border-radius: 8px 8px 0 0;
+}
+
+.post-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: none;
+}
+
+.post-card:hover {
+    box-shadow: 0 4px 18px rgba(20, 32, 26, .05);
+    transform: none;
+}
+
+.post-card::before { opacity: .85; }
+
+.tag-cloud-wrapper {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+}
+
+.detail-card,
+.modal-card {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(20, 32, 26, .16);
+}
+
+.modal-submit {
+    background: var(--primary);
+    box-shadow: none;
+    border-radius: 9px;
+}
+
+.modal-submit:hover { background: var(--primary-dark); }
+
+@media (max-width: 860px) {
+    header { padding: 0 14px; }
+    main { padding: 0 14px; }
+}
