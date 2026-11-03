@@ -23,6 +23,17 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
         response.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=(self)");
         response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+        // 页面入口强制协商缓存，避免发版后浏览器继续使用旧 HTML；静态资源与接口不受影响。
+        String uri = request.getRequestURI();
+        if (uri != null
+                && !uri.startsWith("/api/")
+                && !uri.startsWith("/uploads/")
+                && !uri.startsWith("/css/")
+                && !uri.startsWith("/js/")
+                && !uri.startsWith("/images/")
+                && !uri.startsWith("/error")) {
+            response.setHeader("Cache-Control", "no-cache, must-revalidate");
+        }
         filterChain.doFilter(request, response);
     }
 }
