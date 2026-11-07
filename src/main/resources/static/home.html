@@ -4,171 +4,128 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>概览 · Sekai PetPlant</title>
-    <link rel="stylesheet" href="/css/ui.css">
+    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
-<body class="ui-app">
-
-<aside class="ui-sidebar">
-    <a class="ui-brand" href="/home"><span class="ui-brand-mark"></span>Sekai PetPlant</a>
-    <nav class="ui-nav">
-        <a class="ui-nav-item is-active" href="/home">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg>
-            概览
-        </a>
-        <a class="ui-nav-item" href="/care">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10Z"/></svg>
-            护理助手
-        </a>
-        <a class="ui-nav-item" href="/chat">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-4-.9L3 21l1.9-4.9a8.4 8.4 0 0 1-1-4A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/></svg>
-            AI 对话
-        </a>
-        <a class="ui-nav-item" href="/reminders">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-            护理提醒
-        </a>
-        <a class="ui-nav-item" href="/community.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            养护社区
-        </a>
-        <a class="ui-nav-item" href="/kb">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
-            知识库
-        </a>
-        <a class="ui-nav-item" href="/stats">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M12 10v8"/><path d="M17 6v12"/></svg>
-            数据概览
-        </a>
-    </nav>
-    <div class="ui-sidebar-foot">
-        <span class="ui-user" id="greeting"></span>
-        <button class="ui-btn ui-btn-ghost" onclick="logout()">退出登录</button>
-    </div>
-</aside>
+<body class="ui-app page-home">
+<script src="/js/shell.js?v=20261107a"></script>
 
 <main class="ui-main">
-    <header class="ui-page-head">
-        <div>
-            <p class="ui-eyebrow">概览</p>
-            <h1>你好，<span id="greetingName">...</span></h1>
-            <p class="ui-sub" id="todayDate"></p>
-        </div>
-        <div class="ui-head-actions">
-            <a class="ui-btn ui-btn-primary" href="/care">开始护理</a>
-            <a class="ui-btn" href="/chat">去聊天</a>
-        </div>
-    </header>
-
-    <section class="ui-kpis">
-        <a class="ui-kpi" href="/care">
-            <span class="ui-kpi-label">植物档案</span>
-            <strong id="plantCount">-</strong>
-        </a>
-        <a class="ui-kpi" href="/care">
-            <span class="ui-kpi-label">宠物档案</span>
-            <strong id="petCount">-</strong>
-        </a>
-        <a class="ui-kpi" href="/reminders">
-            <span class="ui-kpi-label">待办提醒</span>
-            <strong id="pendingCount">-</strong>
-        </a>
-    </section>
-
-    <section class="ui-bento">
-        <a class="ui-tile ui-tile-care" href="/care">
+    <div class="ui-wrap">
+        <header class="ui-page-head">
             <div>
-                <span class="ui-chip">核心</span>
-                <h2>护理助手</h2>
-                <p>上传照片识别状态，建立专属档案，持续记录浇水、喂养与每一次护理。</p>
+                <p class="ui-eyebrow">概览</p>
+                <h1>你好，<span id="greetingName">...</span></h1>
+                <p class="ui-sub" id="todayDate"></p>
             </div>
-            <div class="ui-care-points">
-                <span>拍照识别</span>
-                <span>专属档案</span>
-                <span>护理建议</span>
+            <div class="ui-head-actions">
+                <a class="ui-btn ui-btn-primary" href="/care">开始护理</a>
             </div>
-            <span class="ui-tile-link">进入护理</span>
-        </a>
+        </header>
 
-        <a class="ui-tile ui-tile-chat" href="/chat">
-            <span class="ui-tile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-4-.9L3 21l1.9-4.9a8.4 8.4 0 0 1-1-4A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/></svg>
-            </span>
-            <h3>AI 对话</h3>
-            <p>多工具对话，带来源回答</p>
-        </a>
+        <section class="ui-today" aria-label="今天">
+            <div class="ui-today-main">
+                <span class="ui-today-kicker">今天</span>
+                <p class="ui-today-count"><strong id="pendingCount">-</strong> 条待办提醒</p>
+                <p class="ui-today-next" id="nextReminder">正在加载最近的提醒…</p>
+            </div>
+            <div class="ui-today-side">
+                <div class="ui-today-facts">
+                    <span><b id="plantCount">-</b>植物档案</span>
+                    <span><b id="petCount">-</b>宠物档案</span>
+                </div>
+                <a class="ui-btn" href="/reminders">查看提醒</a>
+            </div>
+        </section>
 
-        <a class="ui-tile ui-tile-remind" href="/reminders">
-            <span class="ui-tile-icon">
+        <section class="ui-primary-grid" aria-label="主要入口">
+            <a class="ui-tile ui-tile-care" href="/care">
+                <div>
+                    <span class="ui-chip">核心</span>
+                    <h2>护理助手</h2>
+                    <p>上传照片识别状态，建立专属档案，持续记录浇水、喂养与每一次护理。</p>
+                </div>
+                <div class="ui-care-points">
+                    <span>拍照识别</span>
+                    <span>专属档案</span>
+                    <span>护理建议</span>
+                </div>
+                <span class="ui-tile-link">进入护理</span>
+            </a>
+
+            <a class="ui-tile ui-tile-chat" href="/chat">
+                <span class="ui-tile-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-4-.9L3 21l1.9-4.9a8.4 8.4 0 0 1-1-4A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/></svg>
+                </span>
+                <h3>AI 对话</h3>
+                <p>多工具对话，带来源回答</p>
+                <span class="ui-tile-link">开始对话</span>
+            </a>
+        </section>
+
+        <nav class="ui-quicklinks" aria-label="更多入口">
+            <a class="ui-quicklink" href="/reminders">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                护理提醒
+            </a>
+            <a class="ui-quicklink" href="/community">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                养护社区
+            </a>
+            <a class="ui-quicklink" href="/kb">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+                知识库
+            </a>
+            <a class="ui-quicklink" href="/stats">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M12 10v8"/><path d="M17 6v12"/></svg>
+                数据概览
+            </a>
+        </nav>
+
+        <section class="ui-notice">
+            <span class="ui-notice-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
             </span>
-            <h3>护理提醒</h3>
-            <p>浇水、喂药与复查</p>
-        </a>
+            <div class="ui-notice-text">
+                <div class="ui-notice-title">浏览器推送通知</div>
+                <div class="ui-notice-sub">开启后，护理提醒与每日简报会及时送达</div>
+            </div>
+            <label class="ui-switch">
+                <input type="checkbox" id="pushToggle" onchange="togglePush()">
+                <span class="ui-slider"></span>
+            </label>
+        </section>
 
-        <a class="ui-tile ui-tile-comm" href="/community.html">
-            <span class="ui-tile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </span>
-            <h3>养护社区</h3>
-            <p>分享经验，交流心得</p>
-        </a>
-
-        <a class="ui-tile ui-tile-kb" href="/kb">
-            <span class="ui-tile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
-            </span>
-            <h3>知识库</h3>
-            <p>沉淀专属养护知识</p>
-        </a>
-
-        <a class="ui-tile ui-tile-stats" href="/stats">
-            <span class="ui-tile-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M12 10v8"/><path d="M17 6v12"/></svg>
-            </span>
-            <h3>数据概览</h3>
-            <p>平台运行与工具调用</p>
-        </a>
-    </section>
-
-    <section class="ui-notice">
-        <span class="ui-notice-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-        </span>
-        <div class="ui-notice-text">
-            <div class="ui-notice-title">浏览器推送通知</div>
-            <div class="ui-notice-sub">开启后，护理提醒与每日简报会及时送达</div>
-        </div>
-        <label class="ui-switch">
-            <input type="checkbox" id="pushToggle" onchange="togglePush()">
-            <span class="ui-slider"></span>
-        </label>
-    </section>
-
-    <footer class="ui-footer">
-        <span>Sekai PetPlant © 2026 · 用心守护每一个小生命</span>
-        <div class="site-beian" aria-label="网站备案信息">
-            <a class="site-beian__item" href="https://beian.mps.gov.cn/#/query/webSearch?code=32062102001471" target="_blank" rel="noopener noreferrer">
-                <img class="site-beian__icon" src="/images/public-security-badge.png" alt="">
-                苏公网安备32062102001471号
-            </a>
-            <a class="site-beian__item" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">苏ICP备2026075056号-1</a>
-        </div>
-    </footer>
+        <footer class="ui-footer">
+            <span>Sekai PetPlant © 2026 · 用心守护每一个小生命</span>
+            <div class="site-beian" aria-label="网站备案信息">
+                <a class="site-beian__item" href="https://beian.mps.gov.cn/#/query/webSearch?code=32062102001471" target="_blank" rel="noopener noreferrer">
+                    <img class="site-beian__icon" src="/images/public-security-badge.png" alt="">
+                    苏公网安备32062102001471号
+                </a>
+                <a class="site-beian__item" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">苏ICP备2026075056号-1</a>
+            </div>
+        </footer>
+    </div>
 </main>
 
+<script src="/js/guard.js?v=20261107a"></script>
+<script src="/js/common.js?v=20261107a"></script>
 <script>
 const VAPID_PUBLIC_KEY = 'BLrXSeSFooC3M926Z4JKDI5KFP9_eQ4UBTECVv6--H-hDrcPSBv-qRmilQxywzLw7hRO5qrLiciyeaU3dn4che8';
 const SW_PATH = '/js/service-worker.js';
 
-// Init
-fetch('/api/auth/me').then(r => r.json()).then(data => {
+document.getElementById('todayDate').textContent = new Date().toLocaleDateString('zh-CN', {
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+});
+
+fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.json()).then(data => {
     if (data.code === 200) {
-        var hour = new Date().getHours();
-        var period = hour < 12 ? '早上好' : (hour < 18 ? '下午好' : '晚上好');
-        document.getElementById('greeting').textContent = period + '，' + data.data.userName;
-        document.getElementById('greetingName').textContent = data.data.userName;
-        loadStats();
+        var name = data.data.userName || data.data.user || '';
+        document.getElementById('greetingName').textContent = name;
+        if (window.setShellUser) window.setShellUser(name);
+        loadOverview();
         checkPushStatus();
     } else {
         location.href = '/login';
@@ -177,32 +134,77 @@ fetch('/api/auth/me').then(r => r.json()).then(data => {
     location.href = '/login';
 });
 
-document.getElementById('todayDate').textContent = new Date().toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
-});
+async function loadOverview() {
+    const results = await Promise.allSettled([
+        fetch('/api/care/targets/PLANT'),
+        fetch('/api/care/targets/PET'),
+        fetch('/api/ai/care/reminders/pending'),
+        fetch('/api/ai/care/reminders')
+    ]);
 
-// Load quick stats
-async function loadStats() {
+    // 植物 / 宠物档案数
     try {
-        const [plantRes, petRes] = await Promise.all([
-            fetch('/api/care/targets/PLANT'),
-            fetch('/api/care/targets/PET')
-        ]);
-        const p = await plantRes.json();
-        const d = await petRes.json();
-        if (p.code === 200) document.getElementById('plantCount').textContent = (p.data || []).length;
-        if (d.code === 200) document.getElementById('petCount').textContent = (d.data || []).length;
-    } catch (e) {}
+        const plant = await results[0].value.json();
+        if (plant.code === 200) document.getElementById('plantCount').textContent = (plant.data || []).length;
+    } catch (e) { /* 保持占位 */ }
 
     try {
-        const pr = await fetch('/api/ai/care/reminders/pending');
-        const pj = await pr.json();
-        if (pj.success) {
-            document.getElementById('pendingCount').textContent = pj.count;
-        }
+        const pet = await results[1].value.json();
+        if (pet.code === 200) document.getElementById('petCount').textContent = (pet.data || []).length;
+    } catch (e) { /* 保持占位 */ }
+
+    // 待办数量
+    try {
+        const pending = await results[2].value.json();
+        if (pending.success) document.getElementById('pendingCount').textContent = pending.count;
+    } catch (e) { /* 保持占位 */ }
+
+    // 最近一条待办
+    try {
+        const list = await results[3].value.json();
+        renderNextReminder((list && list.data) || []);
     } catch (e) {
-        document.getElementById('pendingCount').textContent = '-';
+        document.getElementById('nextReminder').textContent = '暂时无法获取提醒，点这里去提醒页查看。';
     }
+}
+
+function parseDue(value) {
+    if (!value) return null;
+    const text = String(value).replace(' ', 'T').replace(/\.\d+$/, '');
+    const date = new Date(text);
+    return isNaN(date.getTime()) ? null : date;
+}
+
+function formatDue(date) {
+    if (!date) return '';
+    const now = new Date();
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const time = hh + ':' + mm;
+    if (date.toDateString() === now.toDateString()) return '今天 ' + time;
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    if (date.toDateString() === tomorrow.toDateString()) return '明天 ' + time;
+    return (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + time;
+}
+
+function renderNextReminder(rows) {
+    const el = document.getElementById('nextReminder');
+    const pending = (rows || [])
+        .filter(r => r && r.status === 'PENDING' && parseDue(r.due_at))
+        .sort((a, b) => parseDue(a.due_at) - parseDue(b.due_at));
+
+    if (!pending.length) {
+        el.textContent = '今天没有待办提醒，去护理页记录一次吧。';
+        return;
+    }
+
+    const next = pending[0];
+    const due = parseDue(next.due_at);
+    const overdue = due.getTime() < Date.now();
+    const when = formatDue(due);
+    el.textContent = (next.reminder_type ? next.reminder_type + ' · ' : '') +
+        (next.content || '护理提醒') + ' · ' + when + (overdue ? '（已到期）' : '');
 }
 
 function logout() {
@@ -271,7 +273,5 @@ function urlB64ToUint8Array(base64String) {
     return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
 }
 </script>
-<script src="/js/guard.js"></script>
-<script src="/js/common.js"></script>
 </body>
 </html>

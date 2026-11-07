@@ -45,4 +45,9 @@ public class PageController {
     public String stats() {
         return "forward:/stats.html";
     }
+
+    @GetMapping("/community")
+    public String community() {
+        return "forward:/community.html";
+    }
 }

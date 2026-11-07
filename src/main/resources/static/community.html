@@ -4,102 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>社区交流 - Sekai PetPlant</title>
-    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
     <style>
+        /* 旧社区组件的变量桥接：统一到 ui.css 令牌 */
         :root {
-            --primary: #4a9;
-            --primary-dark: #3a8;
-            --primary-light: #e8f5e9;
-            --warm: #f39c12;
-            --warm-light: #fff3e0;
-            --cool: #3498db;
-            --cool-light: #e3f2fd;
-            --danger: #e74c3c;
-            --danger-light: #fdecea;
-            --bg: #eef1ef;
-            --card-bg: #fff;
-            --text: #2c3e50;
-            --text-secondary: #555;
-            --text-muted: #999;
-            --border: #e8e8e8;
+            --primary: var(--ui-brand);
+            --primary-dark: var(--ui-brand-strong);
+            --primary-light: var(--ui-brand-soft);
+            --warm: var(--ui-accent);
+            --warm-light: var(--ui-accent-soft);
+            --cool: #3d6fa0;
+            --cool-light: #eaf0f7;
+            --danger: var(--ui-danger);
+            --danger-light: var(--ui-danger-soft);
+            --bg: var(--ui-bg);
+            --card-bg: var(--ui-surface);
+            --text: var(--ui-ink);
+            --text-secondary: var(--ui-ink-2);
+            --text-muted: var(--ui-ink-3);
+            --border: var(--ui-line);
             --radius-sm: 6px;
             --radius: 10px;
             --radius-lg: 14px;
-            --radius-xl: 18px;
-            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-            --shadow: 0 2px 8px rgba(0,0,0,0.05);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-            --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
-            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --radius-xl: 16px;
+            --shadow-sm: none;
+            --shadow: none;
+            --shadow-md: 0 1px 2px rgba(16,32,24,.05), 0 8px 24px rgba(16,32,24,.07);
+            --shadow-lg: 0 16px 44px rgba(16,32,24,.16);
+            --transition: 0.2s ease;
         }
 
         * { box-sizing: border-box; }
 
-        body {
-            background: var(--bg);
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            color: var(--text);
-            line-height: 1.6;
-            animation: pageFadeIn 0.4s ease;
-        }
-
-        @keyframes pageFadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Topbar */
-        .topbar {
-            background: linear-gradient(135deg, #43a047 0%, #388e3c 50%, #2e7d32 100%);
-            color: #fff;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 24px;
-            height: 56px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-            position: sticky;
-            top: 0;
-            z-index: 50;
-        }
-        .topbar-brand {
-            font-size: 16px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            font-size: 13px;
-        }
-        .topbar-right a {
-            color: #fff;
-            opacity: 0.85;
-            text-decoration: none;
-            font-size: 13px;
-            transition: opacity var(--transition);
-        }
-        .topbar-right a:hover { opacity: 1; }
-        .text-btn {
-            background: rgba(255,255,255,0.15);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.25);
-            border-radius: var(--radius-sm);
-            padding: 5px 14px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background var(--transition);
-        }
-        .text-btn:hover { background: rgba(255,255,255,0.25); }
-
         /* Container */
         .community-container {
-            max-width: 800px;
+            max-width: 880px;
             margin: 0 auto;
-            padding: 0 20px;
-            animation: contentSlideIn 0.5s ease forwards;
+            padding: 0;
         }
 
         @keyframes contentSlideIn {
@@ -1222,98 +1164,28 @@
             .pagination { flex-wrap: wrap; }
         }
     </style>
-    <style>
-        /* ===== 新设计系统覆盖层 v2 ===== */
-        :root {
-            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
-            --green-600:#1e8a50; --green-700:#126a3c; --teal:#2a9d8f;
-            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
-            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
-            --shadow:0 10px 30px rgba(20,60,40,.1);
-            --radius:18px;
-        }
-        body {
-            font-family:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-            background:
-                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
-                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
-                linear-gradient(165deg,#f7fbf8,#eef6f1) !important;
-            background-attachment:fixed; color:var(--ink);
-            -webkit-font-smoothing:antialiased;
-        }
-        ::selection{background:rgba(47,158,99,.22)}
-        .topbar{
-            background:rgba(255,255,255,.88) !important; color:var(--ink) !important;
-            backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-            border-bottom:1px solid var(--line); box-shadow:0 4px 18px rgba(20,60,40,.06);
-        }
-        .topbar-brand{color:var(--green-700) !important; font-weight:800; letter-spacing:.3px}
-        .topbar-right{color:var(--ink-2)}
-        .community-container{max-width:1180px; margin:28px auto 60px; padding:0 20px}
-        .com-header{background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:24px}
-        .com-tabs{display:flex; gap:8px; flex-wrap:wrap}
-        .com-tab,.tab-btn,.mode-tab{
-            border:0; padding:10px 18px; border-radius:999px; cursor:pointer;
-            font-size:15px; font-weight:600; color:var(--ink-2); background:transparent; transition:.2s;
-        }
-        .com-tab.active,.tab-btn.active,.mode-tab.active{background:var(--grad); color:#fff; box-shadow:0 6px 16px rgba(30,138,80,.3)}
-        .com-tab:hover,.tab-btn:hover,.mode-tab:hover{background:var(--green-100); color:var(--green-600)}
-        .post-card,.comment-item,.detail-card,.modal-card,.entry-card-wrapper{
-            background:#fff; border:1px solid var(--line); border-radius:16px;
-            box-shadow:0 2px 10px rgba(20,60,40,.06); transition:.25s;
-        }
-        .post-card:hover,.comment-item:hover,.entry-card-wrapper:hover{transform:translateY(-3px); border-color:rgba(47,158,99,.35)}
-        .detail-overlay,.modal-overlay,.modal{background:rgba(20,40,30,.5); backdrop-filter:blur(4px)}
-        .comment-count-badge,.detail-category-badge,.entry-type-badge,.category-badge,.confidence-badge{
-            background:var(--grad); color:#fff; border-radius:999px; padding:3px 10px; font-weight:700; font-size:12px;
-        }
-        .new-post-btn,.btn,.btn-save,.btn-confirm,.primary,.add-btn,.auto-btn,.save-btn{
-            border:0; border-radius:11px; padding:11px 18px; cursor:pointer; font-size:14px; font-weight:700; transition:.2s;
-            background:var(--grad); color:#fff; box-shadow:0 8px 18px rgba(30,138,80,.26);
-        }
-        .new-post-btn:hover,.btn:hover,.btn-save:hover,.btn-confirm:hover,.primary:hover,.add-btn:hover,.auto-btn:hover,.save-btn:hover{
-            transform:translateY(-1px); box-shadow:0 12px 24px rgba(30,138,80,.34);
-        }
-        .btn-cancel,.btn-delete,.btn-edit,.cancel-btn,.delete-btn,.c-delete-btn,.c-reply-btn,.modal-cancel,.modal-rt-btn,.like-btn,.text-btn,.minor,.danger{
-            background:var(--green-50); color:var(--green-700); border:1px solid var(--green-100);
-        }
-        .btn-cancel:hover,.btn-delete:hover,.btn-edit:hover,.cancel-btn:hover,.delete-btn:hover,.c-delete-btn:hover,.c-reply-btn:hover,.modal-cancel:hover,.modal-rt-btn:hover,.minor:hover,.danger:hover{background:var(--green-100)}
-        .like-btn.liked,.heart-icon{color:#e5484d}
-        input,select,textarea{
-            border:1.5px solid var(--line) !important; border-radius:11px !important;
-            padding:11px 14px !important; font:inherit; color:var(--ink); background:#fbfdfc; outline:none; transition:.2s;
-        }
-        input:focus,select:focus,textarea:focus{border-color:var(--green-500) !important; background:#fff; box-shadow:0 0 0 4px rgba(47,158,99,.12)}
-        .empty-state{color:var(--ink-2); text-align:center; padding:32px}
-        .empty-icon{font-size:40px}
-        .toast-container{position:fixed; right:24px; bottom:24px; z-index:100}
-        @media (max-width:860px){ .topbar{padding:0 14px} }
-        @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
-    </style>
-    <link rel="stylesheet" href="/css/ui.css">
-    <link rel="stylesheet" href="/css/soft.css">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
-<body>
-    <!-- Toast -->
-    <div class="toast" id="toast"></div>
+<body class="ui-app page-community">
+<script src="/js/shell.js?v=20261107a"></script>
 
-    <!-- Topbar -->
-    <header class="topbar">
-        <div class="topbar-brand">👥 社区交流</div>
-        <div class="topbar-right">
-            <span id="greeting"></span>
-            <a href="/home.html">首页</a>
-            <button onclick="logout()" class="text-btn">退出</button>
-        </div>
-    </header>
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
+<main class="ui-main">
+    <div class="ui-wrap">
     <div class="community-container">
         <!-- Header -->
-        <div class="com-header">
-            <h2>社区交流</h2>
-            <button class="new-post-btn" onclick="showNewPostModal()">✏️ 发布新帖</button>
-        </div>
+        <header class="ui-page-head">
+            <div>
+                <p class="ui-eyebrow">社区</p>
+                <h1>养护社区</h1>
+                <p class="ui-sub">分享经验、提问求助，和其他养护者交流。</p>
+            </div>
+            <div class="ui-head-actions">
+                <button class="ui-btn ui-btn-primary" onclick="showNewPostModal()">发布新帖</button>
+            </div>
+        </header>
 
         <!-- Category Tabs -->
         <div class="com-tabs">
@@ -1341,6 +1213,8 @@
         <!-- Pagination -->
         <div class="pagination" id="pagination"></div>
     </div>
+    </div>
+</main>
 
     <!-- Post Detail Overlay -->
     <div class="detail-overlay" id="detailOverlay">
@@ -1431,7 +1305,7 @@
             if (data.code === 200) {
                 currentUser = data.data.userName || data.data.user;
                 currentUserName = data.data.userName || data.data.user;
-                document.getElementById('greeting').textContent = getGreeting() + '，' + currentUserName;
+                if (window.setShellUser) window.setShellUser(currentUserName);
                 loadTagCloud();
                 loadPosts();
             } else {
@@ -1983,8 +1857,8 @@
             }
         });
     </script>
-    <script src="/js/push.js"></script>
-<script src="/js/guard.js"></script>
-<script src="/js/common.js"></script>
+    <script src="/js/push.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261107a"></script>
+<script src="/js/common.js?v=20261107a"></script>
 </body>
 </html>

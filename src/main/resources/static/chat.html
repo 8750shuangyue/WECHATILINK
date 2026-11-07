@@ -4,67 +4,74 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sekai PetPlant - AI 对话</title>
-    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
-<body style="background: #f0f4f2;">
-<header class="topbar">
-    <div class="topbar-brand">
-        <a href="/home" style="color:#fff;text-decoration:none;">← 返回首页</a>
-        &nbsp;|&nbsp; <span id="headerSys">AI 对话助手</span>
-    </div>
-    <div class="topbar-right">
-        <span id="greeting"></span>
-        <span class="badge" id="botStatus" style="background:#4a9;">在线</span>
-        <button onclick="logout()" class="text-btn">退出</button>
-    </div>
-</header>
+<body class="ui-app page-chat">
+<script src="/js/shell.js?v=20261107a"></script>
 
-<div class="chat-container">
-    <aside class="chat-sidebar">
-        <div class="sidebar-header"><h3>🐾🌿 PetPlant</h3><p>AI 护理助手</p></div>
-        <div class="sidebar-system"><div class="sys-label">当前系统</div><div class="sys-name" id="sidebarSys">Web AI 助手</div></div>
-        <div class="sidebar-tools"><div class="tool-label">能力清单</div>
-            <div class="tool-list" id="toolList"></div>
+<main class="ui-main">
+<div class="ui-wrap ui-wrap--chat">
+    <header class="ui-page-head">
+        <div>
+            <p class="ui-eyebrow">对话</p>
+            <h1 id="headerSys">AI 对话助手</h1>
+            <p class="ui-sub">结合知识库与工具回答问题，并标注参考来源。</p>
         </div>
-        <button class="secondary-btn" id="clearChatBtn" onclick="clearChat()">清空会话</button>
-        <button class="secondary-btn" onclick="location.href='/home'" style="margin-top:auto;">返回首页</button>
-    </aside>
+        <div class="ui-head-actions">
+            <span class="badge" id="botStatus">在线</span>
+        </div>
+    </header>
 
-    <div class="chat-main">
-        <div class="chat-messages" id="chatMessages">
-            <div class="msg system-msg">
-                <div class="msg-bubble system-bubble" id="welcomeMsg">
-                    欢迎使用 AI 护理助手！<br>可以询问宠物/植物护理、天气、生成图片、护理提醒等。
+    <div class="ui-chat">
+        <div class="chat-main">
+            <div class="chat-messages" id="chatMessages">
+                <div class="msg system-msg">
+                    <div class="msg-bubble system-bubble" id="welcomeMsg">
+                        欢迎使用 AI 护理助手！<br>可以询问宠物/植物护理、天气、生成图片、护理提醒等。
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <div class="quick-row">
+                    <button class="quick-chip" onclick="quickPrompt('帮我查一下北京的天气', true)">🌤 查天气</button>
+                    <button class="quick-chip" onclick="quickPrompt('帮我生成一张可爱的橘猫图片', true)">🖼 生成图片</button>
+                    <button class="quick-chip" onclick="quickPrompt('绿萝叶子发黄该怎么办？')">🌱 护理问答</button>
+                    <button class="quick-chip" onclick="location.href='/reminders'">⏰ 护理提醒</button>
+                </div>
+                <div id="imagePreview" style="display:none;margin-bottom:8px;position:relative;">
+                    <img id="previewImg" src="" alt="" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--ui-line);">
+                    <span onclick="removeImage()" style="position:absolute;top:-8px;left:116px;cursor:pointer;font-size:18px;">&times;</span>
+                </div>
+                <div class="input-row">
+                    <label class="icon-btn" title="发送图片" style="cursor:pointer;">
+                        🖼
+                        <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
+                    </label>
+                    <button class="icon-btn mic-btn" id="micBtn" title="语音输入" onclick="toggleMic()">🎤</button>
+                    <button class="icon-btn tool-mode-btn" id="toolModeBtn" title="工具对话：生成图片/语音等" onclick="toggleToolMode()">⚙️</button>
+                    <textarea id="msgInput" placeholder="输入消息…（Enter 发送）" rows="1"></textarea>
+                    <button class="send-btn" id="sendBtn">发送</button>
                 </div>
             </div>
         </div>
 
-        <div class="chat-input-area">
-            <div class="quick-row">
-                <button class="quick-chip" onclick="quickPrompt('帮我查一下北京的天气', true)">🌤 查天气</button>
-                <button class="quick-chip" onclick="quickPrompt('帮我生成一张可爱的橘猫图片', true)">🖼 生成图片</button>
-                <button class="quick-chip" onclick="quickPrompt('绿萝叶子发黄该怎么办？')">🌱 护理问答</button>
-                <button class="quick-chip" onclick="location.href='/reminders.html'">⏰ 护理提醒</button>
+        <aside class="chat-sidebar">
+            <div class="sidebar-header"><h3>🐾🌿 PetPlant</h3><p>AI 护理助手</p></div>
+            <div class="sidebar-system"><div class="sys-label">当前系统</div><div class="sys-name" id="sidebarSys">Web AI 助手</div></div>
+            <div class="sidebar-tools"><div class="tool-label">能力清单</div>
+                <div class="tool-list" id="toolList"></div>
             </div>
-            <div id="imagePreview" style="display:none;margin-bottom:8px;position:relative;">
-                <img id="previewImg" src="" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid #ddd;">
-                <span onclick="removeImage()" style="position:absolute;top:-8px;left:116px;cursor:pointer;font-size:18px;">&times;</span>
-            </div>
-            <div class="input-row">
-                <label class="icon-btn" title="发送图片" style="cursor:pointer;">
-                    🖼
-                    <input type="file" id="imageInput" accept="image/*" style="display:none;" onchange="handleImage(event)">
-                </label>
-                <button class="icon-btn mic-btn" id="micBtn" title="语音输入" onclick="toggleMic()">🎤</button>
-                <button class="icon-btn tool-mode-btn" id="toolModeBtn" title="工具对话：生成图片/语音等" onclick="toggleToolMode()">⚙️</button>
-                <textarea id="msgInput" placeholder="输入消息…（Enter 发送）" rows="1"></textarea>
-                <button class="send-btn" id="sendBtn">发送</button>
-            </div>
-        </div>
+            <button class="secondary-btn" id="clearChatBtn" onclick="clearChat()">清空会话</button>
+        </aside>
     </div>
 </div>
+</main>
 
+<script src="/js/guard.js?v=20261107a"></script>
+<script src="/js/common.js?v=20261107a"></script>
 <script>
 document.getElementById('headerSys').textContent = 'AI 对话助手';
 document.getElementById('sidebarSys').textContent = 'Web AI 助手';
@@ -83,7 +90,7 @@ var historyLoadPromise = Promise.resolve();
 
 fetch('/api/auth/me').then(r => r.json()).then(data => {
     if (data.code === 200) {
-        document.getElementById('greeting').textContent = data.data.userName;
+        if (window.setShellUser) window.setShellUser(data.data.userName);
         historyLoadPromise = loadHistory();
     } else {
         location.href = '/login';
@@ -95,7 +102,7 @@ function addMessage(text, dir, from, time) {
     var isIn = dir === 'in';
     div.className = 'msg ' + (isIn ? 'bot-msg' : 'user-msg');
     var timeStr = time ? ' ' + time : '';
-    div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#4a9' : 'rgba(255,255,255,0.7)') + ';margin-bottom:3px;">' + from + timeStr + '</div>' + text.replace(/\n/g, '<br>') + '</div>';
+    div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#1f7a4d' : '#5c6b62') + ';margin-bottom:3px;">' + from + timeStr + '</div>' + text.replace(/\n/g, '<br>') + '</div>';
     document.getElementById('chatMessages').appendChild(div);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
     return div;
@@ -107,7 +114,7 @@ function addImageMessage(url, from, time) {
     var bubble = document.createElement('div');
     bubble.className = 'msg-bubble bot-bubble';
     var meta = document.createElement('div');
-    meta.style.cssText = 'font-size:11px;color:#4a9;margin-bottom:6px;';
+    meta.style.cssText = 'font-size:11px;color:#1f7a4d;margin-bottom:6px;';
     meta.textContent = from + (time ? ' ' + time : '');
     var img = document.createElement('img');
     img.src = url;
@@ -235,7 +242,7 @@ function createHistoryAssistantMessage(message) {
     var bubble = document.createElement('div');
     bubble.className = 'msg-bubble bot-bubble';
     var meta = document.createElement('div');
-    meta.style.cssText = 'font-size:11px;color:#4a9;margin-bottom:3px;';
+    meta.style.cssText = 'font-size:11px;color:#1f7a4d;margin-bottom:3px;';
     meta.textContent = 'AI' + (message.timestamp ? ' ' + formatHistoryTime(message.timestamp) : '');
     bubble.appendChild(meta);
 
@@ -583,49 +590,5 @@ async function logout() {
     location.href = '/login';
 }
 </script>
-<style>
-    .quick-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-    .quick-chip {
-        border: 1px solid rgba(47,158,99,.3);
-        background: #f2f9f4;
-        color: #1e8a50;
-        border-radius: 999px;
-        padding: 7px 14px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: .2s;
-    }
-    .quick-chip:hover { background: #dff0e6; transform: translateY(-1px); }
-
-    .mic-btn {
-        border: none;
-        background: transparent;
-        font-size: 17px;
-        cursor: pointer;
-        border-radius: 10px;
-        width: 38px;
-        height: 38px;
-        transition: .2s;
-    }
-    .mic-btn:hover { background: #dff0e6; transform: scale(1.05); }
-    .mic-btn.recording {
-        background: #f43f5e;
-        animation: micPulse 1.2s ease-in-out infinite;
-    }
-    .tool-mode-btn.active {
-        background: #1e8a50;
-        color: #fff;
-        box-shadow: 0 4px 14px rgba(30,138,80,.35);
-    }
-    @keyframes micPulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,.35); }
-        50% { box-shadow: 0 0 0 8px rgba(244,63,94,0); }
-    }
-</style>
-<link rel="stylesheet" href="/css/ui.css">
-<link rel="stylesheet" href="/css/chat.css">
-<script src="/js/guard.js"></script>
-<script src="/js/common.js?v=20261017"></script>
 </body>
 </html>

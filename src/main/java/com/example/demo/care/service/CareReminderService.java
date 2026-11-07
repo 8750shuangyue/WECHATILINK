@@ -66,7 +66,7 @@ public class CareReminderService {
      */
     private void deliverReminder(String userId, String reminderText) {
         try {
-            webPushService.sendPushToUser(userId, "🌿 护理提醒", reminderText, "/home.html");
+            webPushService.sendPushToUser(userId, "🌿 护理提醒", reminderText, "/home");
         } catch (Exception e) {
             log.error("[Reminder] Failed to deliver reminder to user {}: {}", userId, e.getMessage(), e);
         }

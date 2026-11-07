@@ -4,172 +4,94 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sekai PetPlant - 护理提醒</title>
+    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
-    <style>
-        :root {
-            --green-50:#f2f9f4; --green-100:#dff0e6; --green-500:#2f9e63;
-            --green-600:#1e8a50; --green-700:#126a3c; --teal:#2a9d8f;
-            --ink:#1c2b22; --ink-2:#5b6f63; --line:rgba(28,60,44,.1);
-            --grad:linear-gradient(135deg,#2f9e63,#1e8a50 55%,#2a9d8f);
-            --shadow:0 10px 30px rgba(20,60,40,.1);
-            --radius:18px;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: "Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-            color: var(--ink); min-height: 100vh;
-            background:
-                radial-gradient(1000px 520px at 85% -10%, rgba(42,157,143,.14), transparent 60%),
-                radial-gradient(900px 480px at -10% 110%, rgba(47,158,99,.12), transparent 55%),
-                linear-gradient(165deg,#f7fbf8,#eef6f1);
-            background-attachment: fixed;
-            -webkit-font-smoothing: antialiased;
-        }
-        ::selection { background: rgba(47,158,99,.22); }
-
-        .topbar {
-            position: sticky; top: 0; z-index: 50;
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 14px 28px; color: #fff;
-            background: linear-gradient(120deg,#10351f,#1b4a2f 55%,#1e5a3a);
-            box-shadow: 0 8px 26px rgba(10,40,22,.28);
-        }
-        .topbar-brand { font-weight: 800; letter-spacing: .4px; display: flex; align-items: center; gap: 10px; }
-        .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 13px; }
-        .topbar a { color: #fff; text-decoration: none; opacity: .9; }
-        .topbar a:hover { opacity: 1; }
-
-        main { max-width: 1080px; margin: 32px auto 60px; padding: 0 20px; }
-        .page-title { font-size: 28px; font-weight: 800; color: var(--green-700); margin-bottom: 6px; }
-        .page-sub { color: var(--ink-2); margin-bottom: 24px; }
-
-        .stats-row { display: flex; gap: 14px; margin-bottom: 24px; }
-        .stat-card {
-            flex: 1; background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
-            padding: 18px; text-align: center; box-shadow: var(--shadow);
-        }
-        .stat-card .num { font-size: 28px; font-weight: 800; color: var(--green-600); }
-        .stat-card .label { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
-
-        .grid { display: grid; grid-template-columns: 380px 1fr; gap: 22px; align-items: start; }
-        .panel {
-            background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
-            padding: 24px; box-shadow: var(--shadow);
-        }
-        .panel h3 { font-size: 17px; font-weight: 700; color: var(--green-700); margin-bottom: 16px; }
-        label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 12px 0 6px; }
-        input, select, textarea {
-            width: 100%; border: 1.5px solid var(--line); border-radius: 11px;
-            padding: 11px 14px; font: inherit; font-size: 14px; color: var(--ink);
-            background: #fbfdfc; outline: none; transition: .2s;
-        }
-        input:focus, select:focus, textarea:focus { border-color: var(--green-500); background: #fff; box-shadow: 0 0 0 4px rgba(47,158,99,.12); }
-        textarea { resize: vertical; }
-        .primary {
-            width: 100%; margin-top: 18px; border: 0; border-radius: 11px; padding: 12px 18px;
-            font-size: 15px; font-weight: 700; color: #fff; cursor: pointer;
-            background: var(--grad); box-shadow: 0 8px 18px rgba(30,138,80,.26); transition: .2s;
-        }
-        .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(30,138,80,.34); }
-
-        .reminder-list { display: flex; flex-direction: column; gap: 14px; }
-        .reminder-card {
-            background: #fff; border: 1px solid var(--line); border-radius: 16px;
-            padding: 18px 20px; box-shadow: 0 2px 10px rgba(20,60,40,.06);
-            display: flex; justify-content: space-between; align-items: center; gap: 16px;
-            transition: .25s;
-        }
-        .reminder-card:hover { transform: translateY(-2px); border-color: rgba(47,158,99,.35); }
-        .reminder-type { display: inline-block; background: var(--grad); color: #fff; border-radius: 999px; padding: 3px 12px; font-size: 12px; font-weight: 700; }
-        .reminder-content { font-size: 15px; margin: 8px 0 4px; }
-        .reminder-meta { font-size: 13px; color: var(--ink-2); }
-        .status-chip { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
-        .status-PENDING { background: #fff3e0; color: #e65100; }
-        .status-SENT { background: #e3f2fd; color: #1565c0; }
-        .status-DONE { background: #e8f5e9; color: #2e7d32; }
-        .minor {
-            border: 1px solid var(--green-100); background: var(--green-50); color: var(--green-700);
-            border-radius: 11px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: .2s;
-        }
-        .minor:hover { background: var(--green-100); }
-        .minor:disabled { opacity: .5; cursor: not-allowed; }
-        .empty { color: var(--ink-2); text-align: center; padding: 40px 0; }
-
-        @media (max-width: 860px) {
-            .grid { grid-template-columns: 1fr; }
-            .topbar { padding: 12px 16px; }
-            .reminder-card { flex-direction: column; align-items: flex-start; }
-        }
-        @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-    </style>
-    <link rel="stylesheet" href="/css/ui.css">
-    <link rel="stylesheet" href="/css/soft.css">
 </head>
-<body>
-<header class="topbar">
-    <div class="topbar-brand">⏰ 护理提醒</div>
-    <div class="topbar-right">
-        <span id="greeting"></span>
-        <a href="/home">返回首页</a>
-        <a href="javascript:logout()">退出</a>
-    </div>
-</header>
+<body class="ui-app page-reminders">
+<script src="/js/shell.js?v=20261107a"></script>
 
-<main>
-    <h1 class="page-title">护理提醒管理</h1>
-    <p class="page-sub">设置浇水、施肥、喂药等提醒，到期后通过浏览器推送通知你。</p>
-
-    <div class="stats-row">
-        <div class="stat-card"><div class="num" id="statPending">0</div><div class="label">待处理</div></div>
-        <div class="stat-card"><div class="num" id="statSent">0</div><div class="label">已发送</div></div>
-        <div class="stat-card"><div class="num" id="statDone">0</div><div class="label">已完成</div></div>
-    </div>
-
-    <section class="panel" style="margin-bottom:18px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+<main class="ui-main">
+    <div class="ui-wrap">
+        <header class="ui-page-head">
             <div>
-                <h3 style="margin-bottom:4px">🌅 今日简报</h3>
-                <p style="color:var(--ink-2);font-size:13px">结合天气、护理待办与养护知识生成今日日报。</p>
+                <p class="ui-eyebrow">提醒</p>
+                <h1>护理提醒</h1>
+                <p class="ui-sub">设置浇水、施肥、喂药等提醒，到期后通过浏览器推送通知你。</p>
             </div>
-            <button class="primary" id="briefingBtn" onclick="generateBriefing()">生成简报</button>
+            <div class="ui-head-actions">
+                <button class="ui-btn" id="briefingBtn" onclick="generateBriefing()">生成今日简报</button>
+            </div>
+        </header>
+
+        <section class="ui-kpis" style="margin-bottom:16px">
+            <div class="ui-kpi">
+                <span class="ui-kpi-label">待处理</span>
+                <strong id="statPending">0</strong>
+            </div>
+            <div class="ui-kpi">
+                <span class="ui-kpi-label">已发送</span>
+                <strong id="statSent">0</strong>
+            </div>
+            <div class="ui-kpi">
+                <span class="ui-kpi-label">已完成</span>
+                <strong id="statDone">0</strong>
+            </div>
+        </section>
+
+        <section class="ui-card ui-card--pad" style="margin-bottom:16px">
+            <div class="ui-card-head">
+                <div>
+                    <h3 class="ui-section-title">今日简报</h3>
+                    <p class="ui-section-sub">结合天气、护理待办与养护知识生成今日日报。</p>
+                </div>
+            </div>
+            <div class="briefing-box" id="briefingBox">还没有生成简报。</div>
+        </section>
+
+        <div class="reminders-grid">
+            <section class="ui-card ui-card--pad">
+                <h3 class="ui-section-title" style="margin-bottom:14px">新建提醒</h3>
+                <div class="ui-field">
+                    <label for="rmType">提醒类型</label>
+                    <select id="rmType">
+                        <option value="浇水">浇水</option>
+                        <option value="施肥">施肥</option>
+                        <option value="驱虫">驱虫</option>
+                        <option value="疫苗">疫苗</option>
+                        <option value="喂药">喂药</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+                <div class="ui-field">
+                    <label for="rmContent">提醒内容</label>
+                    <textarea id="rmContent" rows="2" placeholder="例如：给绿萝浇水 200ml"></textarea>
+                </div>
+                <div class="ui-field">
+                    <label for="rmTime">计划时间</label>
+                    <input type="datetime-local" id="rmTime">
+                </div>
+                <button class="ui-btn ui-btn-primary" style="width:100%" onclick="createReminder()">创建提醒</button>
+            </section>
+
+            <section class="ui-card ui-card--pad">
+                <div class="ui-card-head">
+                    <h3 class="ui-section-title">提醒列表</h3>
+                </div>
+                <div id="reminderList" class="reminder-list"><div class="ui-empty">加载中…</div></div>
+            </section>
         </div>
-        <div id="briefingBox" style="margin-top:12px;color:var(--ink-2);line-height:1.7">还没有生成简报。</div>
-    </section>
-
-    <div class="grid">
-        <section class="panel">
-            <h3>新建提醒</h3>
-            <label>提醒类型</label>
-            <select id="rmType">
-                <option value="浇水">浇水</option>
-                <option value="施肥">施肥</option>
-                <option value="驱虫">驱虫</option>
-                <option value="疫苗">疫苗</option>
-                <option value="喂药">喂药</option>
-                <option value="其他">其他</option>
-            </select>
-            <label>提醒内容</label>
-            <textarea id="rmContent" rows="2" placeholder="例如：给绿萝浇水 200ml"></textarea>
-            <label>计划时间</label>
-            <input type="datetime-local" id="rmTime">
-            <button class="primary" onclick="createReminder()">创建提醒</button>
-        </section>
-
-        <section class="panel">
-            <h3>提醒列表</h3>
-            <div id="reminderList" class="reminder-list"><div class="empty">加载中…</div></div>
-        </section>
     </div>
 </main>
 
-<script src="/js/guard.js"></script>
-<script src="/js/common.js"></script>
+<script src="/js/guard.js?v=20261107a"></script>
+<script src="/js/common.js?v=20261107a"></script>
 <script>
 var currentUser = '';
 
 requireLogin(function (data) {
     currentUser = data.userName;
-    document.getElementById('greeting').textContent = '你好，' + data.userName;
+    if (window.setShellUser) window.setShellUser(data.userName);
     loadReminders();
 });
 
@@ -186,14 +108,14 @@ async function loadReminders() {
         document.getElementById('statDone').textContent = done;
         renderList(rows);
     } catch (e) {
-        document.getElementById('reminderList').innerHTML = '<div class="empty">加载失败</div>';
+        document.getElementById('reminderList').innerHTML = '<div class="ui-empty">加载失败</div>';
     }
 }
 
 function renderList(rows) {
     var box = document.getElementById('reminderList');
     if (!rows.length) {
-        box.innerHTML = '<div class="empty">还没有提醒，先创建一个吧。</div>';
+        box.innerHTML = '<div class="ui-empty">还没有提醒，先创建一个吧。</div>';
         return;
     }
     box.innerHTML = rows.map(function (r) {
@@ -202,13 +124,13 @@ function renderList(rows) {
         var type = r.reminder_type || '提醒';
         var repeat = r.repeat_rule ? ' · 重复:' + r.repeat_rule : '';
         var doneBtn = status === 'DONE'
-            ? '<button class="minor" disabled>已完成</button>'
-            : '<button class="minor" onclick="completeReminder(' + r.id + ')">标记完成</button>';
+            ? '<button class="ui-btn ui-btn-sm" disabled>已完成</button>'
+            : '<button class="ui-btn ui-btn-sm" onclick="completeReminder(' + r.id + ')">标记完成</button>';
         return '<div class="reminder-card">' +
             '<div><span class="reminder-type">' + esc(type) + '</span>' +
             '<div class="reminder-content">' + esc(r.content || '') + '</div>' +
             '<div class="reminder-meta">计划时间：' + esc(due) + repeat + '</div>' +
-            '<div style="margin-top:8px"><span class="status-chip status-' + status + '">' +
+            '<div><span class="status-chip status-' + status + '">' +
             ({PENDING:'待处理', SENT:'已发送', DONE:'已完成'}[status] || status) + '</span></div></div>' +
             '<div>' + doneBtn + '</div></div>';
     }).join('');

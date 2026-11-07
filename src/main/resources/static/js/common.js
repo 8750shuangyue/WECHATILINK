@@ -100,7 +100,13 @@ function logout() {
 
         footer.appendChild(createLink(POLICE_TEXT, POLICE_URL, true));
         footer.appendChild(createLink(ICP_TEXT, ICP_URL, false));
-        document.body.appendChild(footer);
+        /* 应用页有左侧栏：备案页脚要落在主内容列里，不能挂在 body 上。
+           对话页是满屏布局，页脚放到 .ui-main 末尾，避免挤占聊天高度。 */
+        var chatWrap = document.querySelector('.ui-wrap--chat');
+        var host = chatWrap
+            ? (document.querySelector('.ui-main') || document.body)
+            : (document.querySelector('.ui-wrap') || document.querySelector('.ui-main') || document.body);
+        host.appendChild(footer);
     }
 
     if (document.readyState === 'loading') {

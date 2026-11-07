@@ -63,7 +63,7 @@ public class PushController {
         if (userId == null) return Result.error("未登录");
 
         try {
-            webPushService.sendPushToUser(userId, "Sekai PetPlant", "这是一条测试推送通知", "/home.html");
+            webPushService.sendPushToUser(userId, "Sekai PetPlant", "这是一条测试推送通知", "/home");
             return Result.success("测试推送已发送");
         } catch (Exception e) {
             logger.error("Test push failed: {}", userId, e);
