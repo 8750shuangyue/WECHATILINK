@@ -1,5 +1,7 @@
 package com.example.demo.ai;
 
+import com.example.demo.web.ApiResponses;
+
 import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.model.CareTarget;
 import com.example.demo.care.service.CareRecordService;
@@ -61,7 +63,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/triage")
@@ -85,7 +87,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/target")
@@ -104,7 +106,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @GetMapping("/targets")
@@ -122,7 +124,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/reminder")
@@ -148,7 +150,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @GetMapping("/reminders")
@@ -166,7 +168,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @GetMapping("/reminders/pending")
@@ -176,7 +178,7 @@ public class AiCareController {
         if (userId == null) {
             response.put("success", false);
             response.put("error", "未登录");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(ApiResponses.enrich(response));
         }
         try {
             int count = careReminderService.countPendingReminders(userId);
@@ -187,7 +189,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/reminder/{id}/complete")
@@ -206,7 +208,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/records/medication")
@@ -232,7 +234,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/records/compare")
@@ -253,7 +255,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/plan/generate")
@@ -280,7 +282,7 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @GetMapping("/records/check")
@@ -298,6 +300,6 @@ public class AiCareController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 }

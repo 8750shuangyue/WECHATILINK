@@ -1,5 +1,7 @@
 package com.example.demo.ai;
 
+import com.example.demo.web.ApiResponses;
+
 import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.model.CareTarget;
 import com.example.demo.care.service.CareRecordService;
@@ -88,7 +90,7 @@ public class ToolController {
         } finally {
             UserContextHolder.clear();
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @GetMapping("/tools/registered")
@@ -98,7 +100,7 @@ public class ToolController {
         response.put("success", true);
         response.put("tools", new ArrayList<>(tools));
         response.put("count", tools.size());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     private Map<String, Object> convertToolCallResult(ToolCallResult result) {

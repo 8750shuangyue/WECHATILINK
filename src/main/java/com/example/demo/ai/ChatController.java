@@ -1,5 +1,7 @@
 package com.example.demo.ai;
 
+import com.example.demo.web.ApiResponses;
+
 import com.example.demo.care.model.CareRecord;
 import com.example.demo.config.MdcContext;
 import com.example.demo.care.model.CareTarget;
@@ -55,7 +57,7 @@ public class ChatController {
             response.put("success", false);
             response.put("error", e.getMessage());
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponses.enrich(response));
     }
 
     @PostMapping("/chat/stream")
@@ -151,7 +153,7 @@ public class ChatController {
             response.put("error", "请先登录");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .cacheControl(CacheControl.noStore())
-                    .body(response);
+                    .body(ApiResponses.enrich(response));
         }
 
         String conversationId = (String) session.getAttribute("conversationId");
@@ -164,7 +166,7 @@ public class ChatController {
         response.put("nextBeforeId", page.nextBeforeId());
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(response);
+                .body(ApiResponses.enrich(response));
     }
 
     private String getOrCreateConversationId(HttpSession session) {
@@ -183,7 +185,7 @@ public class ChatController {
         if (userId == null || userId.isBlank()) {
             response.put("success", false);
             response.put("error", "请先登录");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponses.enrich(response));
         }
 
         String conversationId = (String) session.getAttribute("conversationId");
@@ -197,23 +199,23 @@ public class ChatController {
             }
             session.removeAttribute("conversationId");
             response.put("success", true);
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(ApiResponses.enrich(response));
         } catch (ConversationAccessDeniedException e) {
             log.warn("Rejected clear request for unauthorized conversation, userId: {}, conversationId: {}",
                     userId, conversationId);
             response.put("success", false);
             response.put("error", "无权清空该会话");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponses.enrich(response));
         } catch (IllegalArgumentException e) {
             response.put("success", false);
             response.put("error", "清空会话参数无效");
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest().body(ApiResponses.enrich(response));
         } catch (Exception e) {
             log.error("Failed to clear conversation, userId: {}, conversationId: {}",
                     userId, conversationId, e);
             response.put("success", false);
             response.put("error", "清空会话失败，请重试");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponses.enrich(response));
         }
     }
 }
