@@ -100,9 +100,9 @@
             fetch('/api/stats/tool-ranking').then(function (r) { return r.json(); }),
             fetch('/api/stats/trend').then(function (r) { return r.json(); })
         ]).then(function (results) {
-            renderCards(results[0]);
-            renderRanking(results[1]);
-            renderTrend(results[2]);
+            renderCards((results[0] && results[0].data) || {});
+            renderRanking((results[1] && results[1].data) || []);
+            renderTrend((results[2] && results[2].data) || []);
         }).catch(function (e) {
             document.getElementById('statCards').innerHTML = '<div class="ui-empty">加载失败：' + e.message + '</div>';
         });

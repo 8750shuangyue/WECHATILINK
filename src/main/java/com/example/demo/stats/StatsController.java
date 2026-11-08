@@ -1,5 +1,7 @@
 package com.example.demo.stats;
 
+import com.example.demo.aicare.Result;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -36,7 +38,7 @@ public class StatsController {
     }
 
     @GetMapping("/overview")
-    public Map<String, Object> overview() {
+    public Result<Map<String, Object>> overview() {
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("users", count(jdbc, "SELECT COUNT(*) FROM users"));
         r.put("conversations", count(jdbc, "SELECT COUNT(*) FROM conversations"));
@@ -48,13 +50,13 @@ public class StatsController {
         r.put("products", count(jdbc, "SELECT COUNT(*) FROM products"));
         r.put("posts", count(jdbc, "SELECT COUNT(*) FROM community_posts"));
         r.put("kbDocuments", count(sqliteJdbc, "SELECT COUNT(DISTINCT source_id) FROM vector_store"));
-        return r;
+        return Result.success(r);
     }
 
     @GetMapping("/tool-ranking")
-    public List<Map<String, Object>> toolRanking() {
+    public Result<List<Map<String, Object>>> toolRanking() {
         try {
-            return jdbc.queryForList("""
+            return Result.success(jdbc.queryForList("""
                     SELECT tool_name AS toolName,
                            COUNT(*) AS total,
                            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS successCount,
@@ -63,15 +65,15 @@ public class StatsController {
                     GROUP BY tool_name
                     ORDER BY total DESC
                     LIMIT 10
-                    """);
+                    """));
         } catch (Exception e) {
             log.warn("[Stats] tool ranking failed: {}", e.getMessage());
-            return List.of();
+            return Result.success(List.of());
         }
     }
 
     @GetMapping("/trend")
-    public List<Map<String, Object>> trend() {
+    public Result<List<Map<String, Object>>> trend() {
         List<Map<String, Object>> result = new ArrayList<>();
         try {
             LocalDate start = LocalDate.now().minusDays(6);
@@ -100,7 +102,7 @@ public class StatsController {
         } catch (Exception e) {
             log.warn("[Stats] trend failed: {}", e.getMessage());
         }
-        return result;
+        return Result.success(result);
     }
 
     private long count(JdbcTemplate t, String sql) {
