@@ -102,12 +102,9 @@ public class VectorStoreService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.example.demo.monitor.MetricsService metricsService;
 
-    private final List<float[]> vectorIndex = new ArrayList<>();
-    private final Map<Integer, IndexEntry> indexEntries = new ConcurrentHashMap<>();
     private final Set<String> clearedConversationKeys = ConcurrentHashMap.newKeySet();
     private final Object conversationMutationLock = new Object();
-    private final AtomicBoolean indexReady = new AtomicBoolean(false);
-    private final ReadWriteLock indexLock = new ReentrantReadWriteLock();
+    private final VectorIndex index = new VectorIndex();
 
     /** 测试/旧装配兼容：没有事务模板与重排服务。 */
     public VectorStoreService(VectorStoreRepository vectorStoreRepository,
@@ -149,44 +146,16 @@ public class VectorStoreService {
             loadFromSQLite();
         } catch (Exception e) {
             logger.warn("Vector index initialization failed, will retry on first use: {}", e.getMessage());
-            indexReady.set(false);
+            index.markNotReady();
         }
     }
 
     private void loadFromSQLite() {
-        indexLock.writeLock().lock();
         try {
-            List<VectorStore> allVectors = vectorStoreRepository.findAll();
-            vectorIndex.clear();
-            indexEntries.clear();
-            for (VectorStore vs : allVectors) {
-                if (vs.getId() == null) {
-                    continue;
-                }
-                float[] vector = deserializeVector(vs.getVector());
-                if (vector.length > 0) {
-                    int idx = vs.getId().intValue();
-                    while (vectorIndex.size() <= idx) {
-                        vectorIndex.add(null);
-                    }
-                    vectorIndex.set(idx, vector);
-                    indexEntries.put(idx, new IndexEntry(
-                            vs.getDocumentId(),
-                            vs.getContent(),
-                            vs.getUserId(),
-                            vs.getConversationId(),
-                            vs.getSourceId(),
-                            vs.getMetadataJson()
-                    ));
-                }
-            }
-            indexReady.set(true);
-            logger.info("Vector index loaded with {} vectors", indexEntries.size());
+            index.load(vectorStoreRepository.findAll());
         } catch (Exception e) {
             logger.error("Failed to load vector index from SQLite", e);
-            indexReady.set(false);
-        } finally {
-            indexLock.writeLock().unlock();
+            index.markNotReady();
         }
     }
 
@@ -377,7 +346,7 @@ public class VectorStoreService {
 
     private void reloadIndexAfterMutation() {
         loadFromSQLite();
-        if (!indexReady.get()) {
+        if (!index.isReady()) {
             throw new IllegalStateException("vector index reload failed after data mutation");
         }
     }
@@ -518,27 +487,17 @@ public class VectorStoreService {
     }
 
     public synchronized void addToIndex(int rowId, String content, float[] vector) {
-        addToIndex(rowId, content, vector, null, null, null, null, null);
+        index.add(rowId, content, vector, null, null, null, null, null);
     }
 
     public void addToIndex(int rowId, String content, float[] vector,
                            String documentId, String userId, String conversationId,
                            String sourceId, String metadataJson) {
-        indexLock.writeLock().lock();
-        try {
-            while (vectorIndex.size() <= rowId) {
-                vectorIndex.add(null);
-            }
-            vectorIndex.set(rowId, vector);
-            indexEntries.put(rowId, new IndexEntry(
-                    documentId, content, userId, conversationId, sourceId, metadataJson));
-        } finally {
-            indexLock.writeLock().unlock();
-        }
+        index.add(rowId, content, vector, documentId, userId, conversationId, sourceId, metadataJson);
     }
 
     public boolean isIndexReady() {
-        return indexReady.get();
+        return index.isReady();
     }
 
     public List<String> searchSimilar(String query) {
@@ -582,22 +541,17 @@ public class VectorStoreService {
         int admittedCount = 0;
         RetrievalTraceStats stats = baseStats(0, 0);
         try {
-            indexLock.readLock().lock();
-            try {
-                if (!indexReady.get()) {
-                    logger.warn("[RAG] Vector index not ready, traceId: {}", traceId);
-                } else if (query == null || query.isBlank()) {
-                    logger.debug("[RAG] Empty query, traceId: {}", traceId);
+            if (!index.isReady()) {
+                logger.warn("[RAG] Vector index not ready, traceId: {}", traceId);
+            } else if (query == null || query.isBlank()) {
+                logger.debug("[RAG] Empty query, traceId: {}", traceId);
+            } else {
+                float[] queryEmbedding = embeddingService.embed(query);
+                if (queryEmbedding.length == 0) {
+                    logger.warn("[RAG] Query embedding is empty, traceId: {}", traceId);
                 } else {
-                    float[] queryEmbedding = embeddingService.embed(query);
-                    if (queryEmbedding.length == 0) {
-                        logger.warn("[RAG] Query embedding is empty, traceId: {}", traceId);
-                    } else {
-                        collectSimilar(queryEmbedding, query, userId, conversationId, results);
-                    }
+                    collectSimilar(queryEmbedding, query, userId, conversationId, results);
                 }
-            } finally {
-                indexLock.readLock().unlock();
             }
 
             results = sortByCosine(results);
@@ -771,21 +725,17 @@ public class VectorStoreService {
         Set<String> queryTokens = keywordEnabled ? RetrievalScorer.tokens(query) : Set.of();
         Map<String, Double> idf = resolvePublicKnowledgeIdf();
 
-        for (Map.Entry<Integer, IndexEntry> entry : indexEntries.entrySet()) {
-            int rowId = entry.getKey();
-            IndexEntry indexEntry = entry.getValue();
+        for (VectorIndex.IndexedVector indexed : index.snapshot()) {
+            IndexEntry indexEntry = indexed.entry();
+            float[] storedVector = indexed.vector();
             if (indexEntry == null || !isVisible(indexEntry, userId, conversationId)) {
                 continue;
             }
-            if (rowId < 0 || rowId >= vectorIndex.size()) {
-                continue;
-            }
-            float[] storedVector = vectorIndex.get(rowId);
             if (storedVector == null || storedVector.length != queryEmbedding.length) {
                 continue;
             }
             double similarity = cosineSimilarity(queryEmbedding, storedVector);
-            boolean publicKnowledge = isPublicKnowledge(indexEntry);
+            boolean publicKnowledge = indexEntry.isPublicKnowledge();
             double keywordScore = publicKnowledge && keywordEnabled
                     ? RetrievalScorer.keywordScore(queryTokens, indexEntry.tokens, idf)
                     : 0.0;
@@ -825,10 +775,8 @@ public class VectorStoreService {
             return Map.of();
         }
         List<Set<String>> publicTokens = new ArrayList<>();
-        for (IndexEntry entry : indexEntries.values()) {
-            if (entry != null && isPublicKnowledge(entry)) {
-                publicTokens.add(entry.tokens);
-            }
+        for (IndexEntry entry : index.publicEntries()) {
+            publicTokens.add(entry.tokens);
         }
         return RetrievalScorer.idf(publicTokens);
     }
@@ -847,7 +795,7 @@ public class VectorStoreService {
      * 3. 只返回匹配 userId 的对话记忆，未携带用户身份时默认拒绝会话记忆。
      */
     private boolean isVisible(IndexEntry entry, String userId, String conversationId) {
-        if (isPublicKnowledge(entry)) {
+        if (entry.isPublicKnowledge()) {
             return true;
         }
         if (userId == null || userId.isEmpty() || conversationId == null || conversationId.isEmpty()) {
@@ -859,10 +807,6 @@ public class VectorStoreService {
         return userId.equals(entry.userId);
     }
 
-    private boolean isPublicKnowledge(IndexEntry entry) {
-        return entry.sourceId != null && !entry.sourceId.isEmpty()
-                && (entry.conversationId == null || entry.conversationId.isEmpty());
-    }
 
     private void recordRetrievalLog(String traceId, String userId, String conversationId,
                                     String query, List<SearchResult> results,
@@ -972,17 +916,6 @@ public class VectorStoreService {
         return buffer.array();
     }
 
-    private float[] deserializeVector(byte[] bytes) {
-        if (bytes == null || bytes.length % 4 != 0) {
-            return new float[0];
-        }
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        float[] vector = new float[bytes.length / 4];
-        for (int i = 0; i < vector.length; i++) {
-            vector[i] = buffer.getFloat();
-        }
-        return vector;
-    }
 
     @Transactional(transactionManager = "sqliteTransactionManager")
     public void clearConversationVectors(String userId, String conversationId) {
@@ -1051,22 +984,7 @@ public class VectorStoreService {
     }
 
     private void removeSourceFromIndex(String sourceId) {
-        indexLock.writeLock().lock();
-        try {
-            indexEntries.entrySet().removeIf(entry -> {
-                IndexEntry indexEntry = entry.getValue();
-                if (!sourceId.equals(indexEntry.sourceId)) {
-                    return false;
-                }
-                int rowId = entry.getKey();
-                if (rowId >= 0 && rowId < vectorIndex.size()) {
-                    vectorIndex.set(rowId, null);
-                }
-                return true;
-            });
-        } finally {
-            indexLock.writeLock().unlock();
-        }
+        index.removeBySource(sourceId);
     }
 
     /**
@@ -1145,36 +1063,13 @@ public class VectorStoreService {
     }
 
     public long countVectors() {
-        return indexEntries.size();
+        return index.size();
     }
 
     public long countVectorsBySource(String sourceId) {
         return vectorStoreRepository.countBySourceId(sourceId);
     }
 
-    private static class IndexEntry {
-        final String documentId;
-        final String content;
-        final String userId;
-        final String conversationId;
-        final String sourceId;
-        final String metadataJson;
-        /**
-         * 入库时预计算的词面匹配单元，关键词通道直接复用，无需回查数据库。
-         */
-        final Set<String> tokens;
-
-        IndexEntry(String documentId, String content, String userId, String conversationId,
-                   String sourceId, String metadataJson) {
-            this.documentId = documentId;
-            this.content = content;
-            this.userId = userId;
-            this.conversationId = conversationId;
-            this.sourceId = sourceId;
-            this.metadataJson = metadataJson;
-            this.tokens = RetrievalScorer.tokens(content);
-        }
-    }
 
     public static class SearchResult {
         private final String documentId;
