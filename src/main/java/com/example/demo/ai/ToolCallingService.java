@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.chat.LlmService;
+import com.example.demo.monitor.MetricsService;
 import com.example.demo.weather.service.WeatherService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
@@ -68,6 +69,10 @@ public class ToolCallingService {
     private final JdbcTemplate jdbc;
     private final Map<String, ToolInfo> toolRegistry = new LinkedHashMap<>();
     private final ExecutorService toolExecutor;
+
+    /** 可选：没有 Micrometer 的场景（部分单测）保持为空。 */
+    @Autowired(required = false)
+    private MetricsService metricsService;
 
     @Autowired
     public ToolCallingService(LlmService llmService, SpringAiTools springAiTools,
@@ -272,7 +277,9 @@ public class ToolCallingService {
                             UserContextHolder.setUserId(effectiveUserId);
                             try {
                                 log.info("[Trace:{}] Executing tool: {} with args: {}",
-                                        traceId, tc.toolName, tc.arguments);
+                                        traceId, tc.toolName,
+                                        com.example.demo.core.LogSanitizer.describeArgs(
+                                                tc.arguments == null ? null : tc.arguments.toJSONString()));
                                 result = executeTool(tc.toolName, tc.arguments);
                                 log.info("[Trace:{}] Tool {} completed in {}ms",
                                         traceId, tc.toolName, System.currentTimeMillis() - start);
@@ -463,7 +470,7 @@ public class ToolCallingService {
                     try {
                         args = JSON.parseObject(argsStr);
                     } catch (Exception e) {
-                        log.warn("Failed to parse tool arguments: {}", argsStr);
+                        log.warn("Failed to parse tool arguments: {}", com.example.demo.core.LogSanitizer.describeArgs(argsStr));
                     }
                 }
 
@@ -491,6 +498,8 @@ public class ToolCallingService {
     }
 
     public String executeTool(String toolName, JSONObject arguments) {
+        long startedAt = System.nanoTime();
+        boolean success = false;
         ToolInfo toolInfo = toolRegistry.get(toolName);
         if (toolInfo == null) {
             log.warn("Unknown tool: {}", toolName);
@@ -515,12 +524,19 @@ public class ToolCallingService {
             toolInfo.method.setAccessible(true);
             Object result = toolInfo.method.invoke(toolInfo.target, args);
 
-            return convertResult(result);
+            String converted = convertResult(result);
+            success = true;
+            return converted;
 
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             log.error("Tool execution failed: {}", toolName, cause);
             throw new RuntimeException(cause.getMessage(), cause);
+        } finally {
+            if (metricsService != null) {
+                metricsService.recordToolCall(toolName, success,
+                        (System.nanoTime() - startedAt) / 1_000_000);
+            }
         }
     }
 

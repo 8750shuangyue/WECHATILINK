@@ -249,7 +249,8 @@ public class CareController {
             session.setAttribute("conversationId", conversationId);
         }
 
-        logger.info("Care QA request: {}, targetType: {}, targetId: {}, conversationId: {}", question, targetType, targetId, conversationId);
+        logger.info("Care QA request: {}, targetType: {}, targetId: {}, conversationId: {}",
+                com.example.demo.core.LogSanitizer.describe(question), targetType, targetId, conversationId);
 
         try {
             StringBuilder context = new StringBuilder();

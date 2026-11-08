@@ -51,8 +51,8 @@ public class ImageGenerationTool extends BaseTool {
             return ToolResult.failure("请提供图片内容描述");
         }
         
-        logger.info("Executing image generation tool, prompt: {}", 
-                prompt.length() > 100 ? prompt.substring(0, 100) + "..." : prompt);
+        logger.info("Executing image generation tool, prompt: {}",
+                com.example.demo.core.LogSanitizer.describe(prompt));
         
         try {
             com.example.demo.vision.ImageAnalysisResponse analysis = 

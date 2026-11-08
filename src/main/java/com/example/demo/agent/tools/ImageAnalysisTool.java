@@ -60,8 +60,8 @@ public class ImageAnalysisTool extends BaseTool {
             prompt = "请描述这张图片的内容";
         }
         
-        logger.info("Executing image analysis tool, userId: {}, prompt: {}", userId, 
-                prompt.length() > 100 ? prompt.substring(0, 100) + "..." : prompt);
+        logger.info("Executing image analysis tool, userId: {}, prompt: {}", userId,
+                com.example.demo.core.LogSanitizer.describe(prompt));
         
         try {
             String pendingImageBase64 = userSessionService.getPendingImageBase64(userId);

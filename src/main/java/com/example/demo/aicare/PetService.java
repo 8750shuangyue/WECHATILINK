@@ -84,7 +84,8 @@ public class PetService {
             result.put("healthObservation", json.getString("healthObservation"));
             return result;
         } catch (Exception e) {
-            logger.warn("Failed to parse vision result, using raw text: {}", jsonString);
+            logger.warn("Failed to parse vision result, using raw text: {}",
+                    com.example.demo.core.LogSanitizer.describe(jsonString));
             Map<String, Object> result = new HashMap<>();
             result.put("species", jsonString);
             result.put("description", jsonString);

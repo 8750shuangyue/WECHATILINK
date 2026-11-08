@@ -83,8 +83,24 @@ public class RerankService {
         executor.shutdownNow();
     }
 
+    /** 可选：单测装配时不需要 Micrometer。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.demo.monitor.MetricsService metricsService;
+
     public RerankOutcome rerank(String query, List<String> documents) {
         long startedAt = System.nanoTime();
+        RerankOutcome outcome = doRerank(query, documents, startedAt);
+        if (metricsService != null) {
+            metricsService.recordExternalCall("dashscope", "rerank", outcome.applied(),
+                    (System.nanoTime() - startedAt) / 1_000_000);
+            if (!outcome.applied() && outcome.fallbackReason() != null) {
+                metricsService.recordRerankFallback(outcome.fallbackReason());
+            }
+        }
+        return outcome;
+    }
+
+    private RerankOutcome doRerank(String query, List<String> documents, long startedAt) {
         String model = getModel();
         if (documents == null || documents.isEmpty()) {
             return RerankOutcome.fallback(FALLBACK_NO_DOCUMENTS, model, elapsed(startedAt));

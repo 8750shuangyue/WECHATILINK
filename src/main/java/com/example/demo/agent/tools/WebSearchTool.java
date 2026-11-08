@@ -67,7 +67,8 @@ public class WebSearchTool extends BaseTool {
             return ToolResult.failure("请提供搜索关键词");
         }
 
-        logger.info("[BaiduSearch] Executing search for query: {}", query);
+        logger.info("[BaiduSearch] Executing search for query: {}",
+                com.example.demo.core.LogSanitizer.describe(query));
 
         try {
             int count = params.getIntValue("count");
@@ -80,10 +81,9 @@ public class WebSearchTool extends BaseTool {
 
             String jsonBody = JSON.toJSONString(bodyMap);
 
-            String maskedKey = (apiKey != null && apiKey.length() > 8)
-                    ? apiKey.substring(0, 4) + "****" + apiKey.substring(apiKey.length() - 4)
-                    : "null";
-            logger.info("[BaiduSearch] API call - url: {}, apiKey: {}, query: {}, count: {}", apiUrl, maskedKey, query, count);
+            logger.info("[BaiduSearch] API call - url: {}, apiKey: {}, query: {}, count: {}",
+                    apiUrl, com.example.demo.core.LogSanitizer.secretState(apiKey),
+                    com.example.demo.core.LogSanitizer.describe(query), count);
 
             RequestBody requestBody = RequestBody.create(
                     jsonBody,

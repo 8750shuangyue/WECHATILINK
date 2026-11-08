@@ -98,6 +98,10 @@ public class VectorStoreService {
     @Value("${chat.vectorstore.rerank.canary-users:}")
     private String rerankCanaryUsers;
 
+    /** 可选：单测装配时不需要 Micrometer。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.demo.monitor.MetricsService metricsService;
+
     private final List<float[]> vectorIndex = new ArrayList<>();
     private final Map<Integer, IndexEntry> indexEntries = new ConcurrentHashMap<>();
     private final Set<String> clearedConversationKeys = ConcurrentHashMap.newKeySet();
@@ -533,6 +537,10 @@ public class VectorStoreService {
         }
     }
 
+    public boolean isIndexReady() {
+        return indexReady.get();
+    }
+
     public List<String> searchSimilar(String query) {
         return searchSimilar(query, null, null);
     }
@@ -607,6 +615,10 @@ public class VectorStoreService {
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
             stats.returnedCount(results.size());
             recordRetrievalLog(traceId, userId, conversationId, query, results, stats, durationMs);
+            if (metricsService != null) {
+                metricsService.recordRetrieval(durationMs,
+                        Boolean.TRUE.equals(stats.toJson().getBoolean("rerankApplied")));
+            }
         }
         return new SearchOutcome(traceId, List.copyOf(results), stats);
     }

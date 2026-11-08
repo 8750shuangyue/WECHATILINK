@@ -61,8 +61,8 @@ public class TtsTool extends BaseTool {
             return ToolResult.failure("请提供需要合成语音的文本内容");
         }
         
-        logger.info("Executing TTS tool for text (first 50 chars): {}", 
-                text.length() > 50 ? text.substring(0, 50) + "..." : text);
+        logger.info("Executing TTS tool for text: {}",
+                com.example.demo.core.LogSanitizer.describe(text));
         
         try {
             byte[] audioData = ttsService.synthesizeToMp3(text);

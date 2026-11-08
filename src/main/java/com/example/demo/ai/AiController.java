@@ -47,7 +47,7 @@ public class AiController {
         String systemPrompt = request.get("systemPrompt");
         String userId = (String) session.getAttribute("user");
         
-        log.info("AI chat request: message={}", message != null && message.length() > 50 ? message.substring(0, 50) + "..." : message);
+        log.info("AI chat request: message={}", com.example.demo.core.LogSanitizer.describe(message));
         
         Map<String, Object> response = new HashMap<>();
         try {
@@ -231,8 +231,7 @@ public class AiController {
         List<String> allowedTools = (List<String>) request.get("allowedTools");
 
         log.info("AI chat with tools request: message={}, allowedTools={}",
-                message != null && message.length() > 50 ? message.substring(0, 50) + "..." : message,
-                allowedTools);
+                com.example.demo.core.LogSanitizer.describe(message), allowedTools);
 
         Map<String, Object> response = new HashMap<>();
         String userId = (String) servletRequest.getAttribute("userName");
@@ -315,8 +314,8 @@ public class AiController {
         String message = request.get("message");
         String targetId = request.get("targetId");
         
-        log.info("Care workflow request: userId={}, targetId={}, message={}", 
-                userId, targetId, message != null && message.length() > 50 ? message.substring(0, 50) + "..." : message);
+        log.info("Care workflow request: userId={}, targetId={}, message={}",
+                userId, targetId, com.example.demo.core.LogSanitizer.describe(message));
         
         Map<String, Object> response = new HashMap<>();
         try {
@@ -340,7 +339,8 @@ public class AiController {
         String message = request.get("message");
         String targetType = request.get("targetType");
         
-        log.info("Triage request: targetType={}, message={}", targetType, message);
+        log.info("Triage request: targetType={}, message={}", targetType,
+                com.example.demo.core.LogSanitizer.describe(message));
         
         Map<String, Object> response = new HashMap<>();
         try {

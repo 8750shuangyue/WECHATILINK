@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.agent.tools.*;
 import com.example.demo.care.service.*;
 import com.example.demo.chat.UserSessionService;
+import com.example.demo.core.LogSanitizer;
 import com.example.demo.disease.DiseaseRecognitionService;
 import com.example.demo.disease.model.DiseaseResult;
 import com.example.demo.weather.model.WeatherResponse;
@@ -103,7 +104,7 @@ public class SpringAiTools {
     @Tool(name = "webSearch", description = "联网搜索工具，获取实时新闻、天气、百科等在线信息。当用户询问需要联网查询的内容时使用。")
     public String webSearch(
             @ToolParam(description = "搜索关键词，如：北京今天天气、最新科技新闻", required = true) String query) {
-        log.info("[Tool] webSearch called, query: {}", query);
+        log.info("[Tool] webSearch called, query: {}", LogSanitizer.describe(query));
         try {
             JSONObject params = new JSONObject();
             params.put("query", query);
@@ -140,7 +141,7 @@ public class SpringAiTools {
     public String generateImage(
             @ToolParam(description = "图片的文字描述，越详细越好，如：一只可爱的橘猫在阳光下的窗台上", required = true) String prompt,
             @ToolParam(description = "图片风格，可选值：realistic（写实）、anime（动漫）、oil-painting（油画）、watercolor（水彩）") String style) {
-        log.info("[Tool] generateImage called, prompt: {}, style: {}", prompt, style);
+        log.info("[Tool] generateImage called, prompt: {}, style: {}", LogSanitizer.describe(prompt), style);
         try {
             JSONObject params = new JSONObject();
             params.put("prompt", prompt);
@@ -162,7 +163,7 @@ public class SpringAiTools {
     public String analyzeImage(
             @ToolParam(description = "分析指令，如：描述图片内容、识别图片中的文字、列出图片中的物体", required = true) String prompt) {
         String userId = UserContextHolder.getUserId();
-        log.info("[Tool] analyzeImage called, userId: {}, prompt: {}", userId, prompt);
+        log.info("[Tool] analyzeImage called, userId: {}, prompt: {}", userId, LogSanitizer.describe(prompt));
         try {
             JSONObject params = new JSONObject();
             params.put("prompt", prompt);
@@ -184,7 +185,7 @@ public class SpringAiTools {
     public String editImage(
             @ToolParam(description = "编辑指令，如：将图片转为水彩风格、增强图片对比度", required = true) String prompt) {
         String userId = UserContextHolder.getUserId();
-        log.info("[Tool] editImage called, userId: {}, prompt: {}", userId, prompt);
+        log.info("[Tool] editImage called, userId: {}, prompt: {}", userId, LogSanitizer.describe(prompt));
         try {
             JSONObject params = new JSONObject();
             params.put("prompt", prompt);
@@ -206,7 +207,7 @@ public class SpringAiTools {
     public String analyzeFile(
             @ToolParam(description = "分析指令，如：提取文档摘要、分析表格数据、提取关键信息", required = true) String prompt) {
         String userId = UserContextHolder.getUserId();
-        log.info("[Tool] analyzeFile called, userId: {}, prompt: {}", userId, prompt);
+        log.info("[Tool] analyzeFile called, userId: {}, prompt: {}", userId, LogSanitizer.describe(prompt));
         try {
             JSONObject params = new JSONObject();
             params.put("prompt", prompt);
@@ -280,7 +281,8 @@ public class SpringAiTools {
             @ToolParam(description = "问题类型：feeding(喂养)/disease(疾病)/vaccine(疫苗)/breed(品种)/training(训练)/care(护理)/behavior(行为)/emergency(急救)/other(其他)") String queryType,
             @ToolParam(description = "宠物类型，例如：猫、狗、仓鼠、兔子、鸟、鱼、乌龟") String petType,
             @ToolParam(description = "用户的具体问题，例如：猫咪吐黄水怎么办、狗狗多大打疫苗", required = true) String question) {
-        log.info("[Tool] queryPetCare called, type: {}, pet: {}, question: {}", queryType, petType, question);
+        log.info("[Tool] queryPetCare called, type: {}, pet: {}, question: {}", queryType, petType,
+                LogSanitizer.describe(question));
         return petCareQueryService.queryPetCare(queryType, petType, question);
     }
 
@@ -291,7 +293,8 @@ public class SpringAiTools {
             @ToolParam(description = "问题类型：toxicity(毒性查询)/symptoms(误食症状)/emergency(应急处理)/safe_plants(安全植物推荐)/identify(植物识别)/other(其他)") String queryType,
             @ToolParam(description = "植物名称，例如：百合、绿萝、龟背竹、滴水观音、郁金香") String plantName,
             @ToolParam(description = "用户的具体问题，例如：百合对猫有毒吗、狗吃了绿萝会怎样", required = true) String question) {
-        log.info("[Tool] queryPlantSafety called, type: {}, plant: {}, question: {}", queryType, plantName, question);
+        log.info("[Tool] queryPlantSafety called, type: {}, plant: {}, question: {}", queryType, plantName,
+                LogSanitizer.describe(question));
         return plantSafetyQueryService.queryPlantSafety(queryType, plantName, question);
     }
 
@@ -301,7 +304,7 @@ public class SpringAiTools {
     public String queryFoodSafety(
             @ToolParam(description = "食物名称，例如：巧克力、葡萄、洋葱、大蒜、牛奶", required = true) String foodName,
             @ToolParam(description = "宠物类型，如：猫、狗，默认为猫") String petType) {
-        log.info("[Tool] queryFoodSafety called, food: {}, pet: {}", foodName, petType);
+        log.info("[Tool] queryFoodSafety called, food: {}, pet: {}", LogSanitizer.describe(foodName), petType);
         return petFoodSafetyService.queryFoodSafety(foodName, petType);
     }
 
@@ -399,7 +402,7 @@ public class SpringAiTools {
     @Tool(name = "professionalSearch", description = "联网专业搜索，获取宠物护理、植物养护等专业信息。")
     public String professionalSearch(
             @ToolParam(description = "搜索关键词", required = true) String query) {
-        log.info("[Tool] professionalSearch called, query: {}", query);
+        log.info("[Tool] professionalSearch called, query: {}", LogSanitizer.describe(query));
         return careAdvancedService.professionalSearch(query);
     }
 
