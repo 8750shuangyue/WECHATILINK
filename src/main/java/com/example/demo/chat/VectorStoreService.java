@@ -12,16 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -102,6 +96,7 @@ public class VectorStoreService {
     private final Set<String> clearedConversationKeys = ConcurrentHashMap.newKeySet();
     private final Object conversationMutationLock = new Object();
     private final VectorIndex index = new VectorIndex();
+    private final VectorDocumentStore documentStore;
 
     /** 测试/旧装配兼容：没有事务模板与重排服务。 */
     public VectorStoreService(VectorStoreRepository vectorStoreRepository,
@@ -130,6 +125,8 @@ public class VectorStoreService {
         this.ragRetrievalLogService = ragRetrievalLogService;
         this.sqliteTransactionManager = sqliteTransactionManager;
         this.rerankService = rerankService;
+        this.documentStore = new VectorDocumentStore(vectorStoreRepository, embeddingService,
+                index, clearedConversationKeys, conversationMutationLock, sqliteTransactionManager);
     }
 
     /** 测试注入用。 */
@@ -164,72 +161,9 @@ public class VectorStoreService {
      * 保存一轮对话的向量记忆，显式带用户身份，避免不同用户之间互相检索。
      */
     public void saveMessage(String userId, String conversationId, String userMessage, String assistantReply) {
-        try {
-            String conversationKey = buildConversationKey(userId, conversationId);
-            if (clearedConversationKeys.contains(conversationKey)) {
-                logger.debug("[VectorStore] Conversation was cleared, skipping stale vector write, userId: {}, conversationId: {}",
-                        userId, conversationId);
-                return;
-            }
-            logger.info("[VectorStore] saveMessage start, userId: {}, conversationId: {}, content length: {}",
-                    userId, conversationId, (userMessage + assistantReply).length());
-            String docId = buildMessageDocumentId(userId, conversationId, userMessage, assistantReply);
-            if (vectorStoreRepository.findByDocumentId(docId).isPresent()) {
-                logger.debug("[VectorStore] Duplicate message vector skipped, userId: {}, conversationId: {}, docId: {}",
-                        userId, conversationId, docId);
-                return;
-            }
-
-            String combinedContent = "用户: " + userMessage + "\n助手: " + assistantReply;
-            float[] embedding = embeddingService.embed(combinedContent);
-
-            if (embedding.length == 0) {
-                logger.warn("[VectorStore] Embedding is empty, skipping save");
-                return;
-            }
-
-            byte[] vectorBytes = serializeVector(embedding);
-
-            VectorStore vs = new VectorStore(docId, combinedContent, vectorBytes);
-            vs.setUserId(userId);
-            vs.setConversationId(conversationId);
-            synchronized (conversationMutationLock) {
-                if (clearedConversationKeys.contains(conversationKey)) {
-                    logger.debug("[VectorStore] Conversation was cleared during embedding, skipping stale vector write, userId: {}, conversationId: {}",
-                            userId, conversationId);
-                    return;
-                }
-
-                VectorStore saved;
-                try {
-                    saved = vectorStoreRepository.save(vs);
-                } catch (DataIntegrityViolationException e) {
-                    logger.info("[VectorStore] Concurrent duplicate message vector skipped, userId: {}, conversationId: {}, docId: {}",
-                            userId, conversationId, docId);
-                    return;
-                }
-
-                if (saved.getId() != null) {
-                    addToIndex(saved.getId().intValue(), combinedContent, embedding,
-                            saved.getDocumentId(), userId, conversationId, null, null);
-                    logger.info("[VectorStore] Saved message vector, rowId: {}, userId: {}, conversationId: {}",
-                            saved.getId(), userId, conversationId);
-                }
-            }
-        } catch (Exception e) {
-            logger.error("[VectorStore] Failed to save vector, cause: {}", e.getMessage(), e);
-        }
+        documentStore.saveMessage(userId, conversationId, userMessage, assistantReply);
     }
 
-    private String buildMessageDocumentId(String userId, String conversationId,
-                                          String userMessage, String assistantReply) {
-        StringBuilder identity = new StringBuilder();
-        appendLengthPrefixed(identity, userId);
-        appendLengthPrefixed(identity, conversationId);
-        appendLengthPrefixed(identity, userMessage);
-        appendLengthPrefixed(identity, assistantReply);
-        return sha256(identity.toString());
-    }
 
     /**
      * 将阶段 0.2 之前的 UUID 对话向量迁移为稳定 documentId，并删除同一轮对话的重复副本。
@@ -311,7 +245,7 @@ public class VectorStoreService {
         if (assistantReply.isEmpty()) {
             return null;
         }
-        return buildMessageDocumentId(vector.getUserId(), conversationId, userMessage, assistantReply);
+        return VectorDocuments.messageDocumentId(vector.getUserId(), conversationId, userMessage, assistantReply);
     }
 
     private VectorStore selectConversationVectorKeeper(List<VectorStore> vectors, String stableDocumentId) {
@@ -348,52 +282,9 @@ public class VectorStoreService {
         }
     }
 
-    private void appendLengthPrefixed(StringBuilder builder, String value) {
-        String normalized = value == null ? "" : value;
-        builder.append(normalized.length()).append(':').append(normalized);
-    }
 
     public void saveDocument(String sourceId, String content, Map<String, Object> metadata) {
-        try {
-            String docId = buildChunkDocumentId(sourceId, 0, content);
-            if (vectorStoreRepository.findByDocumentId(docId).isPresent()) {
-                logger.debug("Duplicate public knowledge vector skipped, sourceId: {}, docId: {}",
-                        sourceId, docId);
-                return;
-            }
-
-            float[] embedding;
-            try {
-                embedding = embeddingService.embed(content);
-            } catch (IOException e) {
-                throw new IllegalStateException("embedding failed for sourceId " + sourceId, e);
-            }
-
-            if (embedding.length == 0) {
-                logger.warn("Embedding is empty for sourceId: {}, skipping save", sourceId);
-                return;
-            }
-
-            byte[] vectorBytes = serializeVector(embedding);
-
-            VectorStore vectorStore = new VectorStore(docId, content, vectorBytes);
-            vectorStore.setSourceId(sourceId);
-            if (metadata != null) {
-                vectorStore.setMetadataJson(JSON.toJSONString(metadata));
-            }
-            vectorStore.setTimestamp(LocalDateTime.now());
-
-            VectorStore saved = vectorStoreRepository.save(vectorStore);
-
-            if (saved.getId() != null) {
-                addToIndex(saved.getId().intValue(), content, embedding,
-                        saved.getDocumentId(), null, null, sourceId, saved.getMetadataJson());
-                logger.info("Saved public knowledge vector, sourceId: {}, docId: {}, rowId: {}, vector dim: {}",
-                        sourceId, docId, saved.getId(), embedding.length);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to save document vector to SQLite", e);
-        }
+        documentStore.saveDocument(sourceId, content, metadata);
     }
 
     /**
@@ -406,81 +297,7 @@ public class VectorStoreService {
      * embedding 失败时旧向量完全不变。</p>
      */
     public int replaceDocument(String sourceId, List<String> chunks, Map<String, Object> metadata) {
-        if (sourceId == null || sourceId.isBlank()) {
-            throw new IllegalArgumentException("sourceId must not be blank");
-        }
-        if (chunks == null || chunks.isEmpty()) {
-            throw new IllegalArgumentException("chunks must not be empty");
-        }
-        for (int i = 0; i < chunks.size(); i++) {
-            if (chunks.get(i) == null || chunks.get(i).isBlank()) {
-                throw new IllegalArgumentException("chunk content must not be blank");
-            }
-        }
-
-        List<float[]> embeddings;
-        try {
-            embeddings = embeddingService.embedBatch(chunks);
-        } catch (IOException exception) {
-            throw new IllegalStateException("embedding failed for sourceId " + sourceId, exception);
-        }
-        if (embeddings == null || embeddings.size() != chunks.size()) {
-            throw new IllegalStateException("embedding count mismatch for sourceId " + sourceId);
-        }
-
-        List<VectorStore> vectors = new ArrayList<>(chunks.size());
-        for (int i = 0; i < chunks.size(); i++) {
-            String content = chunks.get(i);
-            float[] embedding = embeddings.get(i);
-            if (embedding == null || embedding.length == 0) {
-                throw new IllegalStateException("embedding is empty for chunk " + (i + 1));
-            }
-
-            Map<String, Object> mergedMetadata = metadata == null
-                    ? new LinkedHashMap<>()
-                    : new LinkedHashMap<>(metadata);
-            mergedMetadata.putIfAbsent("sourceId", sourceId);
-            mergedMetadata.put("chunkIndex", i);
-            mergedMetadata.put("chunkCount", chunks.size());
-
-            VectorStore vectorStore = new VectorStore(
-                    buildChunkDocumentId(sourceId, i, content),
-                    content,
-                    serializeVector(embedding)
-            );
-            vectorStore.setSourceId(sourceId);
-            vectorStore.setMetadataJson(JSON.toJSONString(mergedMetadata));
-            vectorStore.setTimestamp(LocalDateTime.now());
-            vectors.add(vectorStore);
-        }
-
-        int savedCount = sqliteTransactionManager == null
-                ? persistReplacedDocument(sourceId, vectors)
-                : new TransactionTemplate(sqliteTransactionManager)
-                        .execute(status -> persistReplacedDocument(sourceId, vectors));
-
-        logger.info("Replaced public knowledge sourceId: {}, chunks: {}",
-                sourceId, savedCount);
-        return savedCount;
-    }
-
-    private int persistReplacedDocument(String sourceId, List<VectorStore> vectors) {
-        vectorStoreRepository.deleteBySourceId(sourceId);
-        // 正文未变的文档会生成相同的 documentId；必须先落删除，否则本次插入会撞旧行的唯一索引。
-        vectorStoreRepository.flush();
-        List<VectorStore> saved = vectorStoreRepository.saveAll(vectors);
-        vectorStoreRepository.flush();
-        loadFromSQLite();
-        return saved == null ? vectors.size() : saved.size();
-    }
-
-    private String buildChunkDocumentId(String sourceId, int chunkIndex, String content) {
-        StringBuilder identity = new StringBuilder();
-        identity.append("public_kb:");
-        appendLengthPrefixed(identity, sourceId);
-        appendLengthPrefixed(identity, String.valueOf(chunkIndex));
-        appendLengthPrefixed(identity, content);
-        return sha256(identity.toString());
+        return documentStore.replaceDocument(sourceId, chunks, metadata);
     }
 
     public synchronized void addToIndex(int rowId, String content, float[] vector) {
@@ -829,7 +646,7 @@ public class VectorStoreService {
                     traceId,
                     userId,
                     conversationId,
-                    sha256(query),
+                    VectorDocuments.sha256(query),
                     resolveScope(results),
                     topK,
                     similarityThreshold,
@@ -865,23 +682,6 @@ public class VectorStoreService {
         return "none";
     }
 
-    private String sha256(String value) {
-        if (value == null) {
-            return null;
-        }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder builder = new StringBuilder(bytes.length * 2);
-            for (byte b : bytes) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
-        } catch (Exception e) {
-            logger.warn("[RAG] Failed to calculate SHA-256 hash: {}", e.getMessage());
-            return null;
-        }
-    }
 
     private double cosineSimilarity(float[] v1, float[] v2) {
         if (v1.length != v2.length) {
@@ -905,13 +705,6 @@ public class VectorStoreService {
         return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
     }
 
-    private byte[] serializeVector(float[] vector) {
-        ByteBuffer buffer = ByteBuffer.allocate(vector.length * 4);
-        for (float f : vector) {
-            buffer.putFloat(f);
-        }
-        return buffer.array();
-    }
 
 
     @Transactional(transactionManager = "sqliteTransactionManager")
@@ -923,7 +716,7 @@ public class VectorStoreService {
             throw new IllegalArgumentException("conversationId must not be blank");
         }
 
-        String conversationKey = buildConversationKey(userId, conversationId);
+        String conversationKey = VectorDocuments.conversationKey(userId, conversationId);
         synchronized (conversationMutationLock) {
             boolean newlyMarked = clearedConversationKeys.add(conversationKey);
             if (clearedConversationKeys.size() > MAX_CLEARED_CONVERSATION_KEYS) {
@@ -944,12 +737,6 @@ public class VectorStoreService {
         }
     }
 
-    private String buildConversationKey(String userId, String conversationId) {
-        StringBuilder key = new StringBuilder();
-        appendLengthPrefixed(key, userId);
-        appendLengthPrefixed(key, conversationId);
-        return key.toString();
-    }
 
     @Transactional(transactionManager = "sqliteTransactionManager")
     public void clearDocumentVectors(String sourceId) {
