@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,8 +32,7 @@ import static org.mockito.Mockito.mock;
 
 class ToolCallingServiceSchemaTest {
 
-    @Test
-    void triageSchemaAllowsMissingDurationAndAge() {
+    private ToolCallingService service() {
         SpringAiTools tools = new SpringAiTools(
                 mock(WeatherService.class),
                 mock(WebSearchTool.class),
@@ -51,12 +51,17 @@ class ToolCallingServiceSchemaTest {
                 mock(DiseaseRecognitionService.class),
                 mock(UserSessionService.class)
         );
-        ToolCallingService service = new ToolCallingService(
+        return new ToolCallingService(
                 mock(LlmService.class),
                 tools,
                 mock(WeatherService.class),
                 mock(JdbcTemplate.class)
         );
+    }
+
+    @Test
+    void triageSchemaAllowsMissingDurationAndAge() {
+        ToolCallingService service = service();
 
         try {
             JSONArray schemas = service.buildToolsSchema(Set.of("triageSymptoms"));
@@ -67,6 +72,17 @@ class ToolCallingServiceSchemaTest {
 
             JSONArray required = function.getJSONObject("parameters").getJSONArray("required");
             assertEquals(Set.of("symptoms"), new HashSet<>(required.toJavaList(String.class)));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void filtersUnknownToolNames() {
+        ToolCallingService service = service();
+        try {
+            assertEquals(List.of("getWeather"),
+                    service.validateToolNames(List.of("getWeather", "notARealTool")));
         } finally {
             service.shutdown();
         }

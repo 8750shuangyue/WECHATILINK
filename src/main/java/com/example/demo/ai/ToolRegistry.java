@@ -9,11 +9,13 @@ import org.springframework.ai.tool.annotation.ToolParam;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 工具注册表：扫描 SpringAiTools / WeatherService 上的 @Tool 方法，
@@ -61,6 +63,24 @@ final class ToolRegistry {
 
     ToolInfo get(String name) {
         return tools.get(name);
+    }
+
+    /** 过滤调用方传入的工具名；空列表表示全部。 */
+    List<String> validateRequested(List<String> requestedTools) {
+        if (requestedTools == null || requestedTools.isEmpty()) {
+            return new ArrayList<>(names());
+        }
+        Set<String> registered = names();
+        List<String> valid = requestedTools.stream()
+                .filter(registered::contains)
+                .collect(Collectors.toList());
+        List<String> invalid = requestedTools.stream()
+                .filter(t -> !registered.contains(t))
+                .collect(Collectors.toList());
+        if (!invalid.isEmpty()) {
+            log.warn("Invalid tool names filtered out: {}. Valid tools: {}", invalid, valid);
+        }
+        return valid;
     }
 
     JSONArray buildSchema() {
