@@ -52,7 +52,7 @@ class AiControllerSessionTest {
     @Test
     void reusesConversationWithinSessionAndIsolatesDifferentSessions() throws Exception {
         LlmService llmService = mock(LlmService.class);
-        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        ChatController controller = createController(llmService, mock(ChatMemoryService.class));
         MockHttpSession firstSession = new MockHttpSession();
         firstSession.setAttribute("user", "user-a");
         MockHttpSession secondSession = new MockHttpSession();
@@ -94,7 +94,7 @@ class AiControllerSessionTest {
     @Test
     void historyRequiresLogin() {
         ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
-        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        ChatController controller = createController(mock(LlmService.class), chatMemoryService);
 
         var response = controller.getHistory(50, null, new MockHttpSession());
 
@@ -108,7 +108,7 @@ class AiControllerSessionTest {
         ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
         when(chatMemoryService.getHistory("user-a", null, null, 50))
                 .thenReturn(new HistoryPage(null, List.of(), false, null));
-        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        ChatController controller = createController(mock(LlmService.class), chatMemoryService);
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
 
@@ -131,7 +131,7 @@ class AiControllerSessionTest {
         ), false, null);
         when(chatMemoryService.getHistory("user-a", "conversation-a", 5L, 100))
                 .thenReturn(page);
-        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        ChatController controller = createController(mock(LlmService.class), chatMemoryService);
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         session.setAttribute("conversationId", "conversation-a");
@@ -150,9 +150,8 @@ class AiControllerSessionTest {
         ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
         when(springAiChatService.chat("user-a", "single turn", "single turn system", null))
                 .thenReturn("single reply");
-        AiController controller = createController(
+        ChatController controller = createController(
                 springAiChatService,
-                mock(ToolCallingService.class),
                 mock(LlmService.class),
                 chatMemoryService
         );
@@ -179,12 +178,7 @@ class AiControllerSessionTest {
         when(toolCallingService.validateToolNames(any())).thenReturn(List.of());
         when(springAiChatService.chatWithTools("user-a", "use a tool", null, null))
                 .thenReturn(ToolCallResponse.builder().text("tool reply").build());
-        AiController controller = createController(
-                springAiChatService,
-                toolCallingService,
-                mock(LlmService.class),
-                chatMemoryService
-        );
+        ToolController controller = new ToolController(springAiChatService, toolCallingService);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setAttribute("userName", "user-a");
 
@@ -201,7 +195,7 @@ class AiControllerSessionTest {
     void clearConversationClearsBackendDataAndRotatesConversationId() throws Exception {
         LlmService llmService = mock(LlmService.class);
         ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
-        AiController controller = createController(llmService, chatMemoryService);
+        ChatController controller = createController(llmService, chatMemoryService);
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         session.setAttribute("conversationId", "old-conversation");
@@ -232,7 +226,7 @@ class AiControllerSessionTest {
     @Test
     void failedClearKeepsConversationIdForRetry() {
         ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
-        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        ChatController controller = createController(mock(LlmService.class), chatMemoryService);
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         session.setAttribute("conversationId", "old-conversation");
@@ -249,7 +243,7 @@ class AiControllerSessionTest {
     @Test
     void clearWithoutConversationClearsOnlyUserSessionState() {
         ChatMemoryService chatMemoryService = mock(ChatMemoryService.class);
-        AiController controller = createController(mock(LlmService.class), chatMemoryService);
+        ChatController controller = createController(mock(LlmService.class), chatMemoryService);
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
 
@@ -276,7 +270,7 @@ class AiControllerSessionTest {
             return null;
         }).when(llmService).chatStream(
                 any(), any(), any(), any(), any(), any(), any(), any());
-        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        ChatController controller = createController(llmService, mock(ChatMemoryService.class));
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -314,7 +308,7 @@ class AiControllerSessionTest {
             return null;
         }).when(llmService).chatStream(
                 any(), any(), any(), any(), any(), any(), any(), any(), eq(true));
-        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        ChatController controller = createController(llmService, mock(ChatMemoryService.class));
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -354,7 +348,7 @@ class AiControllerSessionTest {
             return null;
         }).when(llmService).chatStream(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean());
-        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        ChatController controller = createController(llmService, mock(ChatMemoryService.class));
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -391,7 +385,7 @@ class AiControllerSessionTest {
             return null;
         }).when(llmService).chatStream(
                 any(), any(), any(), any(), any(), any(), any(), any());
-        AiController controller = createController(llmService, mock(ChatMemoryService.class));
+        ChatController controller = createController(llmService, mock(ChatMemoryService.class));
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-a");
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -410,29 +404,14 @@ class AiControllerSessionTest {
         assertTrue(body.contains("hello"));
     }
 
-    private AiController createController(LlmService llmService, ChatMemoryService chatMemoryService) {
-        return createController(
-                mock(SpringAiChatService.class),
-                mock(ToolCallingService.class),
-                llmService,
-                chatMemoryService
-        );
+    private ChatController createController(LlmService llmService, ChatMemoryService chatMemoryService) {
+        return createController(mock(SpringAiChatService.class), llmService, chatMemoryService);
     }
 
-    private AiController createController(SpringAiChatService springAiChatService,
-                                          ToolCallingService toolCallingService,
-                                          LlmService llmService,
-                                          ChatMemoryService chatMemoryService) {
-        return new AiController(
-                springAiChatService,
-                toolCallingService,
-                mock(SpringAiCareWorkflowService.class),
-                mock(CareRecordService.class),
-                mock(CareReminderService.class),
-                mock(MedicalTriageService.class),
-                llmService,
-                chatMemoryService
-        );
+    private ChatController createController(SpringAiChatService springAiChatService,
+                                            LlmService llmService,
+                                            ChatMemoryService chatMemoryService) {
+        return new ChatController(springAiChatService, llmService, chatMemoryService);
     }
 
     private Map<String, String> zipToMap(List<String> keys, List<String> values) {
