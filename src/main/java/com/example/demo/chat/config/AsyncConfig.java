@@ -1,5 +1,6 @@
 package com.example.demo.chat.config;
 
+import com.example.demo.config.MdcContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -21,6 +22,7 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("vector-task-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
+        executor.setTaskDecorator(MdcContext::wrap);
         executor.initialize();
         return executor;
     }
@@ -34,6 +36,7 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("summary-task-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
+        executor.setTaskDecorator(MdcContext::wrap);
         executor.initialize();
         return executor;
     }
@@ -51,6 +54,7 @@ public class AsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(5);
+        executor.setTaskDecorator(MdcContext::wrap);
         executor.initialize();
         return executor;
     }
