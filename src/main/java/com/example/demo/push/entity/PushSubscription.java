@@ -35,6 +35,14 @@ public class PushSubscription {
     @Column
     private String userAgent;
 
+    /**
+     * 生产表里这一列是 NOT NULL 且没有默认值。实体曾经缺这个字段，
+     * 导致 insert 不带 enabled，保存订阅时报 "Field 'enabled' doesn't have a default value"。
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean enabled = true;
+
     @Column
     private LocalDateTime createdAt;
 
