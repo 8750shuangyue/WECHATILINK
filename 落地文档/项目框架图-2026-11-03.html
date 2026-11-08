@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sekai PetPlant · 项目框架图</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --violet: #6d28d9;
+      --green: #16a34a;
+      --teal: #0f766e;
+      --rose: #be123c;
+      --amber: #b45309;
+      --slate: #334155;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 1600px; margin: 0 auto; padding: 36px 28px 64px; }
+    header.hero {
+      background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 55%, #ecfdf9 100%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 34px 38px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 700; letter-spacing: .08em;
+      color: var(--violet); text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: ""; width: 26px; height: 2px; background: var(--violet); border-radius: 2px;
+    }
+    h1 { margin: 10px 0 8px; font-size: clamp(28px, 3vw, 42px); letter-spacing: -.02em; }
+    .sub { margin: 0; color: var(--muted); font-size: 15px; max-width: 1000px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .badge {
+      font-size: 12px; padding: 5px 11px; border-radius: 999px;
+      background: #ffffff; border: 1px solid var(--line); color: var(--slate);
+    }
+    .badge.green { color: #166534; background: #eefaf2; border-color: #bbf7d0; }
+    .badge.violet { color: #5b21b6; background: #f5f3ff; border-color: #ddd6fe; }
+    .badge.teal { color: #115e59; background: #ecfdf9; border-color: #99f6e4; }
+    .badge.rose { color: #9f1239; background: #fff1f2; border-color: #fecdd3; }
+
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 24px 0 30px; }
+    .stat {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 18px 18px 16px; box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+    }
+    .stat .k { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .stat .v { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+    .stat .d { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+    section.figure {
+      background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+      padding: 22px; margin: 26px 0; box-shadow: 0 8px 26px rgba(15, 23, 42, .05);
+      scroll-margin-top: 20px;
+    }
+    .fig-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+    .fig-head h2 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+    .fig-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .fig-head a {
+      color: var(--violet); text-decoration: none; font-size: 12px; font-weight: 700;
+      border: 1px solid #ddd6fe; background: #f5f3ff; border-radius: 999px; padding: 6px 12px;
+      white-space: nowrap;
+    }
+    .fig-head a:hover { background: #ede9fe; }
+    .figure img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid #eef2f7; }
+
+    .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 28px 0; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+    }
+    .card h3 { margin: 0 0 10px; font-size: 15px; }
+    .card ul { margin: 0; padding-left: 18px; color: #334155; font-size: 13px; }
+    .card li { margin: 6px 0; }
+    .card li b { color: var(--ink); }
+    code {
+      font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+      font-size: 12px; background: #f1f5f9; border: 1px solid #e2e8f0;
+      border-radius: 5px; padding: 1px 5px;
+    }
+    .note {
+      margin: 26px 0 0; padding: 18px 22px; border-radius: 16px;
+      background: #fffbeb; border: 1px solid #fde68a; color: #78350f; font-size: 13px;
+    }
+    .note b { color: #92400e; }
+    footer { margin-top: 34px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--violet); text-decoration: none; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cols { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 20px 14px 48px; }
+      header.hero { padding: 24px 20px; }
+      .grid { grid-template-columns: 1fr; }
+      section.figure { padding: 14px; }
+      .fig-head { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Architecture Overview</div>
+    <h1>Sekai PetPlant · 项目框架图</h1>
+    <p class="sub">
+      AI 宠物 / 绿植护理平台：Web 单入口、Spring Boot 单体、MySQL 业务库 + SQLite 向量库。
+      下面两张图分别回答「系统由哪些层和模块组成」与「一次 AI 对话数据怎么流动」。
+    </p>
+    <div class="badges">
+      <span class="badge green">Java 21</span>
+      <span class="badge green">Spring Boot 4.1.2</span>
+      <span class="badge violet">Spring AI 2.0.2</span>
+      <span class="badge teal">MySQL + SQLite</span>
+      <span class="badge rose">DeepSeek V4-Pro</span>
+      <span class="badge">SSE 流式对话</span>
+      <span class="badge">RAG + 引用溯源</span>
+      <span class="badge">2026-11-03</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="stat">
+      <div class="k">后端规模</div>
+      <div class="v">199 个 Java 文件</div>
+      <div class="d">19 个 REST Controller + PageController</div>
+    </div>
+    <div class="stat">
+      <div class="k">AI 能力</div>
+      <div class="v">24 个 @Tool</div>
+      <div class="d">8 组 · 另有 8 个旧 BaseTool 保留</div>
+    </div>
+    <div class="stat">
+      <div class="k">数据存储</div>
+      <div class="v">MySQL + SQLite</div>
+      <div class="d">业务表 / 向量 + 检索审计</div>
+    </div>
+    <div class="stat">
+      <div class="k">质量基线</div>
+      <div class="v">46 个测试类</div>
+      <div class="d">独立 TEST 评测：质量 / Recall / 引用</div>
+    </div>
+  </div>
+
+  <section class="figure" id="overview">
+    <div class="fig-head">
+      <div>
+        <h2>① 总体分层框架</h2>
+        <p>五层纵向架构：用户渠道 → 接入与安全 → 业务应用 → AI 核心 → 数据与基础设施；右侧为横切治理、交付运维、外部服务与异步任务。</p>
+      </div>
+      <a href="图片/项目框架总览-2026-11-03.svg" target="_blank">打开原图 SVG</a>
+    </div>
+    <img src="图片/项目框架总览-2026-11-03.svg" alt="项目总体分层框架图">
+  </section>
+
+  <section class="figure" id="ai-flow">
+    <div class="fig-head">
+      <div>
+        <h2>② AI 对话与 RAG 数据流</h2>
+        <p>以 <code>POST /api/ai/chat/stream</code> 为例：请求 → RAG 检索 → 记忆组装 → 模型流式生成 → SSE 回传 → 消息落库 → 异步向量/摘要写入。</p>
+      </div>
+      <a href="图片/项目框架-AI链路-2026-11-03.svg" target="_blank">打开原图 SVG</a>
+    </div>
+    <img src="图片/项目框架-AI链路-2026-11-03.svg" alt="AI 对话与 RAG 数据流图">
+  </section>
+
+  <div class="cols">
+    <div class="card">
+      <h3>关键入口</h3>
+      <ul>
+        <li><b>正式对话</b>：<code>/api/ai/chat/stream</code>，SSE 多轮</li>
+        <li><b>护理问答</b>：<code>/api/care/qa</code>，复用记忆 + RAG</li>
+        <li><b>工具模式</b>：<code>/api/ai/chat-with-tools</code>，单轮</li>
+        <li><b>知识导入</b>：<code>/api/kb/upload</code></li>
+        <li><b>鉴权</b>：Session + <code>WebAuthInterceptor</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>数据与模型</h3>
+      <ul>
+        <li><b>MySQL</b>：用户、会话、消息、摘要、档案、护理、社区、商城、库存、审计</li>
+        <li><b>SQLite</b>：<code>vector_store</code> + 检索审计日志</li>
+        <li><b>对话模型</b>：DeepSeek V4-Pro</li>
+        <li><b>多模态</b>：百炼 Embedding / VL / Image / ASR / Rerank</li>
+        <li><b>其他</b>：讯飞 TTS、高德、心知天气、百度、WebPush</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>默认关闭的灰度开关</h3>
+      <ul>
+        <li><code>CHAT_VECTORSTORE_RERANK_ENABLED</code></li>
+        <li><code>CHAT_RAG_COMPRESSION_ENABLED</code></li>
+        <li><code>APP_MESSAGE_LIFECYCLE_ENABLED</code></li>
+        <li><code>APP_KB_WRITES_ENABLED</code></li>
+        <li><code>APP_RAG_OBSERVABILITY_ENABLED</code></li>
+        <li>操作审计 <code>APP_AUDIT_ENABLED</code> 默认开启</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>阅读提示：</b>「业务应用层」标注的是后端模块现状。阶段 5.1 已下线 7 个前端页面，但对应 Controller / Service / 测试仍在仓库中；
+    首页导航当前保留 <code>care</code>、<code>chat</code>、<code>community</code>、<code>kb</code>、<code>reminders</code>、<code>stats</code>。
+    旧 <code>AgentService</code> / <code>MessageRouter</code> 也未接入 Web 主链路。
+  </div>
+
+  <footer>
+    <span>生成于 2026-11-03 · 遍历范围：src/main、src/test、TEST、deploy、scripts、.github、README、application.properties</span>
+    <span><a href="项目框架总览-2026-11-03.md">查看完整文档</a> · <a href="../README.md">项目 README</a></span>
+  </footer>
+</div>
+</body>
+</html>

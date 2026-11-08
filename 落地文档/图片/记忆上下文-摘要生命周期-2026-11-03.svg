@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000" role="img" aria-labelledby="title desc">
+  <title id="title">摘要与归档生命周期</title>
+  <desc id="desc">conversation_summaries 的 READY / PENDING / FAILED 状态机、摘要执行步骤、后台调度与 legacy/lifecycle 对比。</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <marker id="aGray" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#64748b"/>
+    </marker>
+    <marker id="aGreen" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#16a34a"/>
+    </marker>
+    <marker id="aRose" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#f43f5e"/>
+    </marker>
+    <marker id="aV" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#8b5cf6"/>
+    </marker>
+    <style>
+      text { font-family: 'Microsoft YaHei','Noto Sans SC','PingFang SC',sans-serif; }
+      .mono { font-family: 'Cascadia Code','Consolas','SFMono-Regular',monospace; }
+      .panel-title { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .state-title { font-size: 12px; font-weight: 700; }
+      .state-sub { font-size: 9px; fill: #64748b; }
+      .step-title { font-size: 12px; font-weight: 600; fill: #1e293b; }
+      .step-sub { font-size: 9.5px; fill: #64748b; }
+      .lbl { font-size: 9px; fill: #475569; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="1000" fill="#f6f7fb"/>
+  <text x="40" y="46" font-size="26" font-weight="700" fill="#0f172a">摘要与归档生命周期</text>
+  <text x="40" y="72" font-size="12.5" fill="#64748b">conversation_summaries 的状态机、摘要提交事务、后台调度与 legacy / lifecycle 两条路径</text>
+  <text x="1460" y="46" font-size="11.5" fill="#94a3b8" text-anchor="end">总开关 APP_MESSAGE_LIFECYCLE_ENABLED</text>
+  <text x="1460" y="66" font-size="11" fill="#94a3b8" text-anchor="end">默认 false；开启后才会归档 / 重试 / 对账</text>
+
+  <!-- ==================== A 状态机 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="110" width="620" height="640" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+  </g>
+  <text x="60" y="140" class="panel-title">A · 摘要状态机</text>
+
+  <!-- 入口 -->
+  <rect x="150" y="150" width="220" height="40" rx="20" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="260" y="175" font-size="10.5" font-weight="600" fill="#334155" text-anchor="middle">无摘要行 · 首次 claim 创建</text>
+  <line x1="260" y1="190" x2="260" y2="221" stroke="#64748b" stroke-width="1.5" marker-end="url(#aGray)"/>
+
+  <!-- PENDING -->
+  <g filter="url(#shadow)">
+    <rect x="170" y="225" width="180" height="56" rx="12" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+    <text x="260" y="248" class="state-title" fill="#92400e" text-anchor="middle">PENDING</text>
+    <text x="260" y="268" class="state-sub" text-anchor="middle">worker 持有租约 · 正在生成</text>
+  </g>
+
+  <!-- READY -->
+  <g filter="url(#shadow)">
+    <rect x="410" y="225" width="180" height="56" rx="12" fill="#eefaf2" stroke="#86efac" stroke-width="1.5"/>
+    <text x="500" y="248" class="state-title" fill="#166534" text-anchor="middle">READY</text>
+    <text x="500" y="268" class="state-sub" text-anchor="middle">摘要可用 · 水位线已推进</text>
+  </g>
+
+  <!-- FAILED -->
+  <g filter="url(#shadow)">
+    <rect x="170" y="420" width="180" height="56" rx="12" fill="#fff1f2" stroke="#fecdd3" stroke-width="1.5"/>
+    <text x="260" y="443" class="state-title" fill="#be123c" text-anchor="middle">FAILED</text>
+    <text x="260" y="463" class="state-sub" text-anchor="middle">生成失败 · next_retry_at 退避</text>
+  </g>
+
+  <!-- PENDING -> READY -->
+  <line x1="350" y1="253" x2="406" y2="253" stroke="#16a34a" stroke-width="1.6" marker-end="url(#aGreen)"/>
+  <text x="380" y="300" class="lbl" text-anchor="middle">提交成功 / 无候选</text>
+
+  <!-- READY -> PENDING，从上方绕回 -->
+  <path d="M590,253 H620 V200 H300 V221" fill="none" stroke="#16a34a" stroke-width="1.4" marker-end="url(#aGreen)"/>
+  <text x="460" y="193" class="lbl" text-anchor="middle">新消息 / 事件 / 对账</text>
+
+  <!-- PENDING -> FAILED -->
+  <line x1="260" y1="281" x2="260" y2="416" stroke="#f43f5e" stroke-width="1.5" marker-end="url(#aRose)"/>
+  <text x="272" y="350" class="lbl">LLM 失败 / 租约过期</text>
+
+  <!-- FAILED -> PENDING，从左侧绕回 -->
+  <path d="M170,448 H120 V268 H166" fill="none" stroke="#64748b" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#aGray)"/>
+  <text x="130" y="360" class="lbl">退避到期</text>
+
+  <!-- PENDING self-loop -->
+  <path d="M350,266 H374 V281 H354" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#aGray)"/>
+  <text x="384" y="276" class="lbl">租约未过期 · busy</text>
+
+  <!-- 状态说明 -->
+  <g font-size="9.5" fill="#475569">
+    <text x="60" y="530" font-weight="600" fill="#0f172a">状态说明</text>
+    <text x="60" y="556">· 状态存放在 conversation_summaries.status，每个会话一行</text>
+    <text x="60" y="582">· version 每次变更 +1，markReady / markFailed 用 CAS 防止并发覆盖</text>
+    <text x="60" y="608">· PENDING 是租约，默认 TTL 600s；过期由调度器置为 FAILED</text>
+    <text x="60" y="634">· FAILED 按 next_retry_at 退避重试，最多 10 次</text>
+    <text x="60" y="660">· READY 之后收到新消息 / 事件会再次进入 PENDING</text>
+    <text x="60" y="686">· 无摘要行时首次 claim 会创建 PENDING 行</text>
+    <text x="60" y="712">· 摘要提交成功 / 无候选都会回到 READY</text>
+  </g>
+
+  <!-- ==================== B 执行步骤 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="700" y="110" width="760" height="640" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+  </g>
+  <text x="720" y="140" class="panel-title">B · 一次摘要的执行步骤</text>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="160" width="720" height="76" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+    <circle cx="742" cy="198" r="11" fill="#64748b"/><text x="742" y="201" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+    <text x="764" y="186" class="step-title">无锁预检</text>
+    <text x="764" y="205" class="step-sub">active 消息数 &gt; window（keep-recent × 2 = 10）；compact 窗口内必须包含 assistant</text>
+    <text x="764" y="222" class="step-sub">不满足直接返回，避免拆散一轮对话</text>
+  </g>
+  <line x1="1080" y1="236" x2="1080" y2="248" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="252" width="720" height="76" rx="10" fill="#fffbeb" stroke="#fde68a"/>
+    <circle cx="742" cy="290" r="11" fill="#d97706"/><text x="742" y="293" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+    <text x="764" y="278" class="step-title">claim（短事务）</text>
+    <text x="764" y="297" class="step-sub mono">SELECT ... FOR UPDATE</text>
+    <text x="764" y="314" class="step-sub">PENDING + 租约 600s + attempt_count++ + version++；busy 或退避中直接返回</text>
+  </g>
+  <line x1="1080" y1="328" x2="1080" y2="340" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="344" width="720" height="76" rx="10" fill="#faf5ff" stroke="#ddd6fe"/>
+    <circle cx="742" cy="382" r="11" fill="#8b5cf6"/><text x="742" y="385" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+    <text x="764" y="370" class="step-title">LLM 调用（事务外）</text>
+    <text x="764" y="389" class="step-sub">输入 = 旧摘要 + 水位线之后、最近窗口之前的对话</text>
+    <text x="764" y="406" class="step-sub">保留核心事实 / 用户意图 / 未完成任务 / 关键数字和时间；只输出摘要正文</text>
+  </g>
+  <line x1="1080" y1="420" x2="1080" y2="432" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="436" width="720" height="110" rx="10" fill="#eefaf2" stroke="#86efac"/>
+    <circle cx="742" cy="474" r="11" fill="#16a34a"/><text x="742" y="477" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+    <text x="764" y="462" class="step-title">apply（一个事务，任一步失败整体回滚）</text>
+    <text x="764" y="482" class="step-sub">version CAS 校验 → activeCount &gt;= candidateCount 校验</text>
+    <text x="764" y="500" class="step-sub mono">messages → messages_archive（id &lt;= newWatermark）</text>
+    <text x="764" y="518" class="step-sub mono">DELETE messages WHERE id &lt;= newWatermark</text>
+    <text x="764" y="536" class="step-sub mono">markReady（CAS）→ 写入 system 镜像行【对话摘要】</text>
+  </g>
+  <line x1="1080" y1="546" x2="1080" y2="558" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="562" width="720" height="76" rx="10" fill="#fff1f2" stroke="#fecdd3"/>
+    <circle cx="742" cy="600" r="11" fill="#f43f5e"/><text x="742" y="603" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
+    <text x="764" y="588" class="step-title">失败退避</text>
+    <text x="764" y="607" class="step-sub mono">markFailed + next_retry_at</text>
+    <text x="764" y="624" class="step-sub">30s × 2^(attempt-1)，上限 21600s（6h），最多 10 次；冲突 / 已清空不记失败</text>
+  </g>
+  <line x1="1080" y1="638" x2="1080" y2="650" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="720" y="654" width="720" height="76" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <circle cx="742" cy="692" r="11" fill="#64748b"/><text x="742" y="695" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
+    <text x="764" y="680" class="step-title">调度与对账</text>
+    <text x="764" y="699" class="step-sub">每 10 分钟：释放过期 PENDING + 提交到期重试 + 对账丢失事件</text>
+    <text x="764" y="716" class="step-sub">每天 03:40：清理 archived_at &lt; now - 180d 的归档消息（批量 1000，最多 10 批）</text>
+  </g>
+
+  <!-- ==================== C 对比表 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="790" width="1420" height="190" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+  </g>
+  <text x="60" y="818" font-size="13.5" font-weight="700" fill="#0f172a">C · 传统路径 vs 生命周期路径</text>
+
+  <rect x="60" y="832" width="1380" height="28" rx="6" fill="#f1f5f9"/>
+  <text x="76" y="851" font-size="10" font-weight="700" fill="#334155">维度</text>
+  <text x="260" y="851" font-size="10" font-weight="700" fill="#334155">传统路径（默认，app.message-lifecycle.enabled=false）</text>
+  <text x="860" y="851" font-size="10" font-weight="700" fill="#334155">生命周期路径（app.message-lifecycle.enabled=true）</text>
+
+  <g font-size="9.5" fill="#475569">
+    <line x1="60" y1="860" x2="1440" y2="860" stroke="#e2e8f0"/>
+    <text x="76" y="880" font-weight="600" fill="#0f172a">摘要存储</text>
+    <text x="260" y="880">messages 中的 system 镜像行【对话摘要】</text>
+    <text x="860" y="880">conversation_summaries + system 镜像行（兼容旧链路）</text>
+
+    <line x1="60" y1="888" x2="1440" y2="888" stroke="#e2e8f0"/>
+    <text x="76" y="908" font-weight="600" fill="#0f172a">旧消息</text>
+    <text x="260" y="908">不删除；只在 Prompt 内截断，messages 持续增长</text>
+    <text x="860" y="908">归档到 messages_archive 并从 messages 删除，active 集合有界</text>
+
+    <line x1="60" y1="916" x2="1440" y2="916" stroke="#e2e8f0"/>
+    <text x="76" y="936" font-weight="600" fill="#0f172a">并发控制</text>
+    <text x="260" y="936">生成后重新计数，历史变化则跳过写入</text>
+    <text x="860" y="936">covered_until_id 水位线 + version CAS + PENDING 租约</text>
+
+    <line x1="60" y1="944" x2="1440" y2="944" stroke="#e2e8f0"/>
+    <text x="76" y="964" font-weight="600" fill="#0f172a">失败 / 重试</text>
+    <text x="260" y="964">无自动重试；依赖下一轮消息事件</text>
+    <text x="860" y="964">每 10 分钟调度 + 指数退避 + 对账丢失事件</text>
+  </g>
+</svg>

@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1040" viewBox="0 0 1500 1040" role="img" aria-labelledby="title desc">
+  <title id="title">记忆与上下文模块总览</title>
+  <desc id="desc">记忆分层与存储、一次对话的写入路径、Prompt 读取与截断路径，以及关键不变量和默认配置。</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <marker id="aV" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#8b5cf6"/>
+    </marker>
+    <marker id="aT" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#0f766e"/>
+    </marker>
+    <style>
+      text { font-family: 'Microsoft YaHei','Noto Sans SC','PingFang SC',sans-serif; }
+      .mono { font-family: 'Cascadia Code','Consolas','SFMono-Regular',monospace; }
+      .col-title { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .box-title { font-size: 11.5px; font-weight: 600; fill: #1e293b; }
+      .box-sub { font-size: 9px; fill: #64748b; }
+      .bullet { font-size: 9.5px; fill: #475569; }
+      .step { font-size: 8px; font-weight: 700; fill: #ffffff; }
+      .tag { font-size: 8.5px; font-weight: 600; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="1040" fill="#f6f7fb"/>
+  <text x="40" y="46" font-size="26" font-weight="700" fill="#0f172a">记忆与上下文模块总览</text>
+  <text x="40" y="72" font-size="12.5" fill="#64748b">MySQL 保存可回放的事实 · SQLite 保存可检索的语义记忆 · Prompt 只带「摘要 + 最近窗口 + RAG 片段」</text>
+  <text x="1460" y="46" font-size="11.5" fill="#94a3b8" text-anchor="end">写入：先落库，再异步向量/摘要</text>
+  <text x="1460" y="66" font-size="11" fill="#94a3b8" text-anchor="end">读取：摘要 + 最近窗口 + RAG</text>
+
+  <!-- ==================== A 记忆分层 ==================== -->
+  <text x="40" y="108" class="col-title">A · 记忆分层与存储</text>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="130" width="420" height="100" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="40" y="130" width="5" height="100" rx="2.5" fill="#64748b"/>
+    <text x="60" y="152" class="box-title">短期用户会话</text>
+    <text x="60" y="169" class="box-sub mono">user_sessions · MySQL</text>
+    <text x="60" y="190" class="bullet">· 待分析图片 base64 / 待分析文件 URL</text>
+    <text x="60" y="208" class="bullet">· per userId；清空会话时一并删除</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="245" width="420" height="125" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="40" y="245" width="5" height="125" rx="2.5" fill="#0f766e"/>
+    <text x="60" y="267" class="box-title">对话记忆</text>
+    <text x="60" y="284" class="box-sub mono">conversations + messages · MySQL</text>
+    <text x="60" y="305" class="bullet">· 归属：user_id + conversation_id</text>
+    <text x="60" y="323" class="bullet">· role：user / assistant / system</text>
+    <text x="60" y="341" class="bullet">· sources_json 只写 assistant 行</text>
+    <text x="60" y="359" class="bullet">· 按 id 升序读取；system 摘要镜像行</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="385" width="420" height="125" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="40" y="385" width="5" height="125" rx="2.5" fill="#8b5cf6"/>
+    <text x="60" y="407" class="box-title">增量摘要</text>
+    <text x="60" y="424" class="box-sub mono">conversation_summaries · MySQL</text>
+    <text x="60" y="445" class="bullet">· summary_text + covered_until_id</text>
+    <text x="60" y="463" class="bullet">· version（CAS）+ status</text>
+    <text x="60" y="481" class="bullet">· attempt_count / next_retry_at</text>
+    <text x="60" y="499" class="bullet">· 每个会话只有一行</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="525" width="420" height="100" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="40" y="525" width="5" height="100" rx="2.5" fill="#f59e0b"/>
+    <text x="60" y="547" class="box-title">归档</text>
+    <text x="60" y="564" class="box-sub mono">messages_archive · MySQL</text>
+    <text x="60" y="585" class="bullet">· 复用原 messages.id（天然幂等）</text>
+    <text x="60" y="603" class="bullet">· archived_at；默认保留 180 天</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="640" width="420" height="130" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <rect x="40" y="640" width="5" height="130" rx="2.5" fill="#be123c"/>
+    <text x="60" y="662" class="box-title">向量记忆</text>
+    <text x="60" y="679" class="box-sub mono">vector_store · SQLite</text>
+    <text x="60" y="700" class="bullet">· public_kb：公共知识，全局可见</text>
+    <text x="60" y="718" class="bullet">· conversation_memory：对话记忆</text>
+    <text x="60" y="736" class="bullet">· userId + conversationId 隔离</text>
+    <text x="60" y="754" class="bullet">· 默认保留 90 天</text>
+  </g>
+
+  <rect x="40" y="785" width="420" height="45" rx="10" fill="#e2e8f0"/>
+  <text x="250" y="812" font-size="9.5" fill="#475569" text-anchor="middle">双数据源：MySQL @Primary · SQLite 独立事务 / 单连接池</text>
+
+  <!-- ==================== B 写入路径 ==================== -->
+  <text x="490" y="108" class="col-title">B · 写入路径（一次对话落库）</text>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="130" width="480" height="64" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="152" class="box-title mono">saveMessagePair(...)</text>
+    <text x="508" y="171" class="box-sub">question + reply + sources + traceId</text>
+  </g>
+  <line x1="730" y1="194" x2="730" y2="210" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="214" width="480" height="64" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="236" class="box-title">INSERT user message</text>
+    <text x="508" y="255" class="box-sub">messages · role=user</text>
+  </g>
+  <line x1="730" y1="278" x2="730" y2="294" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="298" width="480" height="80" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="320" class="box-title">INSERT assistant message</text>
+    <text x="508" y="339" class="box-sub">messages · role=assistant</text>
+    <text x="508" y="356" class="box-sub">+ sources_json（仅 assistant 行）</text>
+  </g>
+  <line x1="730" y1="378" x2="730" y2="394" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="398" width="480" height="80" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="420" class="box-title">发布事件</text>
+    <text x="508" y="439" class="box-sub mono">VectorSaveEvent（[n] 已剥离）</text>
+    <text x="508" y="456" class="box-sub mono">SummaryUpdateEvent（AFTER_COMMIT）</text>
+  </g>
+  <line x1="730" y1="478" x2="730" y2="494" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="498" width="480" height="80" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="520" class="box-title mono">vectorTaskExecutor</text>
+    <text x="508" y="539" class="box-sub">Embedding → SQLite conversation_memory</text>
+    <text x="508" y="556" class="box-sub">documentId = SHA256(长度前缀身份 + 问答)</text>
+  </g>
+  <line x1="730" y1="578" x2="730" y2="594" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="598" width="480" height="80" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="620" class="box-title mono">summaryTaskExecutor</text>
+    <text x="508" y="639" class="box-sub mono">checkAndUpdateSummary → lifecycle / legacy</text>
+    <text x="508" y="656" class="box-sub">摘要失败只记日志，下一轮事件/调度重试</text>
+  </g>
+  <line x1="730" y1="678" x2="730" y2="694" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#aV)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="490" y="698" width="480" height="64" rx="10" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="508" y="720" class="box-title">流式保护</text>
+    <text x="508" y="739" class="box-sub">只有收到 [DONE] 才保存；部分回复不落库</text>
+  </g>
+
+  <rect x="490" y="782" width="480" height="48" rx="10" fill="#faf5ff" stroke="#c4b5fd" stroke-dasharray="5 4"/>
+  <text x="730" y="810" font-size="9.5" fill="#6d28d9" text-anchor="middle">异步失败不影响主回答；MySQL 是主事实</text>
+
+  <!-- ==================== C 读取路径 ==================== -->
+  <text x="1000" y="108" class="col-title">C · 读取路径（组装 Prompt）</text>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="130" width="460" height="64" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="152" class="box-title mono">buildPromptMessages(...)</text>
+    <text x="1018" y="171" class="box-sub">userId / conversationId / systemPrompt / ragContext / question</text>
+  </g>
+  <line x1="1230" y1="194" x2="1230" y2="210" stroke="#0f766e" stroke-width="1.5" marker-end="url(#aT)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="214" width="460" height="64" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="236" class="box-title">归属校验 + 读取 active messages</text>
+    <text x="1018" y="255" class="box-sub">conversation.user_id == userId；按 id 升序</text>
+  </g>
+  <line x1="1230" y1="278" x2="1230" y2="294" stroke="#0f766e" stroke-width="1.5" marker-end="url(#aT)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="298" width="460" height="80" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="320" class="box-title">读取摘要</text>
+    <text x="1018" y="339" class="box-sub mono">conversation_summaries.summary_text</text>
+    <text x="1018" y="356" class="box-sub">无行时回退 messages 中的 system 镜像行</text>
+  </g>
+  <line x1="1230" y1="378" x2="1230" y2="394" stroke="#0f766e" stroke-width="1.5" marker-end="url(#aT)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="398" width="460" height="56" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="420" class="box-title">过滤非摘要 system 消息</text>
+    <text x="1018" y="439" class="box-sub">只保留 user / assistant + 摘要</text>
+  </g>
+  <line x1="1230" y1="454" x2="1230" y2="470" stroke="#0f766e" stroke-width="1.5" marker-end="url(#aT)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="474" width="460" height="96" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="496" class="box-title">组装唯一 system 消息</text>
+    <text x="1018" y="516" class="box-sub">业务规则 / 系统提示词</text>
+    <text x="1018" y="534" class="box-sub">→ RAG 上下文（公共知识 + 历史对话）</text>
+    <text x="1018" y="552" class="box-sub">→ 对话摘要</text>
+  </g>
+  <line x1="1230" y1="570" x2="1230" y2="586" stroke="#0f766e" stroke-width="1.5" marker-end="url(#aT)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="590" width="460" height="56" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="612" class="box-title">追加当前 user 问题</text>
+    <text x="1018" y="631" class="box-sub">system + 最近窗口 + current question</text>
+  </g>
+  <line x1="1230" y1="646" x2="1230" y2="662" stroke="#0f766e" stroke-width="1.5" marker-end="url(#aT)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1000" y="666" width="460" height="96" rx="10" fill="#ffffff" stroke="#99f6e4"/>
+    <text x="1018" y="688" class="box-title">截断</text>
+    <text x="1018" y="708" class="box-sub">条数 ≤ 10 · 估算 token ≤ 2000</text>
+    <text x="1018" y="726" class="box-sub">总 token &gt; 3000 且无摘要 → 读路径同步生成</text>
+    <text x="1018" y="744" class="box-sub">（legacy 兜底；lifecycle 开启后由异步任务生成）</text>
+  </g>
+
+  <rect x="1000" y="782" width="460" height="48" rx="10" fill="#ecfdf9" stroke="#99f6e4" stroke-dasharray="5 4"/>
+  <text x="1230" y="810" font-size="9.5" fill="#0f766e" text-anchor="middle">发送 LLM；system 消息始终保留在首位</text>
+
+  <!-- ==================== 底部：不变量 + 配置 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="860" width="900" height="150" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+  </g>
+  <rect x="40" y="860" width="5" height="150" rx="2.5" fill="#f59e0b"/>
+  <text x="62" y="886" font-size="13.5" font-weight="700" fill="#0f172a">关键不变量</text>
+  <g font-size="10" fill="#334155">
+    <circle cx="66" cy="910" r="3" fill="#f59e0b"/><text x="78" y="914">归属：userId + conversationId 双重校验；无归属会话默认不可读写</text>
+    <circle cx="66" cy="936" r="3" fill="#8b5cf6"/><text x="78" y="940">摘要：1 会话 1 行 + covered_until_id 水位线 + version CAS</text>
+    <circle cx="66" cy="962" r="3" fill="#0f766e"/><text x="78" y="966">切分：水位线落在最后一个 assistant，末尾 user 留到下一轮</text>
+    <circle cx="66" cy="988" r="3" fill="#be123c"/><text x="78" y="992">引用：[n] 只用于展示，进 prompt / 摘要 / 向量前剥离</text>
+    <circle cx="520" cy="910" r="3" fill="#64748b"/><text x="532" y="914">隔离：公共知识全局可见；对话记忆仅同用户同会话可见</text>
+    <circle cx="520" cy="936" r="3" fill="#64748b"/><text x="532" y="940">原子性：归档 + 删除 + 摘要更新 + 镜像行在同一事务</text>
+    <circle cx="520" cy="962" r="3" fill="#64748b"/><text x="532" y="966">竞态：清空时标记 clearedConversationKeys，阻止旧向量写回</text>
+    <circle cx="520" cy="988" r="3" fill="#64748b"/><text x="532" y="992">失败不阻塞：向量 / 摘要 / 审计失败只记日志</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="960" y="860" width="500" height="150" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+  </g>
+  <rect x="960" y="860" width="5" height="150" rx="2.5" fill="#64748b"/>
+  <text x="982" y="886" font-size="13.5" font-weight="700" fill="#0f172a">默认配置</text>
+  <g font-size="10" fill="#334155">
+    <text x="982" y="912" class="mono">max-messages</text><text x="1120" y="912">10</text>
+    <text x="1180" y="912" class="mono">max-tokens</text><text x="1290" y="912">2000</text>
+    <text x="982" y="938" class="mono">summary-threshold</text><text x="1120" y="938">3000</text>
+    <text x="1180" y="938" class="mono">keep-recent</text><text x="1290" y="938">5</text>
+    <text x="982" y="964" class="mono">message-lifecycle</text><text x="1120" y="964">false</text>
+    <text x="1180" y="964" class="mono">data-governance</text><text x="1320" y="964">false</text>
+    <text x="982" y="990" class="mono">rag-compression</text><text x="1120" y="990">false</text>
+    <text x="1180" y="990" class="mono">citations</text><text x="1290" y="990">true</text>
+  </g>
+</svg>

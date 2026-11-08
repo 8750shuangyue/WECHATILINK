@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>记忆与上下文模块 · Sekai PetPlant</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --violet: #6d28d9;
+      --teal: #0f766e;
+      --green: #16a34a;
+      --rose: #be123c;
+      --amber: #b45309;
+      --slate: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 1600px; margin: 0 auto; padding: 36px 28px 64px; }
+    header.hero {
+      background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 55%, #ecfdf9 100%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 34px 38px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 700; letter-spacing: .08em;
+      color: var(--violet); text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--violet); border-radius: 2px; }
+    h1 { margin: 10px 0 8px; font-size: clamp(28px, 3vw, 42px); letter-spacing: -.02em; }
+    .sub { margin: 0; color: var(--muted); font-size: 15px; max-width: 1020px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .badge { font-size: 12px; padding: 5px 11px; border-radius: 999px; background: #fff; border: 1px solid var(--line); color: var(--slate); }
+    .badge.violet { color: #5b21b6; background: #f5f3ff; border-color: #ddd6fe; }
+    .badge.teal { color: #115e59; background: #ecfdf9; border-color: #99f6e4; }
+    .badge.rose { color: #9f1239; background: #fff1f2; border-color: #fecdd3; }
+    .badge.green { color: #166534; background: #eefaf2; border-color: #bbf7d0; }
+
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 24px 0 30px; }
+    .stat { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: 0 4px 14px rgba(15, 23, 42, .04); }
+    .stat .k { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .stat .v { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+    .stat .d { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+    section.figure { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px; margin: 26px 0; box-shadow: 0 8px 26px rgba(15, 23, 42, .05); scroll-margin-top: 20px; }
+    .fig-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+    .fig-head h2 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+    .fig-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .fig-head a { color: var(--violet); text-decoration: none; font-size: 12px; font-weight: 700; border: 1px solid #ddd6fe; background: #f5f3ff; border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+    .fig-head a:hover { background: #ede9fe; }
+    .figure img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid #eef2f7; }
+
+    .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 28px 0; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: 0 4px 14px rgba(15, 23, 42, .04); }
+    .card h3 { margin: 0 0 10px; font-size: 15px; }
+    .card ul { margin: 0; padding-left: 18px; color: #334155; font-size: 13px; }
+    .card li { margin: 6px 0; }
+    .card li b { color: var(--ink); }
+    code { font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace; font-size: 12px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 5px; padding: 1px 5px; }
+    .note { margin: 26px 0 0; padding: 18px 22px; border-radius: 16px; background: #fffbeb; border: 1px solid #fde68a; color: #78350f; font-size: 13px; }
+    .note b { color: #92400e; }
+    footer { margin-top: 34px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--violet); text-decoration: none; }
+
+    .flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+    .flow .node { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 12px; color: var(--slate); }
+    .flow .node b { display: block; color: var(--ink); margin-bottom: 4px; }
+
+    @media (max-width: 1200px) {
+      .grid, .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .wrap { padding: 20px 14px 48px; }
+      header.hero { padding: 24px 20px; }
+      .grid, .cols { grid-template-columns: 1fr; }
+      section.figure { padding: 14px; }
+      .fig-head { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Memory &amp; Context</div>
+    <h1>记忆与上下文模块</h1>
+    <p class="sub">
+      MySQL 保存「可回放的事实」，SQLite 保存「可检索的语义记忆」，Prompt 只带「摘要 + 最近窗口 + RAG 片段」。
+      这张页面把写入、读取、摘要、归档、引用与保留策略串成一条线。
+    </p>
+    <div class="badges">
+      <span class="badge teal">MySQL · messages / summaries / archive</span>
+      <span class="badge rose">SQLite · vector_store</span>
+      <span class="badge violet">VectorSaveEvent / SummaryUpdateEvent</span>
+      <span class="badge green">摘要生命周期</span>
+      <span class="badge">引用 [n] + sources_json</span>
+      <span class="badge">2026-11-03</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="stat">
+      <div class="k">Prompt 窗口</div>
+      <div class="v">10 条 / 2000 tokens</div>
+      <div class="d">摘要阈值 3000 · 保留最近 5 轮</div>
+    </div>
+    <div class="stat">
+      <div class="k">摘要存储</div>
+      <div class="v">1 会话 1 行</div>
+      <div class="d">covered_until_id + version CAS</div>
+    </div>
+    <div class="stat">
+      <div class="k">归档保留</div>
+      <div class="v">180 天</div>
+      <div class="d">messages_archive · 默认关闭</div>
+    </div>
+    <div class="stat">
+      <div class="k">向量保留</div>
+      <div class="v">90 天</div>
+      <div class="d">conversation_memory · 默认关闭治理</div>
+    </div>
+  </div>
+
+  <section class="figure" id="overview">
+    <div class="fig-head">
+      <div>
+        <h2>① 模块总览：分层 · 写入 · 读取</h2>
+        <p>左边是五种记忆与存储；中间是一轮对话的落库与异步事件；右边是 Prompt 的读取、摘要加载与截断。</p>
+      </div>
+      <a href="图片/记忆上下文-模块总览-2026-11-03.svg" target="_blank">打开原图 SVG</a>
+    </div>
+    <img src="图片/记忆上下文-模块总览-2026-11-03.svg" alt="记忆与上下文模块总览图">
+  </section>
+
+  <section class="figure" id="lifecycle">
+    <div class="fig-head">
+      <div>
+        <h2>② 摘要与归档生命周期</h2>
+        <p>READY / PENDING / FAILED 状态机、claim 租约、事务外 LLM、事务内归档/删除/CAS、失败退避与每 10 分钟对账。</p>
+      </div>
+      <a href="图片/记忆上下文-摘要生命周期-2026-11-03.svg" target="_blank">打开原图 SVG</a>
+    </div>
+    <img src="图片/记忆上下文-摘要生命周期-2026-11-03.svg" alt="摘要与归档生命周期图">
+  </section>
+
+  <div class="cols">
+    <div class="card">
+      <h3>写入路径</h3>
+      <ul>
+        <li><b>saveMessagePair</b>：先写 user，再写 assistant</li>
+        <li><b>sources_json</b>：只写 assistant 行</li>
+        <li><b>VectorSaveEvent</b>：剥离 [n] 后异步向量化</li>
+        <li><b>SummaryUpdateEvent</b>：AFTER_COMMIT 触发摘要</li>
+        <li><b>流式保护</b>：收到 [DONE] 才保存</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>读取路径</h3>
+      <ul>
+        <li><b>归属校验</b>：userId + conversationId</li>
+        <li><b>摘要优先</b>：conversation_summaries</li>
+        <li><b>回退</b>：旧的 system 镜像行</li>
+        <li><b>system 顺序</b>：业务规则 → RAG → 摘要</li>
+        <li><b>截断</b>：10 条 / 2000 tokens</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>摘要生命周期</h3>
+      <ul>
+        <li><b>水位线</b>：covered_until_id，只前进</li>
+        <li><b>租约</b>：PENDING + 600s TTL</li>
+        <li><b>并发</b>：version CAS</li>
+        <li><b>提交</b>：归档 + 删除 + 摘要 + 镜像行</li>
+        <li><b>重试</b>：每 10 分钟 + 指数退避</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>安全与隔离</h3>
+      <ul>
+        <li><b>公共知识</b>：全局可见、可引用</li>
+        <li><b>对话记忆</b>：仅同用户同会话可见</li>
+        <li><b>未登录</b>：只能读公共知识</li>
+        <li><b>清空</b>：active + archive + summary + vectors + session</li>
+        <li><b>竞态</b>：clearedConversationKeys 阻止旧向量写回</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card" style="margin: 0 0 26px;">
+    <h3>一轮对话的记忆流</h3>
+    <div class="flow">
+      <div class="node"><b>1. 用户提问</b>Session 提供 userId + conversationId</div>
+      <div class="node"><b>2. 检索</b>公共知识 + 同会话历史对话</div>
+      <div class="node"><b>3. 组装</b>业务规则 → RAG → 摘要 → 最近窗口</div>
+      <div class="node"><b>4. 生成</b>DeepSeek 流式返回，SSE 回传</div>
+      <div class="node"><b>5. 回写</b>MySQL 消息 + 异步向量 + 异步摘要</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>默认状态提醒：</b><code>app.message-lifecycle.enabled=false</code> 时，摘要会写 system 镜像行，但旧 <code>messages</code> 不会归档/删除；
+    <code>app.data-governance.enabled=false</code> 时，90 天对话向量保留与日志清理也不会执行。两个开关互相独立。
+    生命周期关闭时，长会话的 active 消息会持续增长，且读路径在缺少摘要时可能同步调用 LLM 生成滚动摘要。
+  </div>
+
+  <footer>
+    <span>生成于 2026-11-03 · 覆盖 ChatMemoryService / DatabaseChatMemoryRepository / SummaryLifecycleService / MessageLifecycleScheduler / RagContextService / VectorStoreService</span>
+    <span><a href="记忆上下文模块-2026-11-03.md">查看完整文档</a> · <a href="项目框架总览-2026-11-03.md">项目框架总览</a></span>
+  </footer>
+</div>
+</body>
+</html>

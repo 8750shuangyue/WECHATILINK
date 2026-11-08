@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1220" viewBox="0 0 1500 1220" role="img" aria-labelledby="title desc">
+  <title id="title">Sekai PetPlant 项目框架总览</title>
+  <desc id="desc">五层架构：用户渠道、接入与安全、业务应用、AI 核心能力、数据与基础设施，外加外部服务、横切治理、异步任务与交付运维。</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowRose" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f43f5e"/>
+    </marker>
+    <style>
+      text { font-family: 'Microsoft YaHei','Noto Sans SC','PingFang SC',sans-serif; }
+      .layer-title { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .chip-title { font-size: 11.5px; font-weight: 600; fill: #1e293b; }
+      .chip-sub { font-size: 10px; fill: #64748b; }
+      .mono { font-family: 'Cascadia Code','Consolas','SFMono-Regular',monospace; }
+      .muted { fill: #94a3b8; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="1220" fill="#f6f7fb"/>
+  <text x="40" y="46" font-size="26" font-weight="700" fill="#0f172a">Sekai PetPlant · 项目框架总览</text>
+  <text x="40" y="72" font-size="12.5" fill="#64748b">Spring Boot 4.1.2 · Java 21 · Spring AI 2.0.2 · 截至 2026-11-03</text>
+  <text x="1460" y="46" font-size="12" fill="#94a3b8" text-anchor="end">五层纵向架构 + 横切治理 / 外部服务 / 异步任务</text>
+  <text x="1460" y="66" font-size="11" fill="#94a3b8" text-anchor="end">实线：同步请求 / 数据流 · 虚线：异步 / 横切</text>
+
+  <!-- ==================== L1 用户渠道层 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="100" width="1030" height="84" rx="14" fill="#eefaf2" stroke="#86efac" stroke-width="1.2"/>
+  </g>
+  <rect x="40" y="100" width="5" height="84" rx="2.5" fill="#22c55e"/>
+  <text x="62" y="124" class="layer-title">01 用户渠道层 · Web / PWA 单入口</text>
+  <rect x="62" y="134" width="986" height="38" rx="9" fill="#ffffff" stroke="#bbf7d0"/>
+  <text x="78" y="158" font-size="11.5" fill="#334155">登录 / 工作台 / AI 对话 / 护理 / 提醒 / 社区 / 知识库 / 数据观测</text>
+  <text x="1032" y="158" font-size="10.5" fill="#16a34a" text-anchor="end">SSE · WebPush · Service Worker · 响应式</text>
+
+  <!-- ==================== L2 接入与安全层 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="210" width="1030" height="140" rx="14" fill="#ecfdf9" stroke="#99f6e4" stroke-width="1.2"/>
+  </g>
+  <rect x="40" y="210" width="5" height="140" rx="2.5" fill="#14b8a6"/>
+  <text x="62" y="234" class="layer-title">02 接入与安全层 · 所有请求的统一入口</text>
+
+  <g>
+    <rect x="62" y="246" width="186" height="32" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="155" y="266" font-size="11" fill="#0f766e" text-anchor="middle" class="mono">SecurityHeadersFilter</text>
+    <rect x="258" y="246" width="186" height="32" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="351" y="266" font-size="11" fill="#0f766e" text-anchor="middle" class="mono">CsrfProtectionFilter</text>
+    <rect x="454" y="246" width="186" height="32" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="547" y="266" font-size="11" fill="#0f766e" text-anchor="middle" class="mono">WebAuthInterceptor</text>
+    <rect x="650" y="246" width="186" height="32" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="743" y="266" font-size="11" fill="#0f766e" text-anchor="middle" class="mono">AuditContextFilter</text>
+    <rect x="846" y="246" width="202" height="32" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="947" y="266" font-size="11" fill="#0f766e" text-anchor="middle">CORS 显式白名单</text>
+  </g>
+
+  <g>
+    <rect x="62" y="294" width="300" height="42" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="76" y="311" font-size="11" font-weight="600" fill="#134e4a">PageController → 静态页面</text>
+    <text x="76" y="327" font-size="9.5" fill="#64748b" class="mono">/login /home /chat /care /reminders /kb /stats</text>
+    <rect x="374" y="294" width="330" height="42" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="388" y="311" font-size="11" font-weight="600" fill="#134e4a">19 × REST Controller → /api/**</text>
+    <text x="388" y="327" font-size="9.5" fill="#64748b">AI · 护理 · 社区 · 商城 · 库存 · 知识库 · 观测</text>
+    <rect x="716" y="294" width="332" height="42" rx="8" fill="#ffffff" stroke="#ccfbf1"/>
+    <text x="730" y="311" font-size="11" font-weight="600" fill="#134e4a">Session Cookie：ILINKSESSION</text>
+    <text x="730" y="327" font-size="9.5" fill="#64748b">HttpOnly · SameSite=Lax · Secure（生产）</text>
+  </g>
+
+  <!-- ==================== L3 业务应用层 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="376" width="1030" height="206" rx="14" fill="#fffaf0" stroke="#fde68a" stroke-width="1.2"/>
+  </g>
+  <rect x="40" y="376" width="5" height="206" rx="2.5" fill="#f59e0b"/>
+  <text x="62" y="400" class="layer-title">03 业务应用层 · 后端模块保留，前端入口按阶段 5.1 收敛</text>
+
+  <!-- Row 1 -->
+  <g>
+    <rect x="62" y="416" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="76" y="435" class="chip-title">护理中心</text>
+    <text x="76" y="451" class="chip-sub">记录 · 档案 · 诊断 · 提醒</text>
+    <rect x="312" y="416" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="326" y="435" class="chip-title">知识库后台</text>
+    <text x="326" y="451" class="chip-sub">上传 · 分块 · 向量化</text>
+    <rect x="562" y="416" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="576" y="435" class="chip-title">社区</text>
+    <text x="576" y="451" class="chip-sub">帖子 · 评论 · 点赞</text>
+    <rect x="812" y="416" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="826" y="435" class="chip-title">时间线</text>
+    <text x="826" y="451" class="chip-sub">成长记录 · 里程碑</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g>
+    <rect x="62" y="470" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="76" y="489" class="chip-title">商城</text>
+    <text x="76" y="505" class="chip-sub">商品 · 分类 · 发布</text>
+    <rect x="312" y="470" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="326" y="489" class="chip-title">库存</text>
+    <text x="326" y="505" class="chip-sub">出入库 · 低库存预警</text>
+    <rect x="562" y="470" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="576" y="489" class="chip-title">每日简报</text>
+    <text x="576" y="505" class="chip-sub">定时生成 · 推送</text>
+    <rect x="812" y="470" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="826" y="489" class="chip-title">图片中心</text>
+    <text x="826" y="505" class="chip-sub">媒体资产 · 预览 · 删除</text>
+  </g>
+
+  <!-- Row 3 -->
+  <g>
+    <rect x="62" y="524" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="76" y="543" class="chip-title">数据观测</text>
+    <text x="76" y="559" class="chip-sub">工具调用排行 · 趋势</text>
+    <rect x="312" y="524" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="326" y="543" class="chip-title">账号与会话</text>
+    <text x="326" y="559" class="chip-sub">注册 · 登录 · 登录限流</text>
+    <rect x="562" y="524" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="576" y="543" class="chip-title">文件服务</text>
+    <text x="576" y="559" class="chip-sub">上传 · 解析 · 文件问答</text>
+    <rect x="812" y="524" width="238" height="46" rx="8" fill="#ffffff" stroke="#fde68a"/>
+    <text x="826" y="543" class="chip-title">WebPush</text>
+    <text x="826" y="559" class="chip-sub">VAPID 订阅 · 浏览器推送</text>
+  </g>
+
+  <!-- ==================== L4 AI 核心能力层 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="608" width="1030" height="336" rx="14" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.2"/>
+  </g>
+  <rect x="40" y="608" width="5" height="336" rx="2.5" fill="#8b5cf6"/>
+  <text x="62" y="632" class="layer-title">04 AI 核心能力层 · 对话主链路 / 工具调用 / 记忆与 RAG</text>
+
+  <text x="62" y="652" font-size="10.5" font-weight="700" fill="#6d28d9">A · 对话主链路</text>
+  <text x="402" y="652" font-size="10.5" font-weight="700" fill="#6d28d9">B · 工具调用</text>
+  <text x="742" y="652" font-size="10.5" font-weight="700" fill="#6d28d9">C · 记忆与 RAG</text>
+
+  <!-- Column A -->
+  <g>
+    <rect x="62" y="660" width="320" height="72" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="76" y="680" font-size="11.5" font-weight="600" fill="#4c1d95" class="mono">POST /api/ai/chat/stream</text>
+    <text x="76" y="697" font-size="10.5" fill="#334155">正式多轮对话 · SSE 打字机</text>
+    <text x="76" y="714" font-size="9.5" fill="#64748b">AiController → LlmService</text>
+
+    <rect x="62" y="740" width="320" height="62" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="76" y="760" font-size="11.5" font-weight="600" fill="#4c1d95" class="mono">POST /api/ai/chat</text>
+    <text x="76" y="777" font-size="10.5" fill="#334155">单轮兼容 · SpringAiChatService</text>
+    <text x="76" y="793" font-size="9.5" fill="#64748b">ChatModel.call() · 不写持久化记忆</text>
+
+    <rect x="62" y="810" width="320" height="62" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="76" y="830" font-size="11.5" font-weight="600" fill="#4c1d95" class="mono">POST /api/care/qa</text>
+    <text x="76" y="847" font-size="10.5" fill="#334155">护理问答 · 同一记忆契约</text>
+    <text x="76" y="863" font-size="9.5" fill="#64748b">档案 / 护理记录 + RAG 融合</text>
+
+    <rect x="62" y="880" width="320" height="54" rx="8" fill="#faf5ff" stroke="#e9d5ff" stroke-dasharray="4 3"/>
+    <text x="76" y="900" font-size="10.5" font-weight="600" fill="#6d28d9">天气意图 → WeatherTool 预注入</text>
+    <text x="76" y="917" font-size="9.5" fill="#64748b">流式链路无工具调用，实时数据前置取数</text>
+  </g>
+
+  <!-- Column B -->
+  <g>
+    <rect x="402" y="660" width="320" height="64" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="416" y="680" font-size="11.5" font-weight="600" fill="#4c1d95" class="mono">/api/ai/chat-with-tools</text>
+    <text x="416" y="697" font-size="10.5" fill="#334155">ToolCallingService</text>
+    <text x="416" y="713" font-size="9.5" fill="#64748b">≤ 5 轮 function calling · 单轮兼容</text>
+
+    <rect x="402" y="732" width="320" height="64" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="416" y="752" font-size="11.5" font-weight="600" fill="#4c1d95">Spring AI @Tool ×24</text>
+    <text x="416" y="769" font-size="10.5" fill="#334155">8 个功能分组</text>
+    <text x="416" y="785" font-size="9.5" fill="#64748b" class="mono">23 (SpringAiTools) + 1 (Weather)</text>
+
+    <rect x="402" y="804" width="320" height="64" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="416" y="824" font-size="11.5" font-weight="600" fill="#4c1d95">自研 BaseTool ×8</text>
+    <text x="416" y="841" font-size="10.5" fill="#334155">AgentService · 旧引擎保留</text>
+    <text x="416" y="857" font-size="9.5" fill="#64748b">未接入 Web 主链路</text>
+
+    <rect x="402" y="876" width="320" height="58" rx="8" fill="#faf5ff" stroke="#e9d5ff" stroke-dasharray="4 3"/>
+    <text x="416" y="896" font-size="10.5" font-weight="600" fill="#6d28d9">tool_call_logs</text>
+    <text x="416" y="913" font-size="9.5" fill="#64748b">工具名 / 参数摘要 / 耗时 / 成功状态</text>
+    <text x="416" y="928" font-size="9.5" fill="#64748b">→ /api/stats 工具排行与趋势</text>
+  </g>
+
+  <!-- Column C -->
+  <g>
+    <rect x="742" y="660" width="308" height="56" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="756" y="680" font-size="11.5" font-weight="600" fill="#4c1d95">ChatMemoryService</text>
+    <text x="756" y="697" font-size="9.5" fill="#64748b">最近 10 条 / 2000 tokens · 滚动摘要</text>
+
+    <rect x="742" y="724" width="308" height="56" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="756" y="744" font-size="11.5" font-weight="600" fill="#4c1d95">RagContextService</text>
+    <text x="756" y="761" font-size="9.5" fill="#64748b">检索编排 · [n] 引用 · sources</text>
+
+    <rect x="742" y="788" width="308" height="74" rx="8" fill="#ffffff" stroke="#ddd6fe"/>
+    <text x="756" y="808" font-size="11.5" font-weight="600" fill="#4c1d95">VectorStoreService</text>
+    <text x="756" y="825" font-size="9.5" fill="#64748b">向量 + 关键词双通道 · 阈值 0.45</text>
+    <text x="756" y="840" font-size="9.5" fill="#64748b">公共知识 + 会话记忆</text>
+    <text x="756" y="855" font-size="9.5" fill="#64748b">重排 gte-rerank-v2 · 压缩（默认关）</text>
+
+    <rect x="742" y="870" width="308" height="64" rx="8" fill="#faf5ff" stroke="#e9d5ff" stroke-dasharray="4 3"/>
+    <text x="756" y="890" font-size="10.5" font-weight="600" fill="#6d28d9">异步事件</text>
+    <text x="756" y="907" font-size="9.5" fill="#64748b" class="mono">VectorSaveEvent</text>
+    <text x="756" y="922" font-size="9.5" fill="#64748b" class="mono">SummaryUpdateEvent</text>
+  </g>
+
+  <!-- ==================== L5 数据与基础设施层 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="970" width="1030" height="190" rx="14" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2"/>
+  </g>
+  <rect x="40" y="970" width="5" height="190" rx="2.5" fill="#475569"/>
+  <text x="62" y="994" class="layer-title">05 数据与基础设施层 · 双数据源 + 文件存储 + 运行时</text>
+
+  <g>
+    <rect x="62" y="1008" width="238" height="128" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="76" y="1028" font-size="11.5" font-weight="600" fill="#0f172a">MySQL · ilink_chat</text>
+    <text x="76" y="1049" font-size="9.5" fill="#475569">用户 / 会话 / 消息 / 摘要</text>
+    <text x="76" y="1065" font-size="9.5" fill="#475569">宠物植物档案 / 护理记录</text>
+    <text x="76" y="1081" font-size="9.5" fill="#475569">社区 / 商城 / 库存 / 时间线</text>
+    <text x="76" y="1097" font-size="9.5" fill="#475569">推送订阅 / 操作审计</text>
+    <text x="76" y="1113" font-size="9.5" fill="#475569" class="mono">tool_call_logs</text>
+
+    <rect x="312" y="1008" width="238" height="128" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="326" y="1028" font-size="11.5" font-weight="600" fill="#0f172a">SQLite · rag_knowledge</text>
+    <text x="326" y="1049" font-size="9.5" fill="#475569">vector_store</text>
+    <text x="326" y="1065" font-size="9.5" fill="#475569">rag_retrieval_log</text>
+    <text x="326" y="1081" font-size="9.5" fill="#475569">rag_observability_access_log</text>
+    <text x="326" y="1097" font-size="9.5" fill="#475569">Hikari maxPool = 1</text>
+    <text x="326" y="1113" font-size="9.5" fill="#475569">启动加载到内存索引</text>
+
+    <rect x="562" y="1008" width="238" height="128" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="576" y="1028" font-size="11.5" font-weight="600" fill="#0f172a">文件系统 · uploads/</text>
+    <text x="576" y="1049" font-size="9.5" fill="#475569">AI 图片 / TTS 音频 / 文档</text>
+    <text x="576" y="1065" font-size="9.5" fill="#475569">media_assets 媒体资产索引</text>
+    <text x="576" y="1081" font-size="9.5" fill="#475569">/uploads/** 受登录拦截器保护</text>
+    <text x="576" y="1097" font-size="9.5" fill="#475569">UUID 文件名 · 内容校验</text>
+
+    <rect x="812" y="1008" width="238" height="128" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="826" y="1028" font-size="11.5" font-weight="600" fill="#0f172a">运行时</text>
+    <text x="826" y="1049" font-size="9.5" fill="#475569">Java 21 · Spring Boot 4.1.2</text>
+    <text x="826" y="1065" font-size="9.5" fill="#475569">Spring AI 2.0.2 · Tomcat 60 线程</text>
+    <text x="826" y="1081" font-size="9.5" fill="#475569">vectorTask / summaryTask</text>
+    <text x="826" y="1097" font-size="9.5" fill="#475569">auditTask 线程池</text>
+    <text x="826" y="1113" font-size="9.5" fill="#475569">Spring Scheduling · 3 线程</text>
+  </g>
+
+  <rect x="62" y="1148" width="988" height="22" rx="6" fill="#e2e8f0"/>
+  <text x="556" y="1163" font-size="9.5" fill="#475569" text-anchor="middle">灰度开关（默认关闭）：RAG 重排 / 上下文压缩 / 消息生命周期 / 知识库写入 / RAG 观测　·　操作审计默认开启</text>
+
+  <!-- ==================== 右侧：横切治理 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="1100" y="100" width="360" height="252" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+  </g>
+  <rect x="1100" y="100" width="5" height="252" rx="2.5" fill="#64748b"/>
+  <text x="1120" y="124" font-size="14" font-weight="700" fill="#0f172a">横切治理 · 安全 / 审计 / 可观测</text>
+
+  <g font-size="10.5" fill="#334155">
+    <circle cx="1125" cy="148" r="3" fill="#14b8a6"/>
+    <text x="1136" y="152">鉴权：Session + 白名单</text>
+    <circle cx="1125" cy="176" r="3" fill="#14b8a6"/>
+    <text x="1136" y="180">CSRF / Origin / Referer 校验</text>
+    <circle cx="1125" cy="204" r="3" fill="#f59e0b"/>
+    <text x="1136" y="208">安全响应头 · 上传校验 · 敏感词</text>
+    <circle cx="1125" cy="232" r="3" fill="#f43f5e"/>
+    <text x="1136" y="236">操作审计 operation_audit_log（异步）</text>
+    <circle cx="1125" cy="260" r="3" fill="#8b5cf6"/>
+    <text x="1136" y="264">RAG 审计日志 · traceId 贯穿</text>
+    <circle cx="1125" cy="288" r="3" fill="#8b5cf6"/>
+    <text x="1136" y="292">开关：rerank / 压缩 / 生命周期 / KB 写入</text>
+  </g>
+
+  <!-- ==================== 右侧：交付运维质量 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="1100" y="378" width="360" height="206" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.2"/>
+  </g>
+  <rect x="1100" y="378" width="5" height="206" rx="2.5" fill="#94a3b8"/>
+  <text x="1120" y="402" font-size="14" font-weight="700" fill="#0f172a">交付 · 运维 · 质量</text>
+
+  <g>
+    <rect x="1120" y="416" width="320" height="28" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1132" y="435" font-size="10.5" font-weight="600" fill="#0f172a">构建</text>
+    <text x="1188" y="435" font-size="10" fill="#475569">Maven · Java 21 · Spring Boot JAR</text>
+    <rect x="1120" y="448" width="320" height="28" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1132" y="467" font-size="10.5" font-weight="600" fill="#0f172a">部署</text>
+    <text x="1188" y="467" font-size="10" fill="#475569">Nginx 限流 · systemd · ffmpeg</text>
+    <rect x="1120" y="480" width="320" height="28" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1132" y="499" font-size="10.5" font-weight="600" fill="#0f172a">备份</text>
+    <text x="1188" y="499" font-size="10" fill="#475569">systemd timer · 恢复演练</text>
+    <rect x="1120" y="512" width="320" height="28" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1132" y="531" font-size="10.5" font-weight="600" fill="#0f172a">CI</text>
+    <text x="1188" y="531" font-size="10" fill="#475569">build / dependency-scan / secret-scan</text>
+    <rect x="1120" y="544" width="320" height="28" rx="6" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1132" y="563" font-size="10.5" font-weight="600" fill="#0f172a">质量</text>
+    <text x="1188" y="563" font-size="10" fill="#475569">JUnit 46 个测试类 · TEST 评测客户端</text>
+  </g>
+
+  <!-- ==================== 右侧：外部服务 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="1100" y="610" width="360" height="336" rx="14" fill="#fff1f2" stroke="#fecdd3" stroke-width="1.2"/>
+  </g>
+  <rect x="1100" y="610" width="5" height="336" rx="2.5" fill="#f43f5e"/>
+  <text x="1120" y="634" font-size="14" font-weight="700" fill="#881337">外部服务层 · AI 与业务按需调用</text>
+
+  <g>
+    <rect x="1120" y="648" width="320" height="52" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+    <text x="1136" y="668" font-size="11.5" font-weight="600" fill="#881337">DeepSeek V4-Pro</text>
+    <text x="1136" y="686" font-size="9.5" fill="#64748b">主对话模型 · OpenAI 兼容 API</text>
+
+    <rect x="1120" y="708" width="320" height="52" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+    <text x="1136" y="728" font-size="11.5" font-weight="600" fill="#881337">阿里云百炼</text>
+    <text x="1136" y="746" font-size="9.5" fill="#64748b">Embedding / qwen-vl / qwen-image</text>
+
+    <rect x="1120" y="768" width="320" height="52" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+    <text x="1136" y="788" font-size="11.5" font-weight="600" fill="#881337">百炼 ASR · Rerank</text>
+    <text x="1136" y="806" font-size="9.5" fill="#64748b">fun-asr-realtime · gte-rerank-v2</text>
+
+    <rect x="1120" y="828" width="320" height="52" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+    <text x="1136" y="848" font-size="11.5" font-weight="600" fill="#881337">讯飞 TTS · 心知天气</text>
+    <text x="1136" y="866" font-size="9.5" fill="#64748b">语音合成 · 实时 / 未来天气</text>
+
+    <rect x="1120" y="888" width="320" height="52" rx="8" fill="#ffffff" stroke="#fecdd3"/>
+    <text x="1136" y="908" font-size="11.5" font-weight="600" fill="#881337">高德 · 百度 · WebPush</text>
+    <text x="1136" y="926" font-size="9.5" fill="#64748b">导航 / 搜索 / VAPID 浏览器推送</text>
+  </g>
+
+  <!-- ==================== 右侧：异步与定时 ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="1100" y="970" width="360" height="186" rx="14" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2"/>
+  </g>
+  <rect x="1100" y="970" width="5" height="186" rx="2.5" fill="#475569"/>
+  <text x="1120" y="994" font-size="14" font-weight="700" fill="#0f172a">异步与定时任务</text>
+
+  <g font-size="10" fill="#334155">
+    <circle cx="1125" cy="1018" r="3" fill="#8b5cf6"/>
+    <text x="1136" y="1022" class="mono">vectorTaskExecutor</text>
+    <text x="1260" y="1022" fill="#64748b">· 对话向量异步写入</text>
+
+    <circle cx="1125" cy="1044" r="3" fill="#8b5cf6"/>
+    <text x="1136" y="1048" class="mono">summaryTaskExecutor</text>
+    <text x="1268" y="1048" fill="#64748b">· 摘要生成 / 重试</text>
+
+    <circle cx="1125" cy="1070" r="3" fill="#f43f5e"/>
+    <text x="1136" y="1074" class="mono">auditTaskExecutor</text>
+    <text x="1254" y="1074" fill="#64748b">· 审计异步落库</text>
+
+    <circle cx="1125" cy="1096" r="3" fill="#f59e0b"/>
+    <text x="1136" y="1100" fill="#64748b">定时：提醒 60s · 简报 08:00 · 库存 6h</text>
+
+    <circle cx="1125" cy="1122" r="3" fill="#14b8a6"/>
+    <text x="1136" y="1126" fill="#64748b">清理：归档 03:40 · 治理 04:00 · 审计 04:45</text>
+  </g>
+
+  <!-- ==================== 连接线 ==================== -->
+  <g stroke="#64748b" stroke-width="1.6" fill="none">
+    <line x1="555" y1="184" x2="555" y2="206" marker-end="url(#arrow)"/>
+    <line x1="555" y1="350" x2="555" y2="372" marker-end="url(#arrow)"/>
+    <line x1="555" y1="582" x2="555" y2="604" marker-end="url(#arrow)"/>
+    <line x1="555" y1="944" x2="555" y2="966" marker-end="url(#arrow)"/>
+  </g>
+  <g font-size="9.5" fill="#94a3b8">
+    <text x="566" y="199">HTTP / SSE</text>
+    <text x="566" y="365">请求分发</text>
+    <text x="566" y="597">业务调用 AI</text>
+    <text x="566" y="959">读写 / 异步落库</text>
+  </g>
+
+  <!-- 横切治理 → 接入层 -->
+  <line x1="1100" y1="280" x2="1074" y2="280" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrow)" fill="none"/>
+  <text x="1086" y="272" font-size="8.5" fill="#94a3b8" text-anchor="middle">横切</text>
+
+  <!-- AI ↔ 外部服务 -->
+  <g stroke="#f43f5e" stroke-width="1.4" fill="none" opacity="0.75">
+    <line x1="1070" y1="680" x2="1096" y2="680" marker-end="url(#arrowRose)"/>
+    <line x1="1070" y1="760" x2="1096" y2="760" marker-end="url(#arrowRose)"/>
+    <line x1="1070" y1="840" x2="1096" y2="840" marker-end="url(#arrowRose)"/>
+  </g>
+
+  <!-- 异步任务 → 数据层 -->
+  <line x1="1100" y1="1060" x2="1074" y2="1060" stroke="#64748b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrow)" fill="none"/>
+  <text x="1086" y="1052" font-size="8.5" fill="#94a3b8" text-anchor="middle">写入</text>
+
+  <!-- ==================== 页脚 ==================== -->
+  <g font-size="9.5" fill="#64748b">
+    <line x1="62" y1="1198" x2="94" y2="1198" stroke="#64748b" stroke-width="1.6"/>
+    <text x="100" y="1201">同步请求 / 数据流</text>
+    <line x1="220" y1="1198" x2="252" y2="1198" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4"/>
+    <text x="258" y="1201">异步 / 横切</text>
+    <line x1="360" y1="1198" x2="392" y2="1198" stroke="#f43f5e" stroke-width="1.4"/>
+    <text x="398" y="1201">外部服务调用</text>
+    <text x="1460" y="1201" text-anchor="end">配置入口 application.properties · 本地密钥 application-local.properties（gitignored）</text>
+  </g>
+</svg>
