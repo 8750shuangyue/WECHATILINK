@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -26,7 +27,9 @@ public class GlobalApiExceptionHandler {
                 .body(Result.error(400, e.getMessage() == null ? "请求参数不合法" : e.getMessage()));
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class,
+            MissingServletRequestParameterException.class,
+            MissingServletRequestPartException.class})
     public ResponseEntity<Result<Object>> malformedRequest(Exception e) {
         return ResponseEntity.badRequest().body(Result.error(400, "请求格式不正确"));
     }

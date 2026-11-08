@@ -94,13 +94,13 @@ async function uploadDoc() {
         var res = await fetch('/api/kb/upload', { method: 'POST', body: form });
         var x = await res.json();
         if (x.success) {
-            showToast('入库成功：' + x.count + ' 个片段');
+            showToast('入库成功：' + ((x.data && x.data.count) || 0) + ' 个片段');
             document.getElementById('uploadHint').textContent = '支持 PDF、Word、TXT、Markdown，单个不超过 10MB。';
             document.getElementById('kbFile').value = '';
             loadDocs();
         } else {
-            showToast('入库失败：' + (x.error || '未知错误'));
-            document.getElementById('uploadHint').textContent = x.error || '';
+            showToast('入库失败：' + (x.message || '未知错误'));
+            document.getElementById('uploadHint').textContent = x.message || '';
         }
     } catch (e) {
         showToast('上传失败：' + e.message);
@@ -116,7 +116,7 @@ async function deleteDoc(sourceId) {
         var res = await apiFetch('/api/kb/' + encodeURIComponent(sourceId), { method: 'DELETE' });
         var x = await res.json();
         if (x.success) { showToast('已删除'); loadDocs(); }
-        else showToast(x.error || '删除失败');
+        else showToast(x.message || '删除失败');
     } catch (e) {
         showToast('删除失败：' + e.message);
     }

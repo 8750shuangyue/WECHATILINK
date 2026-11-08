@@ -1,5 +1,6 @@
 package com.example.demo.kb;
 
+import com.example.demo.aicare.Result;
 import com.example.demo.audit.AuditAction;
 import com.example.demo.audit.OperationAuditService;
 import com.example.demo.chat.VectorStoreService;
@@ -16,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -55,27 +57,23 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> upload(
+    public ResponseEntity<Result<Map<String, Object>>> upload(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "sourceId", required = false) String sourceId,
             @RequestParam(value = "dryRun", defaultValue = "false") boolean dryRun,
             HttpServletRequest request) {
-        Map<String, Object> r = new HashMap<>();
+        Map<String, Object> payload = new HashMap<>();
         String userName = (String) request.getAttribute("userName");
         if (!kbWriteAccessGuard.canWrite(userName)) {
             auditService.record(request, AuditAction.KB_UPLOAD, AuditAction.DENIED,
                     "knowledge", sourceId, "writes disabled or user not in allowlist");
-            r.put("success", false);
-            r.put("error", "无权修改知识库");
-            return ResponseEntity.status(403).body(r);
+            return ResponseEntity.status(403).body(Result.error(403, "无权修改知识库"));
         }
 
         if (!acquireImportSlot()) {
             auditService.record(request, AuditAction.KB_UPLOAD, AuditAction.FAILURE,
                     "knowledge", sourceId, "import busy");
-            r.put("success", false);
-            r.put("error", "知识库导入繁忙，请稍后再试");
-            return ResponseEntity.status(429).body(r);
+            return ResponseEntity.status(429).body(Result.error(429, "知识库导入繁忙，请稍后再试"));
         }
 
         try {
@@ -84,18 +82,17 @@ public class KnowledgeBaseController {
             KnowledgeImportService.ImportPlan plan =
                     knowledgeImportService.plan(sourceId, file.getOriginalFilename(), text);
 
-            r.put("success", true);
-            r.put("dryRun", dryRun);
-            r.put("sourceId", plan.sourceId());
-            r.put("fileName", plan.fileName());
-            r.put("title", plan.title());
-            r.put("count", plan.chunks().size());
-            r.put("chars", plan.charCount());
+            payload.put("dryRun", dryRun);
+            payload.put("sourceId", plan.sourceId());
+            payload.put("fileName", plan.fileName());
+            payload.put("title", plan.title());
+            payload.put("count", plan.chunks().size());
+            payload.put("chars", plan.charCount());
 
             if (dryRun) {
                 auditService.record(request, AuditAction.KB_UPLOAD, AuditAction.SUCCESS,
                         "knowledge", plan.sourceId(), "dryRun chunks=" + plan.chunks().size());
-                return ResponseEntity.ok(r);
+                return ResponseEntity.ok(Result.success(payload));
             }
 
             long previousCount = vectorStoreService.countVectorsBySource(plan.sourceId());
@@ -114,53 +111,42 @@ public class KnowledgeBaseController {
             auditService.record(request, AuditAction.KB_UPLOAD, AuditAction.SUCCESS,
                     "knowledge", plan.sourceId(),
                     "fileName=" + plan.fileName() + ", chunks=" + count + ", chars=" + plan.charCount());
-            r.put("replacedPreviousCount", previousCount);
+            payload.put("replacedPreviousCount", previousCount);
+            return ResponseEntity.ok(Result.success(payload));
         } catch (FileValidationException | KnowledgeImportException e) {
             log.warn("[KB] Upload rejected: {}", e.getMessage());
             auditService.record(request, AuditAction.KB_UPLOAD, AuditAction.FAILURE,
                     "knowledge", sourceId, e.getMessage());
-            r.put("success", false);
-            r.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(r);
+            return ResponseEntity.badRequest().body(Result.error(400, e.getMessage()));
         } catch (Exception e) {
             log.error("[KB] Upload failed", e);
             auditService.record(request, AuditAction.KB_UPLOAD, AuditAction.FAILURE,
                     "knowledge", sourceId, e.getClass().getSimpleName());
-            r.put("success", false);
-            r.put("error", e.getMessage());
-            return ResponseEntity.internalServerError().body(r);
+            return ResponseEntity.internalServerError().body(Result.error(500, "知识库导入失败"));
         } finally {
             importSlots.release();
         }
-        return ResponseEntity.ok(r);
     }
 
     @GetMapping("/list")
-    public ResponseEntity<Map<String, Object>> list() {
-        Map<String, Object> r = new HashMap<>();
-        r.put("success", true);
-        r.put("data", vectorStoreService.listDocuments());
-        return ResponseEntity.ok(r);
+    public ResponseEntity<Result<List<Map<String, Object>>>> list() {
+        return ResponseEntity.ok(Result.success(vectorStoreService.listDocuments()));
     }
 
     @DeleteMapping("/{sourceId}")
-    public ResponseEntity<Map<String, Object>> delete(@PathVariable String sourceId,
-                                                      HttpServletRequest request) {
-        Map<String, Object> r = new HashMap<>();
+    public ResponseEntity<Result<Object>> delete(@PathVariable String sourceId,
+                                                 HttpServletRequest request) {
         String userName = (String) request.getAttribute("userName");
         if (!kbWriteAccessGuard.canWrite(userName)) {
             auditService.record(request, AuditAction.KB_DELETE, AuditAction.DENIED,
                     "knowledge", sourceId, "writes disabled or user not in allowlist");
-            r.put("success", false);
-            r.put("error", "无权修改知识库");
-            return ResponseEntity.status(403).body(r);
+            return ResponseEntity.status(403).body(Result.error(403, "无权修改知识库"));
         }
 
         vectorStoreService.clearDocumentVectors(sourceId);
         auditService.record(request, AuditAction.KB_DELETE, AuditAction.SUCCESS,
                 "knowledge", sourceId, "cleared");
-        r.put("success", true);
-        return ResponseEntity.ok(r);
+        return ResponseEntity.ok(Result.success(null));
     }
 
     private boolean acquireImportSlot() {
