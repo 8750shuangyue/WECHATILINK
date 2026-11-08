@@ -94,7 +94,12 @@ public class ToolCallingService {
             Tool toolAnnotation = method.getAnnotation(Tool.class);
             if (toolAnnotation != null) {
                 String toolName = toolAnnotation.name().isEmpty() ? method.getName() : toolAnnotation.name();
-                toolRegistry.put(toolName, new ToolInfo(toolObject, method, toolAnnotation));
+                ToolInfo previous = toolRegistry.putIfAbsent(
+                        toolName, new ToolInfo(toolObject, method, toolAnnotation));
+                if (previous != null) {
+                    throw new IllegalStateException("Duplicate tool name '" + toolName + "' in "
+                            + toolObject.getClass().getName() + "; tool names must be unique");
+                }
                 log.info("Registered tool: {}", toolName);
             }
         }

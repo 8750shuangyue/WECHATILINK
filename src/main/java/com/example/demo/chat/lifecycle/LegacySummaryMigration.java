@@ -22,7 +22,7 @@ import java.util.Set;
  *
  * <p>旧摘要的 covered_until_id 未知，统一置 0：首次新摘要会把旧摘要和当前 active
  * 旧消息一起输入，宁可多摘要一次，也不跳过未覆盖的消息。旧 system 镜像行保留，
- * 保证旧 AgentService 仍能读取；首次新生命周期压缩时它随 id <= watermark 一起归档。</p>
+ * 兼容历史旧链路写入的摘要镜像行；首次新生命周期压缩时它随 id <= watermark 一起归档。</p>
  */
 @Component
 public class LegacySummaryMigration {

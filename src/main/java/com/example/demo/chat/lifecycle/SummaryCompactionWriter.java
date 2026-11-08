@@ -62,7 +62,7 @@ public class SummaryCompactionWriter {
                     conversationId, SummaryApplyException.Reason.CONFLICT);
         }
 
-        // 兼容旧 AgentService / 旧 Prompt 的镜像行；新链路优先读 conversation_summaries。
+        // 兼容历史旧链路的摘要镜像行；新链路优先读 conversation_summaries。
         messageRepository.saveAndFlush(new Message(
                 conversationId, "system", SUMMARY_PREFIX + summary, now, null));
 
