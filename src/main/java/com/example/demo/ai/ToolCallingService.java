@@ -7,15 +7,11 @@ import com.example.demo.chat.LlmService;
 import com.example.demo.monitor.MetricsService;
 import com.example.demo.weather.service.WeatherService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
-import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
@@ -64,137 +60,44 @@ public class ToolCallingService {
     }
 
     private final LlmService llmService;
-    private final SpringAiTools springAiTools;
-    private final WeatherService weatherService;
     private final JdbcTemplate jdbc;
-    private final Map<String, ToolInfo> toolRegistry = new LinkedHashMap<>();
-    private final ExecutorService toolExecutor;
+    private final ToolRegistry registry;
+    private final ExecutorService toolPool;
+    private final ToolExecutor toolExecutorService;
 
     /** 可选：没有 Micrometer 的场景（部分单测）保持为空。 */
     @Autowired(required = false)
-    private MetricsService metricsService;
+    public void setMetricsService(MetricsService metricsService) {
+        this.toolExecutorService.setMetricsService(metricsService);
+    }
 
     @Autowired
     public ToolCallingService(LlmService llmService, SpringAiTools springAiTools,
                               WeatherService weatherService, JdbcTemplate jdbc) {
         this.llmService = llmService;
-        this.springAiTools = springAiTools;
-        this.weatherService = weatherService;
         this.jdbc = jdbc;
-        this.toolExecutor = Executors.newFixedThreadPool(
+        this.registry = new ToolRegistry(springAiTools, weatherService);
+        this.toolExecutorService = new ToolExecutor(registry);
+        this.toolPool = Executors.newFixedThreadPool(
                 Math.min(Runtime.getRuntime().availableProcessors(), 4),
                 r -> {
                     Thread t = new Thread(r, "tool-executor");
                     t.setDaemon(true);
                     return t;
                 });
-        registerTools(springAiTools);
-        registerTools(weatherService);
-        log.info("ToolCallingService initialized, registered {} tools: {}",
-                toolRegistry.size(), toolRegistry.keySet());
     }
 
-    private void registerTools(Object toolObject) {
-        for (Method method : toolObject.getClass().getDeclaredMethods()) {
-            Tool toolAnnotation = method.getAnnotation(Tool.class);
-            if (toolAnnotation != null) {
-                String toolName = toolAnnotation.name().isEmpty() ? method.getName() : toolAnnotation.name();
-                ToolInfo previous = toolRegistry.putIfAbsent(
-                        toolName, new ToolInfo(toolObject, method, toolAnnotation));
-                if (previous != null) {
-                    throw new IllegalStateException("Duplicate tool name '" + toolName + "' in "
-                            + toolObject.getClass().getName() + "; tool names must be unique");
-                }
-                log.info("Registered tool: {}", toolName);
-            }
-        }
-    }
 
     public Set<String> getRegisteredToolNames() {
-        return new HashSet<>(toolRegistry.keySet());
+        return registry.names();
     }
 
     public JSONArray buildToolsSchema() {
-        return buildToolsSchema(null);
+        return registry.buildSchema();
     }
 
     public JSONArray buildToolsSchema(Set<String> allowedToolNames) {
-        JSONArray tools = new JSONArray();
-
-        for (Map.Entry<String, ToolInfo> entry : toolRegistry.entrySet()) {
-            String toolName = entry.getKey();
-
-            if (allowedToolNames != null && !allowedToolNames.isEmpty()
-                    && !allowedToolNames.contains(toolName)) {
-                continue;
-            }
-
-            ToolInfo toolInfo = entry.getValue();
-
-            JSONObject tool = new JSONObject();
-            tool.put("type", "function");
-
-            JSONObject function = new JSONObject();
-            function.put("name", toolName);
-            function.put("description", toolInfo.annotation.description().isEmpty()
-                    ? toolName : toolInfo.annotation.description());
-
-            JSONObject parameters = buildParametersSchema(toolInfo.method);
-            function.put("parameters", parameters);
-
-            tool.put("function", function);
-            tools.add(tool);
-        }
-
-        log.info("Built tools schema with {} tools", tools.size());
-        return tools;
-    }
-
-    private JSONObject buildParametersSchema(Method method) {
-        JSONObject parameters = new JSONObject();
-        parameters.put("type", "object");
-
-        JSONObject properties = new JSONObject();
-        JSONArray required = new JSONArray();
-
-        Parameter[] params = method.getParameters();
-        for (Parameter param : params) {
-            String paramName = param.getName();
-
-            JSONObject paramSchema = new JSONObject();
-            paramSchema.put("type", getJsonType(param.getType()));
-
-            ToolParam paramAnnotation = param.getAnnotation(ToolParam.class);
-            if (paramAnnotation != null && !paramAnnotation.description().isEmpty()) {
-                paramSchema.put("description", paramAnnotation.description());
-            } else {
-                paramSchema.put("description", "Parameter: " + paramName);
-            }
-
-            properties.put(paramName, paramSchema);
-
-            if (paramAnnotation == null || paramAnnotation.required()) {
-                required.add(paramName);
-            }
-        }
-
-        parameters.put("properties", properties);
-        if (!required.isEmpty()) {
-            parameters.put("required", required);
-        }
-
-        return parameters;
-    }
-
-    private String getJsonType(Class<?> type) {
-        if (type == String.class) return "string";
-        if (type == int.class || type == Integer.class) return "integer";
-        if (type == long.class || type == Long.class) return "integer";
-        if (type == double.class || type == Double.class) return "number";
-        if (type == float.class || type == Float.class) return "number";
-        if (type == boolean.class || type == Boolean.class) return "boolean";
-        if (type.isArray() || List.class.isAssignableFrom(type)) return "array";
-        return "object";
+        return registry.buildSchema(allowedToolNames);
     }
 
     public ToolCallResponse chatWithTools(String systemPrompt, String userMessage) {
@@ -280,7 +183,7 @@ public class ToolCallingService {
                                         traceId, tc.toolName,
                                         com.example.demo.core.LogSanitizer.describeArgs(
                                                 tc.arguments == null ? null : tc.arguments.toJSONString()));
-                                result = executeTool(tc.toolName, tc.arguments);
+                                result = toolExecutorService.executeTool(tc.toolName, tc.arguments);
                                 log.info("[Trace:{}] Tool {} completed in {}ms",
                                         traceId, tc.toolName, System.currentTimeMillis() - start);
                             } catch (Exception e) {
@@ -300,11 +203,11 @@ public class ToolCallingService {
                                     : ToolCallResult.error(traceId, tc.toolName, tc.arguments, errorMsg, duration);
 
                             synchronized (generatedFiles) {
-                                generatedFiles.addAll(extractGeneratedFiles(result));
+                                generatedFiles.addAll(toolExecutorService.extractGeneratedFiles(result));
                             }
 
                             return callResult;
-                        }, toolExecutor));
+                        }, toolPool));
                     }
 
                     for (Map.Entry<String, Future<ToolCallResult>> entry : futureMap.entrySet()) {
@@ -497,112 +400,13 @@ public class ToolCallingService {
         }
     }
 
-    public String executeTool(String toolName, JSONObject arguments) {
-        long startedAt = System.nanoTime();
-        boolean success = false;
-        ToolInfo toolInfo = toolRegistry.get(toolName);
-        if (toolInfo == null) {
-            log.warn("Unknown tool: {}", toolName);
-            return "错误：未知工具 " + toolName;
-        }
-
-        try {
-            java.lang.reflect.Parameter[] paramTypes = toolInfo.method.getParameters();
-            Object[] args = new Object[paramTypes.length];
-
-            for (int i = 0; i < paramTypes.length; i++) {
-                String paramName = paramTypes[i].getName();
-                Class<?> paramType = paramTypes[i].getType();
-
-                if (arguments != null && arguments.containsKey(paramName)) {
-                    args[i] = convertArgument(arguments.get(paramName), paramType);
-                } else {
-                    args[i] = getDefaultValue(paramType);
-                }
-            }
-
-            toolInfo.method.setAccessible(true);
-            Object result = toolInfo.method.invoke(toolInfo.target, args);
-
-            String converted = convertResult(result);
-            success = true;
-            return converted;
-
-        } catch (Exception e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            log.error("Tool execution failed: {}", toolName, cause);
-            throw new RuntimeException(cause.getMessage(), cause);
-        } finally {
-            if (metricsService != null) {
-                metricsService.recordToolCall(toolName, success,
-                        (System.nanoTime() - startedAt) / 1_000_000);
-            }
-        }
-    }
-
-    private Object convertArgument(Object value, Class<?> targetType) {
-        if (value == null) return getDefaultValue(targetType);
-
-        if (targetType == String.class) {
-            return value.toString();
-        } else if (targetType == int.class || targetType == Integer.class) {
-            return Integer.parseInt(value.toString());
-        } else if (targetType == long.class || targetType == Long.class) {
-            return Long.parseLong(value.toString());
-        } else if (targetType == double.class || targetType == Double.class) {
-            return Double.parseDouble(value.toString());
-        } else if (targetType == boolean.class || targetType == Boolean.class) {
-            return Boolean.parseBoolean(value.toString());
-        }
-
-        return value;
-    }
-
-    private Object getDefaultValue(Class<?> type) {
-        if (type == String.class) return "";
-        if (type == int.class || type == Integer.class) return 0;
-        if (type == long.class || type == Long.class) return 0L;
-        if (type == double.class || type == Double.class) return 0.0;
-        if (type == boolean.class || type == Boolean.class) return false;
-        return null;
-    }
-
-    private String convertResult(Object result) {
-        if (result == null) return "";
-        if (result instanceof String) return (String) result;
-        return JSON.toJSONString(result);
-    }
-
-    private List<Path> extractGeneratedFiles(String result) {
-        List<Path> files = new ArrayList<>();
-        if (result == null) return files;
-
-        try {
-            if (result.startsWith("[IMAGE:") && result.contains("]")) {
-                int end = result.indexOf("]");
-                String path = result.substring(7, end);
-                files.add(Path.of(path));
-                log.info("Extracted image file: {}", path);
-            }
-            if (result.startsWith("[AUDIO:") && result.contains("]")) {
-                int end = result.indexOf("]");
-                String path = result.substring(7, end);
-                files.add(Path.of(path));
-                log.info("Extracted audio file: {}", path);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to extract generated files from result");
-        }
-
-        return files;
-    }
 
     public List<String> validateToolNames(List<String> requestedTools) {
         if (requestedTools == null || requestedTools.isEmpty()) {
-            return new ArrayList<>(toolRegistry.keySet());
+            return new ArrayList<>(registry.names());
         }
 
-        Set<String> registeredTools = toolRegistry.keySet();
+        Set<String> registeredTools = registry.names();
         List<String> validTools = requestedTools.stream()
                 .filter(registeredTools::contains)
                 .collect(Collectors.toList());
@@ -638,7 +442,7 @@ public class ToolCallingService {
 
         for (Map.Entry<String, List<String>> group : TOOL_GROUPS.entrySet()) {
             List<String> available = group.getValue().stream()
-                    .filter(toolRegistry::containsKey)
+                    .filter(registry::contains)
                     .filter(t -> allowedToolNames == null || allowedToolNames.isEmpty() || allowedToolNames.contains(t))
                     .collect(Collectors.toList());
             if (available.isEmpty()) {
@@ -682,28 +486,17 @@ public class ToolCallingService {
 
     @PreDestroy
     public void shutdown() {
-        toolExecutor.shutdown();
+        toolPool.shutdown();
         try {
-            if (!toolExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                toolExecutor.shutdownNow();
+            if (!toolPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                toolPool.shutdownNow();
             }
         } catch (InterruptedException e) {
-            toolExecutor.shutdownNow();
+            toolPool.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
 
-    private static class ToolInfo {
-        final Object target;
-        final Method method;
-        final Tool annotation;
-
-        ToolInfo(Object target, Method method, Tool annotation) {
-            this.target = target;
-            this.method = method;
-            this.annotation = annotation;
-        }
-    }
 
     private static class ToolCallInfo {
         final String id;
