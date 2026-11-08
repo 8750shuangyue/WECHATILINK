@@ -128,7 +128,8 @@ public class ImageGenerationService {
     
     private String executeImageApi(JSONObject jsonRequest, String operationName) throws IOException, InterruptedException {
         String jsonStr = JSON.toJSONString(jsonRequest);
-        logger.info("{} request: {}", operationName, jsonStr);
+        logger.info("{} request: {}", operationName,
+                com.example.demo.core.LogSanitizer.describe(jsonStr));
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(config.getImage().getBaseUrl()))
@@ -142,17 +143,20 @@ public class ImageGenerationService {
         String responseBody = response.body();
 
         logger.info("{} response status: {}, body: {}",
-                operationName, response.statusCode(), responseBody);
+                operationName, response.statusCode(),
+                com.example.demo.core.LogSanitizer.describe(responseBody));
 
         if (response.statusCode() != 200) {
-            throw new IOException(operationName + " failed with status: " + response.statusCode() + ", body: " + responseBody);
+            throw new IOException(operationName + " failed with status: " + response.statusCode()
+                    + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
         }
 
         JSONObject responseJson = JSON.parseObject(responseBody);
 
         JSONObject output = responseJson.getJSONObject("output");
         if (output == null) {
-            throw new RuntimeException("Invalid " + operationName + " response: " + responseBody);
+            throw new RuntimeException("Invalid " + operationName + " response, bodyLen: "
+                    + (responseBody == null ? 0 : responseBody.length()));
         }
 
         JSONArray choices = output.getJSONArray("choices");
@@ -165,15 +169,16 @@ public class ImageGenerationService {
                     JSONObject contentItem = contentArr.getJSONObject(0);
                     String imageValue = contentItem.getString("image");
                     if (imageValue != null && !imageValue.isEmpty()) {
-                        logger.info("Raw image value from API (first 100 chars): [{}]",
-                                imageValue.length() > 100 ? imageValue.substring(0, 100) + "..." : imageValue);
+                        logger.info("Raw image value from API: {}",
+                                com.example.demo.core.LogSanitizer.describe(imageValue));
                         return downloadAndSaveImage(imageValue);
                     }
                 }
             }
         }
 
-        throw new RuntimeException("Failed to get image URL from " + operationName + " response: " + responseBody);
+        throw new RuntimeException("Failed to get image URL from " + operationName
+                    + " response, bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
     }
 
     /**

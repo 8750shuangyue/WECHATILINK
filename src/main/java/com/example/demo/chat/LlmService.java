@@ -149,7 +149,8 @@ public class LlmService {
                 responseBody = EntityUtils.toString(entity, "UTF-8");
             }
             
-            logger.info("LLM API response status: {}, body: {}", response.getCode(), responseBody);
+            logger.info("LLM API response status: {}, body: {}", response.getCode(),
+                    com.example.demo.core.LogSanitizer.describe(responseBody));
             
             if (response.getCode() != 200) {
                 throw new IOException("LLM API request failed with status: " + response.getCode() + ", body: " + responseBody);
@@ -426,7 +427,8 @@ public class LlmService {
         }
         requestBody.put("messages", messages);
         
-        logger.debug("Full request with history: {}", JSON.toJSONString(requestBody));
+        logger.debug("Full request with history: {}",
+                com.example.demo.core.LogSanitizer.describe(JSON.toJSONString(requestBody)));
         
         String reply = executeChatRequest(requestBody);
         if (retrieval.sources().isEmpty()) {
@@ -490,12 +492,14 @@ public class LlmService {
     }
     
     private String parseResponse(String responseBody) {
-        logger.debug("Parsing LLM response: {}", responseBody);
+        logger.debug("Parsing LLM response: {}",
+                com.example.demo.core.LogSanitizer.describe(responseBody));
         
         JSONObject responseJson = JSON.parseObject(responseBody);
         
         if (responseJson == null || !responseJson.containsKey("choices")) {
-            logger.warn("LLM response does not contain choices: {}", responseBody);
+            logger.warn("LLM response does not contain choices: {}",
+                    com.example.demo.core.LogSanitizer.describe(responseBody));
             return "抱歉，我现在无法回答你的问题。";
         }
         

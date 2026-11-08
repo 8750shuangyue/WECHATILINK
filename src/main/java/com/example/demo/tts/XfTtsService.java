@@ -31,9 +31,9 @@ public class XfTtsService {
     private final OkHttpClient okHttpClient;
     private final XunfeiTtsConfig config;
 
-    public XfTtsService(XunfeiTtsConfig config) {
+    public XfTtsService(XunfeiTtsConfig config, OkHttpClient httpClient) {
         this.config = config;
-        this.okHttpClient = new OkHttpClient.Builder()
+        this.okHttpClient = httpClient.newBuilder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(10, TimeUnit.SECONDS)

@@ -30,8 +30,8 @@ public class WebSearchTool extends BaseTool {
     private final OkHttpClient httpClient;
     private final ToolDefinition toolDefinition;
 
-    public WebSearchTool() {
-        this.httpClient = new OkHttpClient.Builder()
+    public WebSearchTool(OkHttpClient httpClient) {
+        this.httpClient = httpClient.newBuilder()
                 .connectTimeout(5, TimeUnit.SECONDS)
                 .readTimeout(8, TimeUnit.SECONDS)
                 .build();

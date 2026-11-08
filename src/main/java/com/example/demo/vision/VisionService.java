@@ -161,7 +161,8 @@ public class VisionService {
                     response.statusCode(), responseBody != null ? responseBody.length() : 0);
 
             if (response.statusCode() != 200) {
-                throw new IOException("Vision API request failed with status: " + response.statusCode() + ", body: " + responseBody);
+                throw new IOException("Vision API request failed with status: " + response.statusCode()
+                        + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -234,7 +235,8 @@ public class VisionService {
                     response.statusCode(), responseBody != null ? responseBody.length() : 0);
 
             if (response.statusCode() != 200) {
-                throw new IOException("Vision API request failed with status: " + response.statusCode() + ", body: " + responseBody);
+                throw new IOException("Vision API request failed with status: " + response.statusCode()
+                        + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
