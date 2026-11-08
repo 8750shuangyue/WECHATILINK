@@ -1,0 +1,8 @@
+[Unit]
+Description=ilink health check
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/ilink-healthcheck
+ExecStart=/usr/local/bin/ilink-healthcheck.sh
