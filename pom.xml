@@ -98,12 +98,6 @@
 			<version>2.0.66</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.httpcomponents.client5</groupId>
-			<artifactId>httpclient5</artifactId>
-			<version>5.6.5</version>
-		</dependency>
-
 		<!-- web-push 的 send() 签名需要编译期可见 -->
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>

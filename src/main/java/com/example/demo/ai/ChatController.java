@@ -1,6 +1,7 @@
 package com.example.demo.ai;
 
 import com.example.demo.care.model.CareRecord;
+import com.example.demo.config.MdcContext;
 import com.example.demo.care.model.CareTarget;
 import com.example.demo.care.service.CareRecordService;
 import com.example.demo.care.service.CareReminderService;
@@ -67,7 +68,7 @@ public class ChatController {
         String conversationId = getOrCreateConversationId(session);
         String userId = (String) session.getAttribute("user");
         SseEmitter emitter = new SseEmitter(120000L);
-        CompletableFuture.runAsync(() -> {
+        CompletableFuture.runAsync(MdcContext.wrap(() -> {
             try {
                 java.util.concurrent.atomic.AtomicReference<String> traceRef =
                         new java.util.concurrent.atomic.AtomicReference<>();
@@ -130,7 +131,7 @@ public class ChatController {
                 log.error("AI chat stream failed", e);
                 emitter.completeWithError(e);
             }
-        });
+        }));
         return emitter;
     }
 

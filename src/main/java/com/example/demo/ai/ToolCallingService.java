@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.chat.LlmService;
+import com.example.demo.config.MdcContext;
 import com.example.demo.monitor.MetricsService;
 import com.example.demo.weather.service.WeatherService;
 import lombok.extern.slf4j.Slf4j;
@@ -132,7 +133,7 @@ public class ToolCallingService {
                     Map<String, Future<ToolCallResult>> futureMap = new LinkedHashMap<>();
 
                     for (ToolCallInfo tc : toolCalls) {
-                        futureMap.put(tc.id, CompletableFuture.supplyAsync(() -> {
+                        futureMap.put(tc.id, CompletableFuture.supplyAsync(MdcContext.wrapSupplier(() -> {
                             long start = System.currentTimeMillis();
                             String result;
                             boolean success = true;
@@ -171,7 +172,7 @@ public class ToolCallingService {
                             }
 
                             return callResult;
-                        }, toolPool));
+                        }), toolPool));
                     }
 
                     for (Map.Entry<String, Future<ToolCallResult>> entry : futureMap.entrySet()) {
