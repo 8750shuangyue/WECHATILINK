@@ -91,12 +91,15 @@ public class VectorStoreService {
 
     /** 可选：单测装配时不需要 Micrometer。 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private com.example.demo.monitor.MetricsService metricsService;
+    public void setMetricsService(com.example.demo.monitor.MetricsService metricsService) {
+        this.retrievalService.setMetricsService(metricsService);
+    }
 
     private final Set<String> clearedConversationKeys = ConcurrentHashMap.newKeySet();
     private final Object conversationMutationLock = new Object();
     private final VectorIndex index = new VectorIndex();
     private final VectorDocumentStore documentStore;
+    private final RetrievalService retrievalService;
 
     /** 测试/旧装配兼容：没有事务模板与重排服务。 */
     public VectorStoreService(VectorStoreRepository vectorStoreRepository,
@@ -127,11 +130,14 @@ public class VectorStoreService {
         this.rerankService = rerankService;
         this.documentStore = new VectorDocumentStore(vectorStoreRepository, embeddingService,
                 index, clearedConversationKeys, conversationMutationLock, sqliteTransactionManager);
+        this.retrievalService = new RetrievalService(embeddingService, index,
+                ragRetrievalLogService, rerankService);
     }
 
     /** 测试注入用。 */
     void setRerankService(RerankService rerankService) {
         this.rerankService = rerankService;
+        this.retrievalService.setRerankService(rerankService);
     }
 
     @PostConstruct
@@ -323,7 +329,7 @@ public class VectorStoreService {
     }
 
     public List<String> searchSimilar(String query, String userId, String conversationId) {
-        List<SearchResult> results = searchInternal(query, userId, conversationId).results();
+        List<SearchResult> results = searchSimilarWithMetadataAndTrace(query, userId, conversationId).results();
         List<String> contents = new ArrayList<>(results.size());
         for (SearchResult result : results) {
             contents.add(result.getContent());
@@ -340,370 +346,19 @@ public class VectorStoreService {
     }
 
     public List<SearchResult> searchSimilarWithMetadata(String query, String userId, String conversationId) {
-        return searchInternal(query, userId, conversationId).results();
+        return searchSimilarWithMetadataAndTrace(query, userId, conversationId).results();
     }
 
     public SearchOutcome searchSimilarWithMetadataAndTrace(
             String query, String userId, String conversationId) {
-        return searchInternal(query, userId, conversationId);
+        return retrievalService.search(query, userId, conversationId, retrievalConfig());
     }
 
-    private SearchOutcome searchInternal(String query, String userId, String conversationId) {
-        long startNanos = System.nanoTime();
-        String traceId = UUID.randomUUID().toString().replace("-", "");
-        List<SearchResult> results = new ArrayList<>();
-        int admittedCount = 0;
-        RetrievalTraceStats stats = baseStats(0, 0);
-        try {
-            if (!index.isReady()) {
-                logger.warn("[RAG] Vector index not ready, traceId: {}", traceId);
-            } else if (query == null || query.isBlank()) {
-                logger.debug("[RAG] Empty query, traceId: {}", traceId);
-            } else {
-                float[] queryEmbedding = embeddingService.embed(query);
-                if (queryEmbedding.length == 0) {
-                    logger.warn("[RAG] Query embedding is empty, traceId: {}", traceId);
-                } else {
-                    collectSimilar(queryEmbedding, query, userId, conversationId, results);
-                }
-            }
-
-            results = sortByCosine(results);
-            admittedCount = results.size();
-            stats.admittedCount(admittedCount);
-            results = selectResults(query, userId, results, stats);
-            stats.returnedCount(results.size());
-            logger.info("[RAG] traceId={}, userId={}, conversationId={}, admitted={}, retrieved={}, topK={}, reranked={}",
-                    traceId, userId, conversationId, admittedCount, results.size(), topK,
-                    Boolean.TRUE.equals(stats.toJson().getBoolean("rerankApplied")));
-        } catch (Exception e) {
-            logger.error("[RAG] Vector search failed, traceId: {}", traceId, e);
-            results = new ArrayList<>();
-        } finally {
-            long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
-            stats.returnedCount(results.size());
-            recordRetrievalLog(traceId, userId, conversationId, query, results, stats, durationMs);
-            if (metricsService != null) {
-                metricsService.recordRetrieval(durationMs,
-                        Boolean.TRUE.equals(stats.toJson().getBoolean("rerankApplied")));
-            }
-        }
-        return new SearchOutcome(traceId, List.copyOf(results), stats);
+    private RetrievalConfig retrievalConfig() {
+        return new RetrievalConfig(topK, memoryTopK, similarityThreshold, keywordFloor, keywordEnabled,
+                rerankEnabled, rerankCandidatePoolSize, rerankMinCandidates, rerankCanaryUsers);
     }
 
-    /**
-     * 选择最终返回结果：
-     * <ul>
-     *   <li>重排关闭/未装配/灰度未命中 —— 与旧行为完全一致的混合余弦 topK；</li>
-     *   <li>重排开启 —— 公共知识池重排取 topK，对话记忆单独预留最多 memoryTopK 条；</li>
-     *   <li>任何重排失败 —— 回退到旧的混合余弦 topK。</li>
-     * </ul>
-     */
-    private List<SearchResult> selectResults(String query, String userId,
-                                             List<SearchResult> admitted,
-                                             RetrievalTraceStats stats) {
-        stats.rerankEnabled(rerankEnabled);
-        if (rerankService == null || !rerankEnabled) {
-            stats.rerankApplied(false);
-            return cosineTopK(admitted);
-        }
-        if (!FeatureRollout.includes(userId, rerankCanaryUsers)) {
-            stats.rerankApplied(false).rerankFallbackReason("canary_excluded");
-            return cosineTopK(admitted);
-        }
-        return rerankAndSelect(query, admitted, stats);
-    }
-
-    private List<SearchResult> rerankAndSelect(String query, List<SearchResult> admitted,
-                                               RetrievalTraceStats stats) {
-        Map<SearchResult, Integer> cosineRankByResult = new java.util.IdentityHashMap<>();
-        List<SearchResult> publicCandidates = new ArrayList<>();
-        List<SearchResult> memoryCandidates = new ArrayList<>();
-        for (int i = 0; i < admitted.size(); i++) {
-            SearchResult result = admitted.get(i);
-            cosineRankByResult.put(result, i + 1);
-            if (ORIGIN_PUBLIC_KB.equals(result.getOrigin())) {
-                publicCandidates.add(result);
-            } else {
-                memoryCandidates.add(result);
-            }
-        }
-
-        int poolSize = Math.min(Math.max(0, rerankCandidatePoolSize), publicCandidates.size());
-        List<SearchResult> pool = new ArrayList<>(publicCandidates.subList(0, poolSize));
-        stats.rerankPoolSize(rerankCandidatePoolSize)
-                .rerankCandidateCount(pool.size())
-                .rerankTimeoutMs(rerankService.getTimeoutMs());
-
-        if (pool.size() < rerankMinCandidates) {
-            stats.rerankApplied(false).rerankFallbackReason("pool_too_small");
-            return cosineTopK(admitted);
-        }
-
-        List<String> documents = new ArrayList<>(pool.size());
-        for (SearchResult candidate : pool) {
-            documents.add(candidate.getContent());
-        }
-        RerankService.RerankOutcome outcome = rerankService.rerank(query, documents);
-        stats.rerankModel(outcome.model()).rerankDurationMs(outcome.durationMs());
-        if (!outcome.applied()) {
-            stats.rerankApplied(false).rerankFallbackReason(outcome.fallbackReason());
-            return cosineTopK(admitted);
-        }
-
-        List<Double> scores = outcome.scoresByIndex();
-        List<Integer> order = new ArrayList<>(pool.size());
-        for (int i = 0; i < pool.size(); i++) {
-            order.add(i);
-        }
-        order.sort(Comparator.comparingDouble((Integer index) -> scores.get(index)).reversed());
-
-        int publicLimit = Math.max(0, topK);
-        List<SearchResult> selectedPublic = new ArrayList<>(Math.min(publicLimit, order.size()));
-        for (int i = 0; i < order.size() && selectedPublic.size() < publicLimit; i++) {
-            int index = order.get(i);
-            SearchResult candidate = pool.get(index);
-            selectedPublic.add(candidate.withRanking(
-                    0,
-                    cosineRankByResult.getOrDefault(candidate, 0),
-                    scores.get(index)));
-        }
-
-        int memoryLimit = selectedPublic.isEmpty()
-                ? Math.min(Math.max(0, topK), memoryCandidates.size())
-                : Math.min(Math.max(0, memoryTopK), memoryCandidates.size());
-        List<SearchResult> finalResults = new ArrayList<>(selectedPublic);
-        if (memoryLimit > 0) {
-            finalResults.addAll(memoryCandidates.subList(0, memoryLimit));
-        }
-
-        List<SearchResult> ranked = new ArrayList<>(finalResults.size());
-        for (int i = 0; i < finalResults.size(); i++) {
-            SearchResult result = finalResults.get(i);
-            ranked.add(result.withRanking(i + 1, result.getCosineRank(), result.getRerankScore()));
-        }
-        stats.rerankApplied(true);
-        return ranked;
-    }
-
-    /** 与旧行为完全一致：混合余弦排序后截断 topK。 */
-    private List<SearchResult> cosineTopK(List<SearchResult> admitted) {
-        List<SearchResult> truncated = admitted.size() > topK
-                ? new ArrayList<>(admitted.subList(0, topK))
-                : new ArrayList<>(admitted);
-        List<SearchResult> ranked = new ArrayList<>(truncated.size());
-        for (int i = 0; i < truncated.size(); i++) {
-            ranked.add(truncated.get(i).withRanking(i + 1, i + 1, -1));
-        }
-        return ranked;
-    }
-
-    /**
-     * 余弦降序；documentId 作为稳定的次级键，避免 Map 遍历顺序导致同分结果漂移。
-     * 重排关闭时这就是最终顺序。
-     */
-    private static List<SearchResult> sortByCosine(List<SearchResult> results) {
-        List<SearchResult> sorted = new ArrayList<>(results);
-        sorted.sort(Comparator
-                .comparingDouble(SearchResult::getSimilarity).reversed()
-                .thenComparing(SearchResult::getDocumentId,
-                        Comparator.nullsLast(Comparator.naturalOrder())));
-        return sorted;
-    }
-
-    private RetrievalTraceStats baseStats(int admittedCount, int returnedCount) {
-        return RetrievalTraceStats.create()
-                .admittedCount(admittedCount)
-                .returnedCount(returnedCount)
-                .topK(topK)
-                .memoryTopK(memoryTopK)
-                .similarityThreshold(similarityThreshold)
-                .keywordFloor(keywordFloor)
-                .keywordEnabled(keywordEnabled);
-    }
-
-    /**
-     * 双通道准入：
-     * <ul>
-     *   <li>向量通道——公共知识与对话记忆都走，门槛 {@link #similarityThreshold}；</li>
-     *   <li>关键词通道——<b>只对公共知识开放</b>，门槛 {@link #keywordFloor}。</li>
-     * </ul>
-     * 对话记忆刻意不接关键词通道：同一会话的旧轮次与当前问题词面天然高度重合，
-     * 接进来会把历史对话大量灌入上下文。
-     *
-     * <p>两条通道只决定「谁有资格进来」，排序仍然只按余弦，
-     * 所以低余弦的关键词命中会排在后面，由 topK 自然截断。
-     */
-    private void collectSimilar(float[] queryEmbedding, String query, String userId,
-                                String conversationId, List<SearchResult> results) {
-        Set<String> queryTokens = keywordEnabled ? RetrievalScorer.tokens(query) : Set.of();
-        Map<String, Double> idf = resolvePublicKnowledgeIdf();
-
-        for (VectorIndex.IndexedVector indexed : index.snapshot()) {
-            IndexEntry indexEntry = indexed.entry();
-            float[] storedVector = indexed.vector();
-            if (indexEntry == null || !isVisible(indexEntry, userId, conversationId)) {
-                continue;
-            }
-            if (storedVector == null || storedVector.length != queryEmbedding.length) {
-                continue;
-            }
-            double similarity = cosineSimilarity(queryEmbedding, storedVector);
-            boolean publicKnowledge = indexEntry.isPublicKnowledge();
-            double keywordScore = publicKnowledge && keywordEnabled
-                    ? RetrievalScorer.keywordScore(queryTokens, indexEntry.tokens, idf)
-                    : 0.0;
-
-            if (!RetrievalScorer.admits(similarity, keywordScore, publicKnowledge,
-                    keywordEnabled, similarityThreshold, keywordFloor)) {
-                continue;
-            }
-            boolean admittedByVector = similarity >= similarityThreshold;
-            boolean admittedByKeyword = publicKnowledge && keywordEnabled
-                    && keywordScore >= keywordFloor;
-
-            JSONObject metadata = null;
-            if (indexEntry.metadataJson != null && !indexEntry.metadataJson.isEmpty()) {
-                metadata = JSON.parseObject(indexEntry.metadataJson);
-            }
-            results.add(new SearchResult(
-                    indexEntry.documentId,
-                    indexEntry.sourceId,
-                    indexEntry.content,
-                    similarity,
-                    metadata,
-                    publicKnowledge ? ORIGIN_PUBLIC_KB : ORIGIN_CONVERSATION,
-                    keywordScore,
-                    resolveChannel(admittedByVector, admittedByKeyword)
-            ));
-        }
-    }
-
-    /**
-     * IDF 只按公共知识块统计：对话记忆是每用户私有的短文本，
-     * 纳入统计既没有意义，也会随本地测试数据膨胀而漂移。
-     * 公共块只有二十来个，每次检索现算的开销远小于向量扫描本身。
-     */
-    private Map<String, Double> resolvePublicKnowledgeIdf() {
-        if (!keywordEnabled) {
-            return Map.of();
-        }
-        List<Set<String>> publicTokens = new ArrayList<>();
-        for (IndexEntry entry : index.publicEntries()) {
-            publicTokens.add(entry.tokens);
-        }
-        return RetrievalScorer.idf(publicTokens);
-    }
-
-    private static String resolveChannel(boolean admittedByVector, boolean admittedByKeyword) {
-        if (admittedByVector && admittedByKeyword) {
-            return CHANNEL_BOTH;
-        }
-        return admittedByKeyword ? CHANNEL_KEYWORD : CHANNEL_VECTOR;
-    }
-
-    /**
-     * 可见性规则：
-     * 1. 公共知识库（有 sourceId 且无 conversationId）对所有用户可见；
-     * 2. 对话记忆必须命中当前会话；
-     * 3. 只返回匹配 userId 的对话记忆，未携带用户身份时默认拒绝会话记忆。
-     */
-    private boolean isVisible(IndexEntry entry, String userId, String conversationId) {
-        if (entry.isPublicKnowledge()) {
-            return true;
-        }
-        if (userId == null || userId.isEmpty() || conversationId == null || conversationId.isEmpty()) {
-            return false;
-        }
-        if (!conversationId.equals(entry.conversationId)) {
-            return false;
-        }
-        return userId.equals(entry.userId);
-    }
-
-
-    private void recordRetrievalLog(String traceId, String userId, String conversationId,
-                                    String query, List<SearchResult> results,
-                                    RetrievalTraceStats stats, long durationMs) {
-        try {
-            JSONArray array = new JSONArray();
-            for (SearchResult result : results) {
-                JSONObject item = new JSONObject();
-                item.put("documentId", result.getDocumentId());
-                item.put("sourceId", result.getSourceId());
-                item.put("similarity", Math.round(result.getSimilarity() * 10000.0) / 10000.0);
-                item.put("origin", result.getOrigin());
-                item.put("keywordScore", Math.round(result.getKeywordScore() * 10000.0) / 10000.0);
-                item.put("channel", result.getChannel());
-                item.put("rank", result.getRank());
-                item.put("cosineRank", result.getCosineRank());
-                if (result.getRerankScore() >= 0) {
-                    item.put("rerankScore", Math.round(result.getRerankScore() * 10000.0) / 10000.0);
-                }
-                array.add(item);
-            }
-            ragRetrievalLogService.record(
-                    traceId,
-                    userId,
-                    conversationId,
-                    VectorDocuments.sha256(query),
-                    resolveScope(results),
-                    topK,
-                    similarityThreshold,
-                    results.size(),
-                    durationMs,
-                    array.toJSONString(),
-                    stats == null ? null : stats.toJson().toJSONString()
-            );
-        } catch (Exception e) {
-            logger.warn("[RAG] Failed to build retrieval log, traceId: {}, cause: {}", traceId, e.getMessage());
-        }
-    }
-
-    private String resolveScope(List<SearchResult> results) {
-        boolean hasPublic = false;
-        boolean hasConversation = false;
-        for (SearchResult result : results) {
-            if (ORIGIN_PUBLIC_KB.equals(result.getOrigin())) {
-                hasPublic = true;
-            } else if (ORIGIN_CONVERSATION.equals(result.getOrigin())) {
-                hasConversation = true;
-            }
-        }
-        if (hasPublic && hasConversation) {
-            return "mixed";
-        }
-        if (hasPublic) {
-            return "public_only";
-        }
-        if (hasConversation) {
-            return "conversation";
-        }
-        return "none";
-    }
-
-
-    private double cosineSimilarity(float[] v1, float[] v2) {
-        if (v1.length != v2.length) {
-            return 0.0;
-        }
-
-        double dotProduct = 0.0;
-        double norm1 = 0.0;
-        double norm2 = 0.0;
-
-        for (int i = 0; i < v1.length; i++) {
-            dotProduct += v1[i] * v2[i];
-            norm1 += v1[i] * v1[i];
-            norm2 += v2[i] * v2[i];
-        }
-
-        if (norm1 == 0 || norm2 == 0) {
-            return 0.0;
-        }
-
-        return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
-    }
 
 
 
