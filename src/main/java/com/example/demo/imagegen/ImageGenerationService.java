@@ -13,16 +13,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
@@ -52,27 +53,30 @@ public class ImageGenerationService {
     @Value("${app.guard.acquire-timeout-ms:200}")
     private long acquireTimeoutMs = 200;
 
-    private volatile HttpClient httpClient;
+    private final OkHttpClient sharedHttpClient;
+    private volatile OkHttpClient imageClient;
     private volatile Semaphore slots;
 
     public ImageGenerationService(DashScopeConfig config, MediaAssetService mediaAssetService,
-                                  UploadPathProvider uploadPathProvider) {
+                                  UploadPathProvider uploadPathProvider, OkHttpClient httpClient) {
         this.config = config;
         this.mediaAssetService = mediaAssetService;
         this.uploadPathProvider = uploadPathProvider;
+        this.sharedHttpClient = httpClient;
     }
 
-    private HttpClient client() {
-        HttpClient current = httpClient;
+    private OkHttpClient client() {
+        OkHttpClient current = imageClient;
         if (current == null) {
             synchronized (this) {
-                if (httpClient == null) {
-                    httpClient = HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofMillis(Math.max(1, connectTimeoutMs)))
-                            .followRedirects(HttpClient.Redirect.NEVER)
+                if (imageClient == null) {
+                    imageClient = sharedHttpClient.newBuilder()
+                            .connectTimeout(Math.max(1, connectTimeoutMs), TimeUnit.MILLISECONDS)
+                            .readTimeout(Math.max(1, readTimeoutMs), TimeUnit.MILLISECONDS)
+                            .writeTimeout(Math.max(1, readTimeoutMs), TimeUnit.MILLISECONDS)
                             .build();
                 }
-                current = httpClient;
+                current = imageClient;
             }
         }
         return current;
@@ -131,26 +135,29 @@ public class ImageGenerationService {
         logger.info("{} request: {}", operationName,
                 com.example.demo.core.LogSanitizer.describe(jsonStr));
 
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(config.getImage().getBaseUrl()))
-            .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
+        Request request = new Request.Builder()
+            .url(config.getImage().getBaseUrl())
             .header("Authorization", "Bearer " + imageApiKey())
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(jsonStr))
+            .post(RequestBody.create(jsonStr, MediaType.parse("application/json")))
             .build();
 
-        HttpResponse<String> response = sendWithGuard(request, HttpResponse.BodyHandlers.ofString());
-        String responseBody = response.body();
+        return withGuard(() -> {
+            try (Response response = client().newCall(request).execute()) {
+                String responseBody = response.body() == null ? "" : response.body().string();
+                logger.info("{} response status: {}, body: {}",
+                        operationName, response.code(),
+                        com.example.demo.core.LogSanitizer.describe(responseBody));
+                if (response.code() != 200) {
+                    throw new IOException(operationName + " failed with status: " + response.code()
+                            + ", bodyLen: " + responseBody.length());
+                }
+                return parseImageResponse(responseBody, operationName);
+            }
+        });
+    }
 
-        logger.info("{} response status: {}, body: {}",
-                operationName, response.statusCode(),
-                com.example.demo.core.LogSanitizer.describe(responseBody));
-
-        if (response.statusCode() != 200) {
-            throw new IOException(operationName + " failed with status: " + response.statusCode()
-                    + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
-        }
-
+    private String parseImageResponse(String responseBody, String operationName)
+            throws IOException, InterruptedException {
         JSONObject responseJson = JSON.parseObject(responseBody);
 
         JSONObject output = responseJson.getJSONObject("output");
@@ -193,29 +200,27 @@ public class ImageGenerationService {
             // Remote URL — download with auth headers in case the MaaS CDN requires them
             String url = extractUrlFromText(imageValue);
             logger.info("Downloading generated image from: {}", url);
-            HttpRequest downloadReq = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
-                .header("Authorization", "Bearer " + imageApiKey())
-                .GET()
-                .build();
-            HttpResponse<InputStream> downloadResp = sendWithGuard(downloadReq, HttpResponse.BodyHandlers.ofInputStream());
-            if (downloadResp.statusCode() != 200) {
-                // Retry without auth (public OSS signed URL)
-                logger.info("Auth download returned {}, retrying without auth", downloadResp.statusCode());
-                HttpRequest retryReq = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
-                        .GET()
+            imageBytes = withGuard(() -> {
+                Request authRequest = new Request.Builder()
+                        .url(url)
+                        .header("Authorization", "Bearer " + imageApiKey())
+                        .get()
                         .build();
-                downloadResp = sendWithGuard(retryReq, HttpResponse.BodyHandlers.ofInputStream());
-                if (downloadResp.statusCode() != 200) {
-                    throw new IOException("Failed to download generated image, status: " + downloadResp.statusCode());
+                try (Response response = client().newCall(authRequest).execute()) {
+                    if (response.code() == 200) {
+                        return readResponseBytes(response);
+                    }
+                    logger.info("Auth download returned {}, retrying without auth", response.code());
                 }
-            }
-            try (InputStream is = downloadResp.body()) {
-                imageBytes = readLimited(is, maxDownloadBytes);
-            }
+                // Retry without auth (public OSS signed URL)
+                Request publicRequest = new Request.Builder().url(url).get().build();
+                try (Response response = client().newCall(publicRequest).execute()) {
+                    if (response.code() != 200) {
+                        throw new IOException("Failed to download generated image, status: " + response.code());
+                    }
+                    return readResponseBytes(response);
+                }
+            });
             // Detect format from URL or magic bytes
             extension = extractExtensionFromUrl(url);
         } else {
@@ -247,18 +252,30 @@ public class ImageGenerationService {
         return targetPath.toString();
     }
 
-    private <T> HttpResponse<T> sendWithGuard(HttpRequest request,
-                                              HttpResponse.BodyHandler<T> handler)
-            throws IOException, InterruptedException {
+    private byte[] readResponseBytes(Response response) throws IOException {
+        if (response.body() == null) {
+            return new byte[0];
+        }
+        try (InputStream input = response.body().byteStream()) {
+            return readLimited(input, maxDownloadBytes);
+        }
+    }
+
+    private <T> T withGuard(IOSupplier<T> action) throws IOException, InterruptedException {
         Semaphore permit = slots();
         if (!permit.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS)) {
             throw new IOException("图片服务繁忙，请稍后再试");
         }
         try {
-            return client().send(request, handler);
+            return action.get();
         } finally {
             permit.release();
         }
+    }
+
+    @FunctionalInterface
+    private interface IOSupplier<T> {
+        T get() throws IOException, InterruptedException;
     }
 
     private static byte[] readLimited(InputStream input, long limit) throws IOException {

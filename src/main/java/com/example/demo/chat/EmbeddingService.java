@@ -4,25 +4,20 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.config.DashScopeConfig;
-import jakarta.annotation.PreDestroy;
-import org.apache.hc.client5.http.classic.methods.HttpPost;
-import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.apache.hc.core5.util.Timeout;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * DashScope / OpenAI-compatible Embedding 客户端。
@@ -37,28 +32,27 @@ public class EmbeddingService {
     private static final int MODEL_MAX_BATCH_SIZE = 25;
 
     private final DashScopeConfig config;
-    private final CloseableHttpClient httpClient;
+    private final OkHttpClient httpClient;
 
+    /** 单测装配：不依赖 Spring 的共享客户端。 */
     public EmbeddingService(DashScopeConfig config) {
+        this(config, new OkHttpClient());
+    }
+
+    @Autowired
+    public EmbeddingService(DashScopeConfig config, OkHttpClient sharedHttpClient) {
         this.config = config;
         int timeoutSeconds = Math.max(1, config.getEmbedding().getTimeoutSeconds());
-        RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(Timeout.ofSeconds(timeoutSeconds))
-                .setConnectionRequestTimeout(Timeout.ofSeconds(timeoutSeconds))
-                .setResponseTimeout(Timeout.ofSeconds(timeoutSeconds))
-                .build();
-        this.httpClient = HttpClients.custom()
-                .setDefaultRequestConfig(requestConfig)
+        this.httpClient = sharedHttpClient.newBuilder()
+                .connectTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                .writeTimeout(timeoutSeconds, TimeUnit.SECONDS)
                 .build();
     }
 
-    @PreDestroy
+    /** OkHttp 客户端由 Spring 统一管理，无需显式关闭；保留方法兼容单测生命周期。 */
     public void close() {
-        try {
-            httpClient.close();
-        } catch (IOException exception) {
-            logger.warn("Failed to close embedding HTTP client: {}", exception.getMessage());
-        }
+        // no-op
     }
 
     public float[] embed(String text) throws IOException {
@@ -167,25 +161,23 @@ public class EmbeddingService {
         }
         requestBody.put("input", input);
 
-        HttpPost httpPost = new HttpPost(config.getEmbedding().getBaseUrl() + "/embeddings");
-        httpPost.setHeader("Content-Type", "application/json");
-        httpPost.setHeader("Authorization", "Bearer " + config.getEmbedding().getApiKey());
-        httpPost.setEntity(new StringEntity(
-                JSON.toJSONString(requestBody), ContentType.APPLICATION_JSON));
+        Request httpRequest = new Request.Builder()
+                .url(config.getEmbedding().getBaseUrl() + "/embeddings")
+                .header("Authorization", "Bearer " + config.getEmbedding().getApiKey())
+                .post(RequestBody.create(JSON.toJSONString(requestBody),
+                        MediaType.parse("application/json")))
+                .build();
 
         long startedAt = System.nanoTime();
-        try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
-            HttpEntity entity = response.getEntity();
-            String responseBody = entity == null ? "" : EntityUtils.toString(entity, "UTF-8");
+        try (Response response = httpClient.newCall(httpRequest).execute()) {
+            String responseBody = response.body() == null ? "" : response.body().string();
             long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
             logger.info("[Embedding] batch request size={}, status={}, elapsedMs={}",
-                    inputs.size(), response.getCode(), elapsedMs);
-            if (response.getCode() != 200) {
-                throw new EmbeddingRequestException(response.getCode(), responseBody);
+                    inputs.size(), response.code(), elapsedMs);
+            if (response.code() != 200) {
+                throw new EmbeddingRequestException(response.code(), responseBody);
             }
             return parseEmbeddings(responseBody, inputs.size(), strict);
-        } catch (ParseException exception) {
-            throw new IOException("Failed to parse embedding response", exception);
         }
     }
 
@@ -276,8 +268,7 @@ public class EmbeddingService {
 
         private EmbeddingRequestException(int status, String responseBody) {
             super("Embedding API request failed with status " + status
-                    + (responseBody == null || responseBody.isBlank()
-                    ? "" : ", response: " + truncate(responseBody, 500)));
+                    + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
             this.status = status;
         }
 
@@ -287,10 +278,6 @@ public class EmbeddingService {
 
         private boolean isRetryable() {
             return status == 429 || status >= 500;
-        }
-
-        private static String truncate(String value, int maxLength) {
-            return value.length() <= maxLength ? value : value.substring(0, maxLength) + "...";
         }
     }
 }

@@ -9,12 +9,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -38,24 +39,27 @@ public class VisionService {
     @Value("${app.guard.acquire-timeout-ms:200}")
     private long acquireTimeoutMs = 200;
 
-    private volatile HttpClient httpClient;
+    private final OkHttpClient sharedHttpClient;
+    private volatile OkHttpClient visionClient;
     private volatile Semaphore slots;
 
-    public VisionService(DashScopeConfig config) {
+    public VisionService(DashScopeConfig config, OkHttpClient httpClient) {
         this.config = config;
+        this.sharedHttpClient = httpClient;
     }
 
-    private HttpClient client() {
-        HttpClient current = httpClient;
+    private OkHttpClient client() {
+        OkHttpClient current = visionClient;
         if (current == null) {
             synchronized (this) {
-                if (httpClient == null) {
-                    httpClient = HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofMillis(Math.max(1, connectTimeoutMs)))
-                            .followRedirects(HttpClient.Redirect.NEVER)
+                if (visionClient == null) {
+                    visionClient = sharedHttpClient.newBuilder()
+                            .connectTimeout(Math.max(1, connectTimeoutMs), TimeUnit.MILLISECONDS)
+                            .readTimeout(Math.max(1, readTimeoutMs), TimeUnit.MILLISECONDS)
+                            .writeTimeout(Math.max(1, readTimeoutMs), TimeUnit.MILLISECONDS)
                             .build();
                 }
-                current = httpClient;
+                current = visionClient;
             }
         }
         return current;
@@ -74,15 +78,33 @@ public class VisionService {
         return current;
     }
 
-    private <T> HttpResponse<T> sendWithGuard(HttpRequest request,
-                                              HttpResponse.BodyHandler<T> handler)
-            throws IOException, InterruptedException {
+    private String postVision(String jsonRequest) throws IOException {
+        Request request = new Request.Builder()
+                .url(visionBaseUrl() + "/chat/completions")
+                .header("Authorization", "Bearer " + visionApiKey())
+                .post(RequestBody.create(jsonRequest, MediaType.parse("application/json")))
+                .build();
+
         Semaphore permit = slots();
-        if (!permit.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS)) {
+        boolean acquired;
+        try {
+            acquired = permit.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Vision API request was interrupted", e);
+        }
+        if (!acquired) {
             throw new IOException("图片识别服务繁忙，请稍后再试");
         }
-        try {
-            return client().send(request, handler);
+        try (Response response = client().newCall(request).execute()) {
+            String responseBody = response.body() == null ? "" : response.body().string();
+            logger.info("Vision API response status: {}, body length: {}",
+                    response.code(), responseBody.length());
+            if (response.code() != 200) {
+                throw new IOException("Vision API request failed with status: " + response.code()
+                        + ", bodyLen: " + responseBody.length());
+            }
+            return responseBody;
         } finally {
             permit.release();
         }
@@ -144,30 +166,7 @@ public class VisionService {
         
         String jsonRequest = JSON.toJSONString(requestBody);
         
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(visionBaseUrl() + "/chat/completions"))
-            .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
-            .header("Authorization", "Bearer " + visionApiKey())
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
-            .build();
-
-        String responseBody;
-        try {
-            HttpResponse<String> response = sendWithGuard(request, HttpResponse.BodyHandlers.ofString());
-            responseBody = response.body();
-
-            logger.info("Vision API response status: {}, body length: {}",
-                    response.statusCode(), responseBody != null ? responseBody.length() : 0);
-
-            if (response.statusCode() != 200) {
-                throw new IOException("Vision API request failed with status: " + response.statusCode()
-                        + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Vision API request was interrupted", e);
-        }
+        String responseBody = postVision(jsonRequest);
 
         return parseVisionResponse(responseBody);
     }
@@ -218,30 +217,7 @@ public class VisionService {
         
         String jsonRequest = JSON.toJSONString(requestBody);
         
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(visionBaseUrl() + "/chat/completions"))
-            .timeout(Duration.ofMillis(Math.max(1, readTimeoutMs)))
-            .header("Authorization", "Bearer " + visionApiKey())
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(jsonRequest))
-            .build();
-
-        String responseBody;
-        try {
-            HttpResponse<String> response = sendWithGuard(request, HttpResponse.BodyHandlers.ofString());
-            responseBody = response.body();
-
-            logger.info("Vision API response status: {}, body length: {}",
-                    response.statusCode(), responseBody != null ? responseBody.length() : 0);
-
-            if (response.statusCode() != 200) {
-                throw new IOException("Vision API request failed with status: " + response.statusCode()
-                        + ", bodyLen: " + (responseBody == null ? 0 : responseBody.length()));
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Vision API request was interrupted", e);
-        }
+        String responseBody = postVision(jsonRequest);
 
         return parseVisionResponseToText(responseBody);
     }

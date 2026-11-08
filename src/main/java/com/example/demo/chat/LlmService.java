@@ -6,17 +6,11 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.config.DashScopeConfig;
 import com.example.demo.utils.JsonUtils;
 import com.example.demo.weather.tool.WeatherTool;
-import jakarta.annotation.PreDestroy;
-import org.apache.hc.client5.http.classic.methods.HttpPost;
-import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.apache.hc.core5.util.Timeout;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,9 +20,8 @@ import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 @Service
@@ -48,7 +41,8 @@ public class LlmService {
     @Value("${app.http.llm.response-timeout-ms:90000}")
     private long responseTimeoutMs = 90_000;
 
-    private volatile CloseableHttpClient httpClient;
+    private final OkHttpClient sharedHttpClient;
+    private volatile OkHttpClient llmClient;
 
     @Autowired
     @Lazy
@@ -65,41 +59,34 @@ public class LlmService {
     @Value("${chat.citations.enabled:true}")
     private boolean citationsEnabled = true;
 
+    /** 单测装配：不依赖 Spring 的共享客户端。 */
     public LlmService(DashScopeConfig config, ChatMemoryService chatMemoryService) {
-        this.config = config;
-        this.chatMemoryService = chatMemoryService;
+        this(config, chatMemoryService, new OkHttpClient());
     }
 
-    private CloseableHttpClient client() {
-        CloseableHttpClient current = httpClient;
+    @Autowired
+    public LlmService(DashScopeConfig config, ChatMemoryService chatMemoryService,
+                      OkHttpClient sharedHttpClient) {
+        this.config = config;
+        this.chatMemoryService = chatMemoryService;
+        this.sharedHttpClient = sharedHttpClient;
+    }
+
+    private OkHttpClient client() {
+        OkHttpClient current = llmClient;
         if (current == null) {
             synchronized (this) {
-                if (httpClient == null) {
-                    RequestConfig requestConfig = RequestConfig.custom()
-                            .setConnectTimeout(Timeout.ofMilliseconds(Math.max(1, connectTimeoutMs)))
-                            .setConnectionRequestTimeout(Timeout.ofMilliseconds(Math.max(1, connectionRequestTimeoutMs)))
-                            .setResponseTimeout(Timeout.ofMilliseconds(Math.max(1, responseTimeoutMs)))
-                            .build();
-                    httpClient = HttpClients.custom()
-                            .setDefaultRequestConfig(requestConfig)
+                if (llmClient == null) {
+                    llmClient = sharedHttpClient.newBuilder()
+                            .connectTimeout(Math.max(1, connectTimeoutMs), TimeUnit.MILLISECONDS)
+                            .readTimeout(Math.max(1, responseTimeoutMs), TimeUnit.MILLISECONDS)
+                            .writeTimeout(Math.max(1, responseTimeoutMs), TimeUnit.MILLISECONDS)
                             .build();
                 }
-                current = httpClient;
+                current = llmClient;
             }
         }
         return current;
-    }
-
-    @PreDestroy
-    public void closeClient() {
-        CloseableHttpClient current = httpClient;
-        if (current != null) {
-            try {
-                current.close();
-            } catch (IOException e) {
-                logger.debug("Failed to close LLM http client", e);
-            }
-        }
     }
 
     public String chat(String userMessage) throws IOException {
@@ -137,28 +124,24 @@ public class LlmService {
     public JSONObject executeChatRequestWithResponse(JSONObject requestBody) throws IOException {
         String jsonRequest = JSON.toJSONString(requestBody);
         
-        HttpPost httpPost = new HttpPost(config.getBaseUrl() + "/chat/completions");
-        httpPost.setHeader("Content-Type", "application/json");
-        httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
-        httpPost.setEntity(new StringEntity(jsonRequest, ContentType.APPLICATION_JSON));
-        
-        try (CloseableHttpResponse response = client().execute(httpPost)) {
-            HttpEntity entity = response.getEntity();
-            String responseBody = "";
-            if (entity != null) {
-                responseBody = EntityUtils.toString(entity, "UTF-8");
-            }
-            
-            logger.info("LLM API response status: {}, body: {}", response.getCode(),
+        Request httpRequest = new Request.Builder()
+                .url(config.getBaseUrl() + "/chat/completions")
+                .header("Authorization", "Bearer " + config.getApiKey())
+                .post(RequestBody.create(jsonRequest, MediaType.parse("application/json")))
+                .build();
+
+        try (Response response = client().newCall(httpRequest).execute()) {
+            String responseBody = response.body() == null ? "" : response.body().string();
+
+            logger.info("LLM API response status: {}, body: {}", response.code(),
                     com.example.demo.core.LogSanitizer.describe(responseBody));
-            
-            if (response.getCode() != 200) {
-                throw new IOException("LLM API request failed with status: " + response.getCode() + ", body: " + responseBody);
+
+            if (response.code() != 200) {
+                throw new IOException("LLM API request failed with status: " + response.code()
+                        + ", bodyLen: " + responseBody.length());
             }
-            
+
             return JSON.parseObject(responseBody);
-        } catch (org.apache.hc.core5.http.ParseException e) {
-            throw new IOException("Failed to parse LLM response", e);
         }
     }
 
@@ -300,20 +283,21 @@ public class LlmService {
         requestBody.put("messages", messages);
         requestBody.put("stream", true);
 
-        HttpPost httpPost = new HttpPost(config.getBaseUrl() + "/chat/completions");
-        httpPost.setHeader("Content-Type", "application/json");
-        httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
-        httpPost.setEntity(new StringEntity(JSON.toJSONString(requestBody), ContentType.APPLICATION_JSON));
+        Request httpRequest = new Request.Builder()
+                .url(config.getBaseUrl() + "/chat/completions")
+                .header("Authorization", "Bearer " + config.getApiKey())
+                .post(RequestBody.create(JSON.toJSONString(requestBody),
+                        MediaType.parse("application/json")))
+                .build();
 
         StringBuilder fullReply = new StringBuilder();
-        client().execute(httpPost, response -> {
-            if (response.getCode() != 200) {
-                throw new IOException("Streaming LLM request failed with status: " + response.getCode());
+        try (Response response = client().newCall(httpRequest).execute()) {
+            if (response.code() != 200) {
+                throw new IOException("Streaming LLM request failed with status: " + response.code());
             }
 
             boolean completed = false;
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(response.getEntity().getContent(), StandardCharsets.UTF_8))) {
+            try (BufferedReader reader = new BufferedReader(response.body().charStream())) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (!line.startsWith("data:")) {
@@ -363,8 +347,7 @@ public class LlmService {
                             conversationId, e);
                 }
             }
-            return null;
-        });
+        }
         onDone.run();
     }
 
@@ -384,7 +367,8 @@ public class LlmService {
                                  Consumer<List<RagContextService.SourceRef>> onSources,
                                  boolean includeCitations) throws IOException {
         boolean citationEnabled = includeCitations && citationsEnabled;
-        logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}", userId, conversationId, userMessage);
+        logger.info("Chat with memory, userId: {}, conversationId: {}, userMessage: {}",
+                userId, conversationId, com.example.demo.core.LogSanitizer.describe(userMessage));
 
         String effectivePrompt = systemPrompt;
         if (weatherTool != null && WeatherTool.matchesIntent(userMessage)) {
@@ -532,7 +516,8 @@ public class LlmService {
         JSONObject choice = (JSONObject) choiceObj;
         Object messageObj = choice.get("message");
         if (!(messageObj instanceof JSONObject)) {
-            logger.warn("LLM message is not a JSONObject: {}", messageObj);
+            logger.warn("LLM message is not a JSONObject: {}",
+                    com.example.demo.core.LogSanitizer.describe(String.valueOf(messageObj)));
             return "抱歉，我现在无法回答你的问题。";
         }
         
