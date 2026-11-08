@@ -32,8 +32,8 @@ public class WebPushService {
             // web-push 5.1.2 的 Utils 用 java.util.Base64.getUrlDecoder() 解码密钥，
             // 不能转成标准 Base64（会引入 +//，URL 解码器直接报 Illegal base64 character 2f）。
             // 这里统一规范成无填充的 URL-safe 形式，兼容配置里写成标准 Base64 的情况。
-            tmp.setPublicKey(normalizeVapidKey(vapidPublicKey));
-            tmp.setPrivateKey(normalizeVapidKey(vapidPrivateKey));
+            tmp.setPublicKey(normalizeBase64Url(vapidPublicKey));
+            tmp.setPrivateKey(normalizeBase64Url(vapidPrivateKey));
             tmp.setSubject(vapidSubject);
             tmpEnabled = true;
             logger.info("WebPush service initialized successfully");
@@ -44,7 +44,8 @@ public class WebPushService {
         this.enabled = tmpEnabled;
     }
 
-    private static String normalizeVapidKey(String key) {
+    /** 统一成无填充的 URL-safe Base64；web-push 5.1.2 的解码器只接受这种形式。 */
+    private static String normalizeBase64Url(String key) {
         if (key == null) {
             return null;
         }
@@ -110,8 +111,13 @@ public class WebPushService {
                     escapeJson(title), escapeJson(body), escapeJson(url)
             );
             byte[] payload = payloadJson.getBytes(StandardCharsets.UTF_8);
+            // 浏览器端用 btoa 上报的是标准 Base64（含 +//），库 5.1.2 用 URL-safe 解码器读取。
             nl.martijndwars.webpush.Notification notification =
-                    new nl.martijndwars.webpush.Notification(sub.getEndpoint(), sub.getP256dh(), sub.getAuth(), payload);
+                    new nl.martijndwars.webpush.Notification(
+                            sub.getEndpoint(),
+                            normalizeBase64Url(sub.getP256dh()),
+                            normalizeBase64Url(sub.getAuth()),
+                            payload);
             libraryPushService.send(notification);
         } catch (Exception e) {
             logger.warn("Failed to send push to user {}: {}", sub.getUserId(), e.getMessage());
