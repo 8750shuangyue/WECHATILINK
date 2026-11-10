@@ -6,6 +6,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityHeadersFilterTest {
@@ -27,5 +28,36 @@ class SecurityHeadersFilterTest {
         assertTrue(response.getHeader("Permissions-Policy") != null);
         // 链继续执行：MockFilterChain 记录已到达后续请求
         assertTrue(chain.getRequest() != null);
+    }
+
+    @Test
+    void allowsRootScopeOnlyForServiceWorkerScript() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/js/service-worker.js");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertEquals("/", response.getHeader("Service-Worker-Allowed"));
+        assertEquals("no-cache, must-revalidate", response.getHeader("Cache-Control"));
+    }
+
+    @Test
+    void doesNotAllowRootScopeForOtherScripts() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/js/push.js");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertNull(response.getHeader("Service-Worker-Allowed"));
+    }
+
+    @Test
+    void doesNotMatchServiceWorkerPathSuffix() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/js/service-worker.js.map");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertNull(response.getHeader("Service-Worker-Allowed"));
     }
 }

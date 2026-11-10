@@ -25,6 +25,11 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
         // 页面入口强制协商缓存，避免发版后浏览器继续使用旧 HTML；静态资源与接口不受影响。
         String uri = request.getRequestURI();
+        if ("/js/service-worker.js".equals(uri)) {
+            // 允许把推送 SW 的作用域从 /js/ 扩大到根路径，同时避免脚本被长期缓存。
+            response.setHeader("Service-Worker-Allowed", "/");
+            response.setHeader("Cache-Control", "no-cache, must-revalidate");
+        }
         if (uri != null
                 && !uri.startsWith("/api/")
                 && !uri.startsWith("/uploads/")

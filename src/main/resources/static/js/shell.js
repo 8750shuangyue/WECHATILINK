@@ -79,15 +79,5 @@
         el.title = value;
     };
 
-    /* 页面自己也会校验登录；这里只负责把名字填进侧栏，失败时保持空白。 */
-    fetch('/api/auth/me', { cache: 'no-store' })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-            if (!data || data.code !== 200 || !data.data) return;
-            var el = document.getElementById('ui-user');
-            if (el && !el.textContent) {
-                window.setShellUser(data.data.userName || data.data.user || '');
-            }
-        })
-        .catch(function () { /* 未登录由页面守卫处理 */ });
+    /* 用户名由 common.js 的 UI.me() 统一填充，避免 shell + 页面重复请求。 */
 })();

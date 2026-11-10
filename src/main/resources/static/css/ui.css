@@ -681,3 +681,40 @@ a.ui-kpi:hover { border-color: var(--ui-line-strong); box-shadow: var(--ui-shado
         scroll-behavior: auto !important;
     }
 }
+
+/* 全局 Toast：由 common.js 的 UI.toast 创建并复用 */
+.ui-toast {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 9999;
+    max-width: min(420px, calc(100vw - 32px));
+    padding: 12px 18px;
+    border-radius: 12px;
+    background: #263a2e;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.45;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+}
+
+.ui-toast.is-visible {
+    opacity: 1;
+    transform: none;
+}
+
+.ui-toast--success { background: #166534; }
+.ui-toast--error { background: #9f1239; }
+.ui-toast--warning { background: #92400e; }
+
+@media (max-width: 640px) {
+    .ui-toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ui-toast { transition: none; }
+}

@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>概览 · Sekai PetPlant</title>
-    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
-    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
+    <link rel="stylesheet" href="/css/ui.css?v=20261110a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261110a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body class="ui-app page-home">
-<script src="/js/shell.js?v=20261107a"></script>
+<script src="/js/shell.js?v=20261110a"></script>
 
 <main class="ui-main">
     <div class="ui-wrap">
@@ -110,58 +110,49 @@
     </div>
 </main>
 
-<script src="/js/guard.js?v=20261107a"></script>
-<script src="/js/common.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261110a"></script>
+<script src="/js/common.js?v=20261110a"></script>
 <script>
-const VAPID_PUBLIC_KEY = 'BLrXSeSFooC3M926Z4JKDI5KFP9_eQ4UBTECVv6--H-hDrcPSBv-qRmilQxywzLw7hRO5qrLiciyeaU3dn4che8';
-const SW_PATH = '/js/service-worker.js';
-
 document.getElementById('todayDate').textContent = new Date().toLocaleDateString('zh-CN', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
 });
 
-fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.json()).then(data => {
-    if (data.code === 200) {
-        var name = data.data.userName || data.data.user || '';
-        document.getElementById('greetingName').textContent = name;
-        if (window.setShellUser) window.setShellUser(name);
-        loadOverview();
-        checkPushStatus();
-    } else {
-        location.href = '/login';
-    }
-}).catch(() => {
-    location.href = '/login';
+requireLogin(function (data) {
+    var name = data.userName || data.user || '';
+    document.getElementById('greetingName').textContent = name;
+    if (window.setShellUser) window.setShellUser(name);
+    loadOverview();
+    checkPushStatus();
 });
 
 async function loadOverview() {
     const results = await Promise.allSettled([
-        fetch('/api/care/targets/PLANT'),
-        fetch('/api/care/targets/PET'),
-        fetch('/api/ai/care/reminders/pending'),
-        fetch('/api/ai/care/reminders')
+        UI.apiJson('/api/care/targets/PLANT'),
+        UI.apiJson('/api/care/targets/PET'),
+        UI.apiJson('/api/ai/care/reminders/pending'),
+        UI.apiJson('/api/ai/care/reminders')
     ]);
 
     // 植物 / 宠物档案数
     try {
-        const plant = await results[0].value.json();
+        const plant = results[0].value;
         if (plant.code === 200) document.getElementById('plantCount').textContent = (plant.data || []).length;
     } catch (e) { /* 保持占位 */ }
 
     try {
-        const pet = await results[1].value.json();
+        const pet = results[1].value;
         if (pet.code === 200) document.getElementById('petCount').textContent = (pet.data || []).length;
     } catch (e) { /* 保持占位 */ }
 
     // 待办数量
     try {
-        const pending = await results[2].value.json();
+        const pending = results[2].value;
         if (pending.success) document.getElementById('pendingCount').textContent = pending.count;
     } catch (e) { /* 保持占位 */ }
 
     // 最近一条待办
     try {
-        const list = await results[3].value.json();
+        const list = results[3].value;
         renderNextReminder((list && list.data) || []);
     } catch (e) {
         document.getElementById('nextReminder').textContent = '暂时无法获取提醒，点这里去提醒页查看。';
@@ -207,10 +198,6 @@ function renderNextReminder(rows) {
         (next.content || '护理提醒') + ' · ' + when + (overdue ? '（已到期）' : '');
 }
 
-function logout() {
-    fetch('/api/auth/logout', { method: 'POST' }).then(() => location.href = '/login');
-}
-
 // Push
 async function checkPushStatus() {
     const toggle = document.getElementById('pushToggle');
@@ -219,7 +206,8 @@ async function checkPushStatus() {
         return;
     }
     try {
-        const reg = await navigator.serviceWorker.register(SW_PATH);
+        const reg = await UI.sw.getRegistration();
+        if (!reg) { toggle.disabled = true; return; }
         const sub = await reg.pushManager.getSubscription();
         toggle.checked = !!sub;
     } catch (e) {}
@@ -228,36 +216,26 @@ async function checkPushStatus() {
 async function togglePush() {
     const toggle = document.getElementById('pushToggle');
     try {
-        const reg = await navigator.serviceWorker.getRegistration(SW_PATH) ||
-            await navigator.serviceWorker.register(SW_PATH);
+        const reg = await UI.sw.getRegistration();
+        if (!reg) throw new Error('service worker unavailable');
 
         if (toggle.checked) {
             const sub = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY)
+                applicationServerKey: UI.sw.applicationServerKey()
             });
-            const p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh'))));
-            const auth = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('auth'))));
-            const res = await fetch('/api/push/subscribe', {
+            const data = await UI.apiJson('/api/push/subscribe', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: sub.endpoint,
-                    p256dh: p256dh,
-                    auth: auth,
-                    userAgent: navigator.userAgent
-                })
+                body: UI.sw.payload(sub)
             });
-            const data = await res.json();
             if (data.code !== 200) throw new Error(data.message || 'subscribe failed');
         } else {
             const sub = await reg.pushManager.getSubscription();
             if (sub) {
                 await sub.unsubscribe();
-                await fetch('/api/push/unsubscribe', {
+                await UI.apiJson('/api/push/unsubscribe', {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ endpoint: sub.endpoint })
+                    body: { endpoint: sub.endpoint }
                 });
             }
         }
@@ -266,12 +244,6 @@ async function togglePush() {
     }
 }
 
-function urlB64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = atob(base64);
-    return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
-}
 </script>
 </body>
 </html>

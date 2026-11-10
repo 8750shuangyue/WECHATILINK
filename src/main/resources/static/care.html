@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>植物与宠物 AI 护理助手</title>
-    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
-    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
+    <link rel="stylesheet" href="/css/ui.css?v=20261110a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261110a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body class="ui-app page-care">
-<script src="/js/shell.js?v=20261107a"></script>
+<script src="/js/shell.js?v=20261110a"></script>
 
 <main class="ui-main">
     <div class="ui-wrap">
@@ -95,17 +95,17 @@
     </div>
 </main>
 
-<script src="/js/guard.js?v=20261107a"></script>
-<script src="/js/common.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261110a"></script>
+<script src="/js/common.js?v=20261110a"></script>
 <script>
 let type='PLANT', imageData='', diagnosis='', lastReply='', lastTargetName='';
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=UI.escapeHtml;
 
-fetch('/api/auth/me', { cache: 'no-store' }).then(r=>r.json()).then(x=>{
-    if(x.code!==200){ location.href='/login'; return; }
-    if(window.setShellUser) window.setShellUser(x.data.userName || x.data.user || '');
+requireLogin(function (data) {
+    if(window.setShellUser) window.setShellUser(data.userName || data.user || '');
+    loadTargets();
+    loadAssets();
 });
-function toast(s){ showToast(s); }
 
 function switchType(t){
     type=t;
@@ -127,17 +127,14 @@ function recognize(file){
     uploadBox.classList.add('loading');
     compressImage(file).then(function(b64){
         imageData='data:image/webp;base64,'+b64;
-        return fetch('/api/care/identify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,image:b64})})
-    }).then(function(r){
-        if(!r.ok)throw Error('识别失败');
-        return r.json()
+        return UI.apiJson('/api/care/identify',{method:'POST',body:{type,image:b64}});
     }).then(function(x){
         diagnosis=x.data.result;
         resultText.textContent=diagnosis;
         emptyResult.style.display='none';
         aiResult.style.display='block';
         species.value=extractSpecies(diagnosis)
-    }).catch(function(e){toast(e.message)}).finally(function(){uploadBox.classList.remove('loading')})
+    }).catch(function(e){showToast(e.message)}).finally(function(){uploadBox.classList.remove('loading')})
 }
 
 function extractSpecies(s){
@@ -146,19 +143,17 @@ function extractSpecies(s){
 }
 
 async function saveTarget(){
-    if(!targetName.value.trim())return toast('请填写档案名称');
+    if(!targetName.value.trim())return showToast('请填写档案名称');
     const body={name:targetName.value.trim(),species:species.value.trim(),breed:breed.value.trim(),imageUrl:imageData?'data:image/uploaded':''};
-    const r=await fetch('/api/care/targets/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!r.ok)return toast('保存失败');
+    const x=await UI.apiJson('/api/care/targets/'+type,{method:'POST',body});
+    if(!x || x.code!==200)return showToast('保存失败');
     targetName.value='';
-    toast('档案已保存');
+    showToast('档案已保存');
     loadTargets()
 }
 
 async function loadTargets(){
-    const r=await fetch('/api/care/targets/'+type);
-    if(r.status===401)return location.href='/login';
-    const x=await r.json();
+    const x=await UI.apiJson('/api/care/targets/'+type);
     const rows=x.data;
     targets.innerHTML=rows.length?rows.map(cardHtml).join(''):'<div class="ui-empty">还没有档案，上传照片识别或直接创建一个吧。</div>';
     updateTargetSelect(rows)
@@ -171,8 +166,7 @@ function cardHtml(x){
 async function showRecords(id,btn){
     const box=document.getElementById('records-'+id);
     if(box.style.display!=='none'){box.style.display='none';return}
-    const r=await fetch(`/api/care/records/${type}/${id}`);
-    const x=await r.json();
+    const x=await UI.apiJson(`/api/care/records/${type}/${id}`);
     const rows=x.data;
     box.innerHTML=rows.length?rows.map(x=>`<div class="care-record"><b>${esc(x.recordType||'护理')}</b> · ${esc(x.content||'')}<div class="muted">${esc(x.createdAt||'')}</div></div>`).join(''):'<div class="ui-empty">暂无护理记录</div>';
     box.style.display='block'
@@ -183,8 +177,8 @@ async function addRecord(id){
     if(!recordType)return;
     const content=prompt('记录详情');
     if(content===null)return;
-    await fetch('/api/care/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetType:type,targetId:id,recordType,content})});
-    toast('护理记录已保存');
+    await UI.apiJson('/api/care/records',{method:'POST',body:{targetType:type,targetId:id,recordType,content}});
+    showToast('护理记录已保存');
     const box=document.getElementById('records-'+id);
     box.style.display='none';
     showRecords(id)
@@ -192,7 +186,7 @@ async function addRecord(id){
 
 async function removeTarget(id){
     if(!confirm('确定删除档案及其护理记录？'))return;
-    await fetch(`/api/care/targets/${type}/${id}`,{method:'DELETE'});
+    await UI.apiJson(`/api/care/targets/${type}/${id}`,{method:'DELETE'});
     loadTargets()
 }
 
@@ -215,9 +209,7 @@ async function loadTimeline(targetId){
     if(!targetId){box.innerHTML='<div class="muted">选择一个档案后查看成长记录。</div>';return}
     box.innerHTML='<div class="muted">加载中…</div>';
     try{
-        const r=await fetch('/api/care/records/'+type+'/'+targetId);
-        if(r.status===401)return location.href='/login';
-        const x=await r.json();
+        const x=await UI.apiJson('/api/care/records/'+type+'/'+targetId);
         const rows=x.data||[];
         box.innerHTML=rows.length?rows.map(e=>`<div class="care-record"><b>${esc(e.recordType||'护理')}</b>${e.content?' · '+esc(e.content):''}<div class="muted">${esc(e.createdAt||'')}</div></div>`).join(''):'<div class="ui-empty">暂无护理记录</div>'
     }catch(e){box.innerHTML='<div class="muted">成长记录加载失败</div>'}
@@ -226,9 +218,7 @@ async function loadTimeline(targetId){
 async function loadAssets(){
     const box=document.getElementById('assetsBox');
     try{
-        const r=await fetch('/api/gallery/list');
-        if(r.status===401)return location.href='/login';
-        const x=await r.json();
+        const x=await UI.apiJson('/api/gallery/list');
         const rows=x.data||[];
         if(!rows.length){box.innerHTML='<div class="muted">还没有素材，去对话页让 AI 生成图片或语音吧。</div>';return}
         box.innerHTML='<div class="care-assets">'+rows.map(a=>{
@@ -244,15 +234,14 @@ async function loadAssets(){
 
 async function askAI(){
     const q=question.value.trim();
-    if(!q)return toast('请输入护理问题');
+    if(!q)return showToast('请输入护理问题');
     qaResult.style.display='block';
     qaResult.textContent='AI正在分析中…';
     qaSummary.style.display='none';
     summaryBtnContainer.style.display='none';
     const targetSelect=document.getElementById('targetSelect');
     const targetId=targetSelect.value?parseInt(targetSelect.value):null;
-    const r=await fetch('/api/care/qa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,targetType:type,targetId:targetId,includeCitations:true})});
-    const x=await r.json();
+    const x=await UI.apiJson('/api/care/qa',{method:'POST',body:{question:q,targetType:type,targetId:targetId,includeCitations:true}});
     const _sources=(x.data&&x.data.sources)||[];
     renderAnswerWithCitations(qaResult,x.data.reply||'暂时无法回答',_sources,{idPrefix:'care'});
     renderSourcesBlock(qaResult,_sources,{idPrefix:'care'});
@@ -262,16 +251,13 @@ async function askAI(){
 }
 
 async function generateSummary(){
-    if(!lastReply)return toast('请先提问获取护理建议');
+    if(!lastReply)return showToast('请先提问获取护理建议');
     qaSummary.style.display='block';
     summaryText.textContent='AI正在生成摘要…';
-    const r=await fetch('/api/care/qa/summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reply:lastReply,targetType:type,targetName:lastTargetName})});
-    const x=await r.json();
-    summaryText.textContent=x.data.summary||'无法生成摘要'
+    const x=await UI.apiJson('/api/care/qa/summary',{method:'POST',body:{reply:lastReply,targetType:type,targetName:lastTargetName}});
+    summaryText.textContent=(x.data&&x.data.summary)||'无法生成摘要'
 }
 
-loadTargets();
-loadAssets();
 </script>
 </body>
 </html>

@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sekai PetPlant - 护理提醒</title>
-    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
-    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
+    <link rel="stylesheet" href="/css/ui.css?v=20261110a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261110a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body class="ui-app page-reminders">
-<script src="/js/shell.js?v=20261107a"></script>
+<script src="/js/shell.js?v=20261110a"></script>
 
 <main class="ui-main">
     <div class="ui-wrap">
@@ -84,8 +84,8 @@
     </div>
 </main>
 
-<script src="/js/guard.js?v=20261107a"></script>
-<script src="/js/common.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261110a"></script>
+<script src="/js/common.js?v=20261110a"></script>
 <script>
 var currentUser = '';
 
@@ -97,8 +97,7 @@ requireLogin(function (data) {
 
 async function loadReminders() {
     try {
-        var res = await apiFetch('/api/ai/care/reminders');
-        var x = await res.json();
+        var x = await UI.apiJson('/api/ai/care/reminders');
         var rows = (x.data || []).slice(0, 20);
         var pending = rows.filter(function (r) { return r.status === 'PENDING'; }).length;
         var sent = rows.filter(function (r) { return r.status === 'SENT'; }).length;
@@ -136,11 +135,7 @@ function renderList(rows) {
     }).join('');
 }
 
-function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
-    });
-}
+var esc = UI.escapeHtml;
 
 async function createReminder() {
     var content = document.getElementById('rmContent').value.trim();
@@ -148,15 +143,14 @@ async function createReminder() {
     if (!content) return showToast('请填写提醒内容');
     if (!time) return showToast('请选择计划时间');
     try {
-        var res = await apiFetch('/api/ai/care/reminder', {
+        var x = await UI.apiJson('/api/ai/care/reminder', {
             method: 'POST',
-            body: JSON.stringify({
+            body: {
                 title: document.getElementById('rmType').value,
                 content: content,
                 reminderTime: time
-            })
+            }
         });
-        var x = await res.json();
         if (x.success) {
             showToast('提醒已创建');
             document.getElementById('rmContent').value = '';
@@ -173,11 +167,10 @@ async function createReminder() {
 async function generateBriefing() {
     var box = document.getElementById('briefingBox');
     var btn = document.getElementById('briefingBtn');
-    btn.disabled = true;
+    UI.setBusy(btn, true, { text: '生成中…' });
     box.innerHTML = 'AI 正在生成日报…';
     try {
-        var res = await apiFetch('/api/briefing/generate', { method: 'POST' });
-        var x = await res.json();
+        var x = await UI.apiJson('/api/briefing/generate', { method: 'POST' });
         if (x.code === 200 && x.data) {
             box.innerHTML = esc(x.data).replace(/\n/g, '<br>');
         } else {
@@ -186,17 +179,16 @@ async function generateBriefing() {
     } catch (e) {
         box.innerHTML = '生成失败，请稍后重试';
     } finally {
-        btn.disabled = false;
+        UI.setBusy(btn, false);
     }
 }
 
 async function completeReminder(id) {
     try {
-        var res = await apiFetch('/api/ai/care/reminder/' + id + '/complete', {
+        var x = await UI.apiJson('/api/ai/care/reminder/' + id + '/complete', {
             method: 'POST',
-            body: '{}'
+            body: {}
         });
-        var x = await res.json();
         if (x.success) {
             showToast('已完成');
             loadReminders();

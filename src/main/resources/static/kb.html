@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sekai PetPlant - 知识库管理</title>
-    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
-    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
+    <link rel="stylesheet" href="/css/ui.css?v=20261110a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261110a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body class="ui-app page-kb">
-<script src="/js/shell.js?v=20261107a"></script>
+<script src="/js/shell.js?v=20261110a"></script>
 
 <main class="ui-main">
     <div class="ui-wrap">
@@ -39,8 +39,8 @@
     </div>
 </main>
 
-<script src="/js/guard.js?v=20261107a"></script>
-<script src="/js/common.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261110a"></script>
+<script src="/js/common.js?v=20261110a"></script>
 <script>
 var currentUser = '';
 
@@ -50,16 +50,11 @@ requireLogin(function (data) {
     loadDocs();
 });
 
-function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
-    });
-}
+var esc = UI.escapeHtml;
 
 async function loadDocs() {
     try {
-        var res = await apiFetch('/api/kb/list');
-        var x = await res.json();
+        var x = await UI.apiJson('/api/kb/list');
         var docs = x.data || [];
         document.getElementById('docCount').textContent = docs.length;
         var box = document.getElementById('docList');
@@ -86,13 +81,12 @@ async function uploadDoc() {
     var file = document.getElementById('kbFile').files[0];
     if (!file) return showToast('请先选择文件');
     var btn = document.getElementById('uploadBtn');
-    btn.disabled = true;
+    UI.setBusy(btn, true, { text: '上传中…' });
     document.getElementById('uploadHint').textContent = '正在解析并向量化…';
     try {
         var form = new FormData();
         form.append('file', file);
-        var res = await fetch('/api/kb/upload', { method: 'POST', body: form });
-        var x = await res.json();
+        var x = await UI.apiJson('/api/kb/upload', { method: 'POST', body: form });
         if (x.success) {
             showToast('入库成功：' + ((x.data && x.data.count) || 0) + ' 个片段');
             document.getElementById('uploadHint').textContent = '支持 PDF、Word、TXT、Markdown，单个不超过 10MB。';
@@ -106,15 +100,14 @@ async function uploadDoc() {
         showToast('上传失败：' + e.message);
         document.getElementById('uploadHint').textContent = '上传失败，请重试';
     } finally {
-        btn.disabled = false;
+        UI.setBusy(btn, false);
     }
 }
 
 async function deleteDoc(sourceId) {
     if (!confirm('确定删除该文档及其向量吗？')) return;
     try {
-        var res = await apiFetch('/api/kb/' + encodeURIComponent(sourceId), { method: 'DELETE' });
-        var x = await res.json();
+        var x = await UI.apiJson('/api/kb/' + encodeURIComponent(sourceId), { method: 'DELETE' });
         if (x.success) { showToast('已删除'); loadDocs(); }
         else showToast(x.message || '删除失败');
     } catch (e) {

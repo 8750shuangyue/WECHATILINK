@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sekai PetPlant - AI 对话</title>
-    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
-    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
+    <link rel="stylesheet" href="/css/ui.css?v=20261110a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261110a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 </head>
 <body class="ui-app page-chat">
-<script src="/js/shell.js?v=20261107a"></script>
+<script src="/js/shell.js?v=20261110a"></script>
 
 <main class="ui-main">
 <div class="ui-wrap ui-wrap--chat">
@@ -70,8 +70,8 @@
 </div>
 </main>
 
-<script src="/js/guard.js?v=20261107a"></script>
-<script src="/js/common.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261110a"></script>
+<script src="/js/common.js?v=20261110a"></script>
 <script>
 document.getElementById('headerSys').textContent = 'AI 对话助手';
 document.getElementById('sidebarSys').textContent = 'Web AI 助手';
@@ -88,13 +88,9 @@ capabilities.forEach(function(c) {
 var imageBase64 = null;
 var historyLoadPromise = Promise.resolve();
 
-fetch('/api/auth/me').then(r => r.json()).then(data => {
-    if (data.code === 200) {
-        if (window.setShellUser) window.setShellUser(data.data.userName);
-        historyLoadPromise = loadHistory();
-    } else {
-        location.href = '/login';
-    }
+requireLogin(function (data) {
+    if (window.setShellUser) window.setShellUser(data.userName || data.user || '');
+    historyLoadPromise = loadHistory();
 });
 
 function addMessage(text, dir, from, time) {
@@ -102,7 +98,9 @@ function addMessage(text, dir, from, time) {
     var isIn = dir === 'in';
     div.className = 'msg ' + (isIn ? 'bot-msg' : 'user-msg');
     var timeStr = time ? ' ' + time : '';
-    div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#1f7a4d' : '#5c6b62') + ';margin-bottom:3px;">' + from + timeStr + '</div>' + text.replace(/\n/g, '<br>') + '</div>';
+    var fromSafe = UI.escapeHtml(from || '') + UI.escapeHtml(timeStr);
+    var textSafe = UI.escapeHtml(text == null ? '' : text).replace(/\n/g, '<br>');
+    div.innerHTML = '<div class="msg-bubble ' + (isIn ? 'bot-bubble' : 'user-bubble') + '"><div style="font-size:11px;color:' + (isIn ? '#1f7a4d' : '#5c6b62') + ';margin-bottom:3px;">' + fromSafe + '</div>' + textSafe + '</div>';
     document.getElementById('chatMessages').appendChild(div);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
     return div;
@@ -152,14 +150,12 @@ function toggleToolMode() {
 async function clearChat() {
     var clearBtn = document.getElementById('clearChatBtn');
     if (clearBtn && clearBtn.disabled) return;
-    if (clearBtn) clearBtn.disabled = true;
+    UI.setBusy(clearBtn, true, { text: '清空中…' });
     var box = document.getElementById('chatMessages');
     try {
-        var res = await fetch('/api/ai/chat/clear', { method: 'POST' });
-        var data = {};
-        try { data = await res.json(); } catch (e) {}
-        if (!res.ok || !data.success) {
-            showToast(data.error || '清空会话失败，请重试');
+        var data = await UI.apiJson('/api/ai/chat/clear', { method: 'POST' });
+        if (!data || !data.success) {
+            showToast((data && (data.error || data.message)) || '清空会话失败，请重试');
             return;
         }
         box.innerHTML = '<div class="msg system-msg"><div class="msg-bubble system-bubble">已清空会话，可以开始新的提问。</div></div>';
@@ -169,20 +165,20 @@ async function clearChat() {
     } catch (e) {
         showToast('清空会话失败，请重试');
     } finally {
-        if (clearBtn) clearBtn.disabled = false;
+        UI.setBusy(clearBtn, false);
     }
 }
 
 function handleImage(e) {
     var file = e.target.files[0];
     if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function(ev) {
-        imageBase64 = ev.target.result.split(',')[1];
-        document.getElementById('previewImg').src = ev.target.result;
+    compressImage(file).then(function (b64) {
+        imageBase64 = b64;
+        document.getElementById('previewImg').src = 'data:image/webp;base64,' + b64;
         document.getElementById('imagePreview').style.display = 'block';
-    };
-    reader.readAsDataURL(file);
+    }).catch(function (e2) {
+        showToast(e2.message || '图片读取失败');
+    });
 }
 
 function removeImage() {
@@ -275,10 +271,8 @@ async function loadEarlier(beforeId, wrap) {
     if (!beforeId) return;
     var box = document.getElementById('chatMessages');
     try {
-        var res = await fetch('/api/ai/chat/history?limit=50&beforeId=' + encodeURIComponent(beforeId),
+        var data = await UI.apiJson('/api/ai/chat/history?limit=50&beforeId=' + encodeURIComponent(beforeId),
             {cache: 'no-store'});
-        if (!res.ok) return;
-        var data = await res.json();
         if (!data || !data.success || !Array.isArray(data.messages) || !data.messages.length) return;
 
         var oldHeight = box.scrollHeight;
@@ -299,9 +293,7 @@ async function loadEarlier(beforeId, wrap) {
 
 async function loadHistory() {
     try {
-        var res = await fetch('/api/ai/chat/history?limit=50', {cache: 'no-store'});
-        if (!res.ok) return;
-        var data = await res.json();
+        var data = await UI.apiJson('/api/ai/chat/history?limit=50', {cache: 'no-store'});
         if (!data || !data.success || !Array.isArray(data.messages) || !data.messages.length) return;
 
         var box = document.getElementById('chatMessages');
@@ -321,7 +313,7 @@ function addBotText(text, small) {
     var div = document.createElement('div');
     div.className = 'msg bot-msg';
     div.innerHTML = '<div class="msg-bubble bot-bubble"' + (small ? ' style="font-size:12px;opacity:.85;"' : '') + '>' +
-        text.replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
+        UI.escapeHtml(text == null ? '' : text).replace(/\n/g, '<br>') + '</div>';
     document.getElementById('chatMessages').appendChild(div);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
@@ -344,12 +336,10 @@ function renderGeneratedAsset(path) {
 async function sendTextWithTools(text) {
     showThinking();
     try {
-        var res = await fetch('/api/ai/chat-with-tools', {
+        var data = await UI.apiJson('/api/ai/chat-with-tools', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
+            body: { message: text }
         });
-        var data = await res.json();
         hideThinking();
         if (!data.success) {
             addBotText(data.error || '工具对话失败，请重试');
@@ -476,12 +466,10 @@ async function sendText() {
                 renderSourcesBlock(liveMsg, sources, {idPrefix: liveId});
             }
         } else {
-            var res = await fetch('/api/care/qa', {
+            var x = await UI.apiJson('/api/care/qa', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ question: '请分析这张图片', includeCitations: true })
+                body: { question: '请分析这张图片', includeCitations: true }
             });
-            var x = await res.json();
             var reply = (x.data && x.data.reply) ? x.data.reply : null;
             if (reply) {
                 var replyMsg = createHistoryAssistantMessage({
@@ -563,8 +551,7 @@ async function uploadVoice() {
     fd.append('file', blob, 'voice_' + Date.now() + '.webm');
     showToast('正在识别语音…');
     try {
-        var res = await fetch('/api/asr/transcribe', { method: 'POST', body: fd });
-        var data = await res.json();
+        var data = await UI.apiJson('/api/asr/transcribe', { method: 'POST', body: fd });
         if (data.success && data.text) {
             document.getElementById('msgInput').value = data.text;
             document.getElementById('msgInput').focus();
@@ -585,10 +572,6 @@ async function uploadVoice() {
     }
 })();
 
-async function logout() {
-    await fetch('/api/auth/logout', {method:'POST'});
-    location.href = '/login';
-}
 </script>
 </body>
 </html>

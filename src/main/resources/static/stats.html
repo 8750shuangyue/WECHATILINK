@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sekai PetPlant - 数据概览</title>
-    <link rel="stylesheet" href="/css/ui.css?v=20261107a">
-    <link rel="stylesheet" href="/css/pages.css?v=20261107a">
+    <link rel="stylesheet" href="/css/ui.css?v=20261110a">
+    <link rel="stylesheet" href="/css/pages.css?v=20261110a">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📊%3C/text%3E%3C/svg%3E">
 </head>
 <body class="ui-app page-stats">
-<script src="/js/shell.js?v=20261107a"></script>
+<script src="/js/shell.js?v=20261110a"></script>
 
 <main class="ui-main">
     <div class="ui-wrap">
@@ -37,8 +37,8 @@
     </div>
 </main>
 
-<script src="/js/guard.js?v=20261107a"></script>
-<script src="/js/common.js?v=20261107a"></script>
+<script src="/js/guard.js?v=20261110a"></script>
+<script src="/js/common.js?v=20261110a"></script>
 <script>
     var OVERVIEW_META = [
         { key: 'users', label: '注册用户' },
@@ -61,6 +61,8 @@
         document.getElementById('statCards').innerHTML = html;
     }
 
+    var esc = UI.escapeHtml;
+
     function renderRanking(rows) {
         var el = document.getElementById('toolRanking');
         if (!rows || rows.length === 0) {
@@ -72,7 +74,7 @@
             var pct = Math.round(r.total / max * 100);
             var successRate = Math.round(r.successCount / r.total * 100);
             return '<div class="rank-item">' +
-                '<div class="rank-name" title="' + r.toolName + '">' + r.toolName + '</div>' +
+                '<div class="rank-name" title="' + esc(r.toolName) + '">' + esc(r.toolName) + '</div>' +
                 '<div class="rank-bar-wrap"><div class="rank-bar" style="width:' + pct + '%"></div></div>' +
                 '<div class="rank-meta">' + r.total + ' 次 · 成功率 ' + successRate + '% · 均耗 ' + r.avgMs + 'ms</div>' +
                 '</div>';
@@ -88,25 +90,26 @@
             return '<div class="trend-col">' +
                 '<div class="trend-val">' + r.count + '</div>' +
                 '<div class="trend-bar" style="height:' + h + 'px"></div>' +
-                '<div class="trend-date">' + r.date.slice(5) + '</div>' +
+                '<div class="trend-date">' + esc(String(r.date || '').slice(5)) + '</div>' +
                 '</div>';
         }).join('') + '</div>';
         el.innerHTML = html;
     }
 
-    (function init() {
+    requireLogin(function () {
         Promise.all([
-            fetch('/api/stats/overview').then(function (r) { return r.json(); }),
-            fetch('/api/stats/tool-ranking').then(function (r) { return r.json(); }),
-            fetch('/api/stats/trend').then(function (r) { return r.json(); })
+            UI.apiJson('/api/stats/overview'),
+            UI.apiJson('/api/stats/tool-ranking'),
+            UI.apiJson('/api/stats/trend')
         ]).then(function (results) {
             renderCards((results[0] && results[0].data) || {});
             renderRanking((results[1] && results[1].data) || []);
             renderTrend((results[2] && results[2].data) || []);
         }).catch(function (e) {
-            document.getElementById('statCards').innerHTML = '<div class="ui-empty">加载失败：' + e.message + '</div>';
+            document.getElementById('statCards').innerHTML =
+                '<div class="ui-empty">加载失败：' + esc(e.message) + '</div>';
         });
-    })();
+    });
 </script>
 </body>
 </html>

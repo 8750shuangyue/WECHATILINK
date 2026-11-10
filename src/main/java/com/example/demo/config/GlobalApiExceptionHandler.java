@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 统一错误返回：所有未捕获异常都落成 {code, success:false, message, data:null}。
@@ -41,6 +42,12 @@ public class GlobalApiExceptionHandler {
         int code = e.getStatusCode().value();
         String message = e.getReason() == null ? "请求失败" : e.getReason();
         return ResponseEntity.status(e.getStatusCode()).body(Result.error(code, message));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result<Object>> notFound(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Result.error(404, "资源不存在"));
     }
 
     @ExceptionHandler(Exception.class)
